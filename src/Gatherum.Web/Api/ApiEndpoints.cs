@@ -52,7 +52,7 @@ public static class ApiEndpoints
             UpdatePageRequest request) =>
         {
             var node = await nodes.SavePageAsync(http.User.GetUserId(), id,
-                PageMarkdown.ToDocJson(request.Markdown), request.Title);
+                PageMarkdown.ToDocJson(request.Markdown), request.Title, resetCollabState: true);
             return Results.Ok(NodeDto.From(node));
         });
 

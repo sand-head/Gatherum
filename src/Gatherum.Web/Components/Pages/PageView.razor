@@ -1,18 +1,27 @@
 @inherits GatherumComponent
+@implements IAsyncDisposable
 @inject AppOperations Ops
+@inject IJSRuntime Js
+@inject NavigationManager Navigation
 @using Gatherum.Core.Markdown
 @using Markdig
 
 <div class="page-body">
     <div class="page-toolbar">
+        <span class="save-indicator @saveState.ToString().ToLowerInvariant()">
+            @(saveState switch
+            {
+                SaveState.Saving => "Saving…",
+                SaveState.Saved => "Saved",
+                _ => "",
+            })
+        </span>
         <button class="ghost" @onclick="ToggleHistoryAsync">
             @(showHistory ? "Hide history" : "History")
         </button>
     </div>
 
-    <div class="page-content">
-        @((MarkupString)RenderedHtml)
-    </div>
+    <div class="editor-host" @ref="editorHost"></div>
 
     @if (showHistory)
     {
@@ -33,7 +42,7 @@
             @if (previewing is { } preview)
             {
                 <div class="history-preview page-content">
-                    @((MarkupString)Render(preview.Doc))
+                    @((MarkupString)RenderPreview(preview.Doc))
                 </div>
             }
         </aside>
@@ -44,22 +53,51 @@
     [Parameter, EditorRequired] public Node Node { get; set; } = null!;
     [Parameter] public EventCallback OnSaved { get; set; }
 
+    private enum SaveState { Idle, Saving, Saved }
+
+    private ElementReference editorHost;
+    private IJSObjectReference? module;
+    private IJSObjectReference? editor;
+    private DotNetObjectReference<PageView>? selfRef;
+    private Guid mountedNodeId;
+    private SaveState saveState = SaveState.Idle;
+
     private bool showHistory;
     private List<Revision> revisions = [];
     private Revision? previewing;
 
-    private string RenderedHtml => Render(Node.Page!.Doc);
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (mountedNodeId == Node.Id)
+            return;
+        mountedNodeId = Node.Id;
+        await DisposeEditorAsync();
 
-    private static string Render(string doc) =>
-        Markdig.Markdown.ToHtml(PageMarkdown.ToMarkdown(doc), RenderPipeline);
+        module ??= await Js.InvokeAsync<IJSObjectReference>("import", "./js/dist/editor.js");
+        selfRef ??= DotNetObjectReference.Create(this);
+        editor = await module.InvokeAsync<IJSObjectReference>("mount", editorHost, new
+        {
+            nodeId = Node.Id.ToString(),
+            docJson = Node.Page!.Doc,
+            user = new { name = UserName, color = ColorFor(UserId) },
+        }, selfRef);
+    }
 
-    private static readonly Markdig.MarkdownPipeline RenderPipeline =
-        new Markdig.MarkdownPipelineBuilder()
-            .UsePipeTables()
-            .UseTaskLists()
-            .UseEmphasisExtras(Markdig.Extensions.EmphasisExtras.EmphasisExtraOptions.Strikethrough)
-            .DisableHtml()
-            .Build();
+    [JSInvokable]
+    public void OnEditorDirty()
+    {
+        saveState = SaveState.Saving;
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public async Task OnAutosave(string docJson)
+    {
+        await Ops.Nodes(s => s.SavePageAsync(UserId, Node.Id, docJson));
+        saveState = SaveState.Saved;
+        StateHasChanged();
+        await OnSaved.InvokeAsync();
+    }
 
     private async Task ToggleHistoryAsync()
     {
@@ -72,8 +110,52 @@
     private async Task RestoreAsync(int number)
     {
         await Ops.Nodes(s => s.RestoreRevisionAsync(UserId, Node.Id, number));
-        showHistory = false;
-        previewing = null;
-        await OnSaved.InvokeAsync();
+        // The collaboration doc was reset server-side; a full reload re-seeds every client.
+        Navigation.Refresh(forceReload: true);
+    }
+
+    private static string RenderPreview(string doc) =>
+        Markdig.Markdown.ToHtml(PageMarkdown.ToMarkdown(doc), PreviewPipeline);
+
+    private static readonly Markdig.MarkdownPipeline PreviewPipeline =
+        new Markdig.MarkdownPipelineBuilder()
+            .UsePipeTables()
+            .UseTaskLists()
+            .UseEmphasisExtras(Markdig.Extensions.EmphasisExtras.EmphasisExtraOptions.Strikethrough)
+            .DisableHtml()
+            .Build();
+
+    private static string ColorFor(Guid userId) =>
+        $"hsl({Math.Abs(userId.GetHashCode()) % 360}, 70%, 45%)";
+
+    private async Task DisposeEditorAsync()
+    {
+        if (editor is null)
+            return;
+        try
+        {
+            await editor.InvokeVoidAsync("destroy");
+            await editor.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+        editor = null;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await DisposeEditorAsync();
+        if (module is not null)
+        {
+            try
+            {
+                await module.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+        }
+        selfRef?.Dispose();
     }
 }

@@ -9,6 +9,23 @@
     <ProjectReference Include="..\Gatherum.Infrastructure\Gatherum.Infrastructure.csproj" />
   </ItemGroup>
 
+  <!-- The editor bundle: npm install once, esbuild on every build (it is fast). The
+       target is skipped when npm is absent so the solution still compiles server-side
+       only; the Dockerfile builds the bundle in a dedicated node stage instead. -->
+  <Target Name="BuildClientBundle" BeforeTargets="AssignTargetPaths"
+          Condition="'$(SkipClientBundle)' != 'true'">
+    <Exec Command="npm --version" ContinueOnError="true" StandardOutputImportance="low">
+      <Output TaskParameter="ExitCode" PropertyName="NpmExitCode" />
+    </Exec>
+    <Exec Command="npm install --no-audit --no-fund"
+          Condition="'$(NpmExitCode)' == '0' AND !Exists('$(MSBuildProjectDirectory)/node_modules')" />
+    <Exec Command="npm run build" Condition="'$(NpmExitCode)' == '0'" />
+    <ItemGroup>
+      <Content Remove="wwwroot/js/dist/**" />
+      <Content Include="wwwroot/js/dist/**" />
+    </ItemGroup>
+  </Target>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.11" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.3">
@@ -16,6 +33,10 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="ModelContextProtocol.AspNetCore" Version="2.2.0" />
+    <!-- YDotNet does not pull its native binaries transitively; this brings libyrs
+         for every runtime the container and dev machines use. -->
+    <PackageReference Include="YDotNet.Native" Version="0.6.0" />
+    <PackageReference Include="YDotNet.Server.WebSockets" Version="0.6.0" />
   </ItemGroup>
 
 </Project>

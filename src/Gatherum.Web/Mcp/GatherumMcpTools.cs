@@ -69,8 +69,8 @@ public class GatherumMcpTools(
         [Description("The page node id.")] Guid id,
         [Description("The new body as Markdown.")] string markdown,
         [Description("Optional new title.")] string? title = null) =>
-        await Run(async () => NodeDto.From(
-            await nodes.SavePageAsync(UserId, id, PageMarkdown.ToDocJson(markdown), title)));
+        await Run(async () => NodeDto.From(await nodes.SavePageAsync(
+            UserId, id, PageMarkdown.ToDocJson(markdown), title, resetCollabState: true)));
 
     [McpServerTool(Name = "move_node")]
     [Description("Move a node (and its subtree) to a new parent and/or position.")]

@@ -1,0 +1,32 @@
+{
+  "name": "gatherum-web-client",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "esbuild Scripts/editor.js --bundle --format=esm --minify --outfile=wwwroot/js/dist/editor.js"
+  },
+  "dependencies": {
+    "@tiptap/core": "2.27.2",
+    "@tiptap/extension-collaboration": "2.27.2",
+    "@tiptap/extension-collaboration-cursor": "2.27.2",
+    "@tiptap/extension-image": "2.27.2",
+    "@tiptap/extension-link": "2.27.2",
+    "@tiptap/extension-mention": "2.27.2",
+    "@tiptap/extension-placeholder": "2.27.2",
+    "@tiptap/extension-table": "2.27.2",
+    "@tiptap/extension-table-cell": "2.27.2",
+    "@tiptap/extension-table-header": "2.27.2",
+    "@tiptap/extension-table-row": "2.27.2",
+    "@tiptap/extension-task-item": "2.27.2",
+    "@tiptap/extension-task-list": "2.27.2",
+    "@tiptap/pm": "2.27.2",
+    "@tiptap/starter-kit": "2.27.2",
+    "@tiptap/suggestion": "2.27.2",
+    "y-prosemirror": "1.3.7",
+    "y-websocket": "3.1.0",
+    "yjs": "13.6.32"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

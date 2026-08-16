@@ -12,6 +12,12 @@ public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeP
     /// of flooding history with keystroke-sized snapshots.</summary>
     private static readonly TimeSpan RevisionCollapseWindow = TimeSpan.FromMinutes(5);
 
+    /// <summary>Two live editors autosave the same page concurrently; serializing saves
+    /// per node keeps revision numbers and link rows race-free. Process-wide is enough:
+    /// Gatherum deploys as a single instance.</summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, SemaphoreSlim>
+        SaveGates = new();
+
     public async Task<Node> CreatePageAsync(Guid userId, Guid? parentId, string title,
         string? docJson = null, CancellationToken ct = default)
     {
@@ -84,22 +90,37 @@ public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeP
                 n.PrivateToUserId != null))
             .ToListAsync(ct);
 
+    /// <summary>Saves a page body. Edits that arrive from outside a live editing session
+    /// (REST, MCP, revision restore) set <paramref name="resetCollabState"/> so the next
+    /// editor to open the page re-seeds its collaboration doc from this content instead
+    /// of resurrecting the stale CRDT state.</summary>
     public async Task<Node> SavePageAsync(Guid userId, Guid nodeId, string docJson,
-        string? title = null, CancellationToken ct = default)
+        string? title = null, bool resetCollabState = false, CancellationToken ct = default)
     {
-        var node = await GetWithBodyAsync(userId, nodeId, ct);
-        if (node.Page is null)
-            throw new NotFoundException($"Node {nodeId} is not a page.");
+        var gate = SaveGates.GetOrAdd(nodeId, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(ct);
+        try
+        {
+            var node = await GetWithBodyAsync(userId, nodeId, ct);
+            if (node.Page is null)
+                throw new NotFoundException($"Node {nodeId} is not a page.");
 
-        node.Page.Doc = docJson;
-        if (title is not null)
-            node.Title = title;
-        node.UpdatedAt = clock.GetUtcNow();
-        await AddRevisionAsync(node, userId, ct);
-        RefreshPageDerivedState(node);
-        await ReplaceLinksAsync(node, PageMarkdown.LinkedNodeIds(docJson), ct);
-        await db.SaveChangesAsync(ct);
-        return node;
+            if (resetCollabState)
+                await db.YjsDocs.Where(d => d.NodeId == nodeId).ExecuteDeleteAsync(ct);
+            node.Page.Doc = docJson;
+            if (title is not null)
+                node.Title = title;
+            node.UpdatedAt = clock.GetUtcNow();
+            await AddRevisionAsync(node, userId, ct);
+            RefreshPageDerivedState(node);
+            await ReplaceLinksAsync(node, PageMarkdown.LinkedNodeIds(docJson), ct);
+            await db.SaveChangesAsync(ct);
+            return node;
+        }
+        finally
+        {
+            gate.Release();
+        }
     }
 
     public async Task RenameAsync(Guid userId, Guid nodeId, string title, CancellationToken ct = default)
@@ -231,7 +252,8 @@ public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeP
         var revision = await db.Revisions
             .FirstOrDefaultAsync(r => r.NodeId == nodeId && r.Number == revisionNumber, ct)
             ?? throw new NotFoundException($"Revision {revisionNumber} of node {nodeId} not found.");
-        return await SavePageAsync(userId, nodeId, revision.Doc, revision.Title, ct);
+        return await SavePageAsync(userId, nodeId, revision.Doc, revision.Title,
+            resetCollabState: true, ct: ct);
     }
 
     /// <summary>Refreshes search text and, for files, must be called after versions or
