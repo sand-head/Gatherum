@@ -1,6 +1,7 @@
 using Gatherum.Core;
 using Gatherum.Core.Data;
 using Gatherum.Infrastructure;
+using Gatherum.Web.Api;
 using Gatherum.Web.Auth;
 using Gatherum.Web.Components;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -26,6 +27,16 @@ var authentication = builder.Services
         options.LoginPath = "/auth/login";
         options.ExpireTimeSpan = TimeSpan.FromDays(14);
         options.SlidingExpiration = true;
+        options.Events.OnRedirectToLogin = context =>
+        {
+            // API and MCP clients want a status code, not a login page.
+            if (context.Request.Path.StartsWithSegments("/api") ||
+                context.Request.Path.StartsWithSegments("/mcp"))
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            else
+                context.Response.Redirect(context.RedirectUri);
+            return Task.CompletedTask;
+        };
     })
     .AddScheme<Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions,
         ApiKeyAuthenticationHandler>(ApiKeyAuthenticationHandler.SchemeName, null);
@@ -90,7 +101,11 @@ if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
 }
-app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
+app.UseWhen(
+    context => !context.Request.Path.StartsWithSegments("/api") &&
+        !context.Request.Path.StartsWithSegments("/mcp"),
+    browser => browser.UseStatusCodePagesWithReExecute(
+        "/not-found", createScopeForStatusCodePages: true));
 
 app.UseAuthentication();
 app.UseAuthorization();
@@ -99,6 +114,7 @@ app.UseAntiforgery();
 app.MapStaticAssets().AllowAnonymous();
 app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
 app.MapAuthEndpoints(oidc);
+app.MapGatherumApi();
 
 app.MapGet("/healthz", async (GatherumDbContext db) =>
 {
