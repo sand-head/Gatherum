@@ -28,4 +28,6 @@ public class OidcOptions
     public string ClientSecret { get; set; } = "";
     public string Scopes { get; set; } = "openid profile email";
     public bool RequestOfflineAccess { get; set; }
+
+    public bool IsConfigured => Authority.Length > 0 && ClientId.Length > 0;
 }
