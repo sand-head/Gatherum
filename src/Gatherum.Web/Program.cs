@@ -12,6 +12,9 @@ using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 
 var builder = WebApplication.CreateBuilder(args);
 
+if (!builder.Environment.IsDevelopment())
+    builder.Logging.ClearProviders().AddJsonConsole();
+
 builder.Services.AddGatherum(builder.Configuration);
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 builder.Services.AddCascadingAuthenticationState();

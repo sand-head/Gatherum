@@ -1,0 +1,5 @@
+[Unit]
+Description=Gatherum internal network
+
+[Network]
+Label=app=gatherum

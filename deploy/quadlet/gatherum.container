@@ -1,0 +1,23 @@
+[Unit]
+Description=Gatherum
+Requires=gatherum-postgres.service
+After=gatherum-postgres.service
+
+[Container]
+# Build locally with: podman build -t localhost/gatherum:latest .
+Image=localhost/gatherum:latest
+ContainerName=gatherum
+Network=gatherum.network
+# The reverse proxy terminating TLS forwards to this port; keep it loopback-only.
+PublishPort=127.0.0.1:8080:8080
+Environment=Gatherum__Database__ConnectionString=Host=gatherum-postgres;Database=gatherum;Username=gatherum;Password=change-me
+Environment=Gatherum__Oidc__Authority=https://auth.example.org
+Environment=Gatherum__Oidc__ClientId=gatherum
+Environment=Gatherum__Oidc__ClientSecret=change-me
+Volume=gatherum-files:/data
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

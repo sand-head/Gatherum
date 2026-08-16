@@ -1,0 +1,19 @@
+[Unit]
+Description=Gatherum PostgreSQL
+
+[Container]
+Image=docker.io/library/postgres:16-alpine
+ContainerName=gatherum-postgres
+Network=gatherum.network
+Environment=POSTGRES_DB=gatherum
+Environment=POSTGRES_USER=gatherum
+Environment=POSTGRES_PASSWORD=change-me
+Volume=gatherum-db:/var/lib/postgresql/data
+HealthCmd=pg_isready -U gatherum
+HealthInterval=10s
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target
