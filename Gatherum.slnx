@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Gatherum.Core/Gatherum.Core.csproj" />
+    <Project Path="src/Gatherum.Infrastructure/Gatherum.Infrastructure.csproj" />
+    <Project Path="src/Gatherum.Web/Gatherum.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Gatherum.Tests/Gatherum.Tests.csproj" />
+  </Folder>
+</Solution>
