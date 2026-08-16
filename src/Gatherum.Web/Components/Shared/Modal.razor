@@ -1,0 +1,12 @@
+<div class="modal-backdrop" @onclick="() => OnClose.InvokeAsync()">
+    <div class="modal" @onclick:stopPropagation>
+        <h3>@Title</h3>
+        @ChildContent
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+}

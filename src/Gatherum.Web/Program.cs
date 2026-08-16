@@ -16,6 +16,8 @@ builder.Services.AddGatherum(builder.Configuration);
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<Gatherum.Web.Services.AppOperations>();
+builder.Services.AddScoped<Gatherum.Web.Services.TreeState>();
 builder.Services.AddMcpServer(options => options.ServerInfo = new ModelContextProtocol.Protocol.Implementation
     {
         Name = "gatherum",

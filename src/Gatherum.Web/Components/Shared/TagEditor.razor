@@ -1,0 +1,60 @@
+@inherits GatherumComponent
+@inject AppOperations Ops
+
+<div class="tag-editor">
+    @foreach (var tag in Tags)
+    {
+        <span class="tag">
+            <a href="/tags/@Uri.EscapeDataString(tag)">#@tag</a>
+            <button title="Remove tag" @onclick="() => RemoveAsync(tag)">×</button>
+        </span>
+    }
+    <input class="tag-input" placeholder="+ tag" list="tag-suggestions-@NodeId"
+           value="@draft" @oninput="OnInput"
+           @onkeydown="OnKeyDown" @onblur="AddDraftAsync" />
+    <datalist id="tag-suggestions-@NodeId">
+        @foreach (var suggestion in suggestions)
+        {
+            <option value="@suggestion.Name" />
+        }
+    </datalist>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Guid NodeId { get; set; }
+    [Parameter] public IReadOnlyList<string> Tags { get; set; } = [];
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private string draft = "";
+    private List<TagSummary> suggestions = [];
+
+    private async Task OnInput(ChangeEventArgs e)
+    {
+        draft = e.Value?.ToString() ?? "";
+        suggestions = draft.Length > 0
+            ? await Ops.Nodes(s => s.ListTagsAsync(UserId, draft))
+            : [];
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await AddDraftAsync();
+    }
+
+    private async Task AddDraftAsync()
+    {
+        if (draft.Trim().Length == 0)
+            return;
+        await Ops.Nodes(s => s.AddTagAsync(UserId, NodeId, draft));
+        draft = "";
+        suggestions = [];
+        await OnChanged.InvokeAsync();
+    }
+
+    private async Task RemoveAsync(string tag)
+    {
+        await Ops.Nodes(s => s.RemoveTagAsync(UserId, NodeId, tag));
+        await OnChanged.InvokeAsync();
+    }
+}

@@ -1,0 +1,92 @@
+@page "/nodes/{Id:guid}"
+@inherits GatherumComponent
+@inject AppOperations Ops
+@inject TreeState Tree
+@inject NavigationManager Navigation
+
+@if (notFound)
+{
+    <PageTitle>Not found — Gatherum</PageTitle>
+    <div class="node-missing">This node doesn't exist (or is private to someone else).</div>
+}
+else if (node is not null)
+{
+    <PageTitle>@node.Title — Gatherum</PageTitle>
+    <article class="node">
+        <header class="node-header">
+            <input class="node-title-input" value="@node.Title"
+                   @onchange="e => RenameAsync(e.Value?.ToString() ?? node.Title)" />
+            <div class="node-meta">
+                <TagEditor NodeId="@node.Id" Tags="@tags" OnChanged="ReloadAsync" />
+                @if (node.IsPrivate)
+                {
+                    <span class="badge">🔒 private</span>
+                }
+            </div>
+        </header>
+
+        @if (node.Kind == NodeKind.Page)
+        {
+            <PageView Node="node" OnSaved="OnPageSavedAsync" />
+        }
+        else
+        {
+            <FileView Node="node" OnChanged="ReloadAsync" />
+        }
+
+        @if (backlinks.Count > 0)
+        {
+            <section class="backlinks">
+                <h3>Referenced by</h3>
+                <ul>
+                    @foreach (var source in backlinks)
+                    {
+                        <li><a href="/nodes/@source.Id">@source.Title</a></li>
+                    }
+                </ul>
+            </section>
+        }
+    </article>
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private Node? node;
+    private List<string> tags = [];
+    private List<Node> backlinks = [];
+    private bool notFound;
+
+    protected override async Task OnParametersSetAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        try
+        {
+            node = await Ops.Nodes(s => s.GetWithBodyAsync(UserId, Id));
+            tags = node.Tags.Select(t => t.Tag!.Name).Order().ToList();
+            backlinks = await Ops.Nodes(s => s.GetBacklinksAsync(UserId, Id));
+            notFound = false;
+        }
+        catch (Gatherum.Core.NotFoundException)
+        {
+            node = null;
+            notFound = true;
+        }
+    }
+
+    private async Task RenameAsync(string title)
+    {
+        if (node is null || title.Length == 0 || title == node.Title)
+            return;
+        await Ops.Nodes(s => s.RenameAsync(UserId, node.Id, title));
+        await Tree.RefreshAsync(UserId);
+        await ReloadAsync();
+    }
+
+    private async Task OnPageSavedAsync()
+    {
+        backlinks = await Ops.Nodes(s => s.GetBacklinksAsync(UserId, Id));
+        StateHasChanged();
+    }
+}

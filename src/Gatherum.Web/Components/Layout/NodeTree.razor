@@ -1,0 +1,168 @@
+@inherits GatherumComponent
+@implements IDisposable
+@inject AppOperations Ops
+@inject TreeState Tree
+@inject NavigationManager Navigation
+
+<div class="tree" @ref="dropZone">
+    @foreach (var root in Tree.ByParent[null])
+    {
+        <TreeItem Node="root" Depth="0" Tree="this" />
+    }
+    <div class="tree-actions">
+        <button @onclick="() => CreatePageAsync(null)">＋ New page</button>
+        <label class="upload-label">
+            ⇪ Upload
+            <InputFile OnChange="e => UploadAsync(e, null)" multiple />
+        </label>
+    </div>
+</div>
+
+@if (moving is { } movingNode)
+{
+    <Modal Title="@($"Move “{movingNode.Title}”")" OnClose="() => moving = null">
+        <label>New parent</label>
+        <select @bind="moveTargetId">
+            <option value="">(top level)</option>
+            @foreach (var (candidate, depth) in Flatten())
+            {
+                @if (candidate.Id != movingNode.Id && !IsInSubtree(candidate.Id, movingNode.Id))
+                {
+                    <option value="@candidate.Id">@(new string(' ', depth * 3))@candidate.Title</option>
+                }
+            }
+        </select>
+        <div class="modal-actions">
+            <button class="primary" @onclick="ConfirmMoveAsync">Move</button>
+            <button @onclick="() => moving = null">Cancel</button>
+        </div>
+    </Modal>
+}
+
+@code {
+    private ElementReference dropZone;
+    private TreeNode? moving;
+    private string moveTargetId = "";
+    private readonly HashSet<Guid> expanded = [];
+
+    [Inject] private IJSRuntime Js { get; set; } = null!;
+    private IJSObjectReference? module;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+        Tree.Changed += OnTreeChanged;
+        await Tree.RefreshAsync(UserId);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            module = await Js.InvokeAsync<IJSObjectReference>("import", "./js/gatherum.js");
+            await module.InvokeVoidAsync("initDropZone", dropZone,
+                DotNetObjectReference.Create(this));
+        }
+    }
+
+    [JSInvokable]
+    public async Task OnFilesDropped() => await Tree.RefreshAsync(UserId);
+
+    public bool IsExpanded(Guid id) => expanded.Contains(id);
+
+    public void Toggle(Guid id)
+    {
+        if (!expanded.Remove(id))
+            expanded.Add(id);
+    }
+
+    public async Task CreatePageAsync(Guid? parentId)
+    {
+        var node = await Ops.Nodes(s => s.CreatePageAsync(UserId, parentId, "Untitled"));
+        if (parentId is { } id)
+            expanded.Add(id);
+        await Tree.RefreshAsync(UserId);
+        Navigation.NavigateTo($"/nodes/{node.Id}");
+    }
+
+    public async Task UploadAsync(InputFileChangeEventArgs e, Guid? parentId)
+    {
+        Guid lastId = default;
+        foreach (var file in e.GetMultipleFiles())
+        {
+            await using var stream = file.OpenReadStream(maxAllowedSize: 512 * 1024 * 1024);
+            var node = await Ops.Files(s => s.CreateFileNodeAsync(UserId, parentId, file.Name,
+                string.IsNullOrWhiteSpace(file.ContentType) ? "application/octet-stream" : file.ContentType,
+                stream));
+            lastId = node.Id;
+        }
+        if (parentId is { } id)
+            expanded.Add(id);
+        await Tree.RefreshAsync(UserId);
+        if (lastId != default)
+            Navigation.NavigateTo($"/nodes/{lastId}");
+    }
+
+    public async Task MoveBy(TreeNode node, int delta)
+    {
+        var position = Math.Max(0, node.Position + delta);
+        await Ops.Nodes(s => s.MoveAsync(UserId, node.Id, node.ParentId, position));
+        await Tree.RefreshAsync(UserId);
+    }
+
+    public void BeginMove(TreeNode node)
+    {
+        moving = node;
+        moveTargetId = "";
+    }
+
+    private async Task ConfirmMoveAsync()
+    {
+        if (moving is null)
+            return;
+        Guid? target = Guid.TryParse(moveTargetId, out var id) ? id : null;
+        await Ops.Nodes(s => s.MoveAsync(UserId, moving.Id, target));
+        moving = null;
+        await Tree.RefreshAsync(UserId);
+    }
+
+    public async Task DeleteAsync(TreeNode node)
+    {
+        await Ops.Nodes(s => s.DeleteAsync(UserId, node.Id));
+        await Tree.RefreshAsync(UserId);
+        Navigation.NavigateTo("/");
+    }
+
+    public async Task TogglePrivateAsync(TreeNode node)
+    {
+        await Ops.Nodes(s => s.SetPrivateAsync(UserId, node.Id, !node.IsPrivate));
+        await Tree.RefreshAsync(UserId);
+    }
+
+    public async Task RefreshAsync() => await Tree.RefreshAsync(UserId);
+
+    private IEnumerable<(TreeNode Node, int Depth)> Flatten(Guid? parentId = null, int depth = 0)
+    {
+        foreach (var node in Tree.ByParent[parentId])
+        {
+            yield return (node, depth);
+            foreach (var child in Flatten(node.Id, depth + 1))
+                yield return child;
+        }
+    }
+
+    private bool IsInSubtree(Guid candidate, Guid root)
+    {
+        var byId = Tree.Nodes.ToDictionary(n => n.Id, n => n.ParentId);
+        for (Guid? current = candidate; current is { } id; current = byId.GetValueOrDefault(id))
+        {
+            if (id == root)
+                return true;
+        }
+        return false;
+    }
+
+    private void OnTreeChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Tree.Changed -= OnTreeChanged;
+}

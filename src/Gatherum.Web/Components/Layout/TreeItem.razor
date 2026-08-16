@@ -1,0 +1,59 @@
+@inject TreeState State
+
+@{
+    var children = State.ByParent[Node.Id].ToList();
+    var isExpanded = Tree.IsExpanded(Node.Id);
+}
+<div class="tree-item" style="--depth: @Depth">
+    <div class="tree-row">
+        @if (children.Count > 0)
+        {
+            <button class="chevron" @onclick="() => Tree.Toggle(Node.Id)">@(isExpanded ? "▾" : "▸")</button>
+        }
+        else
+        {
+            <span class="chevron"></span>
+        }
+        <NavLink class="tree-link" href="@($"/nodes/{Node.Id}")">
+            <span class="node-icon">@(Node.Kind == NodeKind.Page ? "▤" : "◈")</span>
+            <span class="node-title">@Node.Title</span>
+            @if (Node.IsPrivate)
+            {
+                <span class="node-private" title="Private">🔒</span>
+            }
+        </NavLink>
+        <button class="row-menu" @onclick="() => menuOpen = !menuOpen">⋯</button>
+    </div>
+    @if (menuOpen)
+    {
+        <div class="menu" @onclick="() => menuOpen = false">
+            <button @onclick="() => Tree.CreatePageAsync(Node.Id)">New page inside</button>
+            <label class="upload-label menu-upload">
+                Upload file inside
+                <InputFile OnChange="e => Tree.UploadAsync(e, Node.Id)" multiple />
+            </label>
+            <button @onclick="() => Tree.MoveBy(Node, -1)">Move up</button>
+            <button @onclick="() => Tree.MoveBy(Node, +1)">Move down</button>
+            <button @onclick="() => Tree.BeginMove(Node)">Move to…</button>
+            <button @onclick="() => Tree.TogglePrivateAsync(Node)">
+                @(Node.IsPrivate ? "Make visible" : "Make private")
+            </button>
+            <button class="danger" @onclick="() => Tree.DeleteAsync(Node)">Delete</button>
+        </div>
+    }
+    @if (isExpanded)
+    {
+        @foreach (var child in children)
+        {
+            <TreeItem Node="child" Depth="Depth + 1" Tree="Tree" />
+        }
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public TreeNode Node { get; set; } = null!;
+    [Parameter] public int Depth { get; set; }
+    [Parameter, EditorRequired] public NodeTree Tree { get; set; } = null!;
+
+    private bool menuOpen;
+}

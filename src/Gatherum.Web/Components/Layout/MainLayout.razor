@@ -1,9 +1,30 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
 
-@Body
-
-<div id="blazor-error-ui" data-nosnippet>
-    An unhandled error has occurred.
-    <a href="." class="reload">Reload</a>
-    <span class="dismiss">🗙</span>
+<div class="shell">
+    <aside class="sidebar">
+        <div class="sidebar-head">
+            <a class="brand" href="/">Gatherum</a>
+            <button class="search-trigger" @onclick="() => palette?.Open()" title="Search (Ctrl+K)">
+                <span>Search</span><kbd>⌘K</kbd>
+            </button>
+        </div>
+        <NodeTree />
+        <nav class="sidebar-foot">
+            <NavLink href="/tags">Tags</NavLink>
+            <NavLink href="/settings">Settings</NavLink>
+            <form method="post" action="/auth/logout" class="logout">
+                <AntiforgeryToken />
+                <button type="submit">Sign out</button>
+            </form>
+        </nav>
+    </aside>
+    <main class="content">
+        @Body
+    </main>
 </div>
+
+<SearchPalette @ref="palette" />
+
+@code {
+    private SearchPalette? palette;
+}
