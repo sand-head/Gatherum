@@ -15,6 +15,15 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddGatherum(builder.Configuration);
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 builder.Services.AddCascadingAuthenticationState();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddMcpServer(options => options.ServerInfo = new ModelContextProtocol.Protocol.Implementation
+    {
+        Name = "gatherum",
+        Title = "Gatherum",
+        Version = "1.0",
+    })
+    .WithHttpTransport(options => options.Stateless = true)
+    .WithTools<Gatherum.Web.Mcp.GatherumMcpTools>();
 
 var oidc = builder.Configuration
     .GetSection($"{GatherumOptions.Section}:{nameof(GatherumOptions.Oidc)}")
@@ -115,6 +124,7 @@ app.MapStaticAssets().AllowAnonymous();
 app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
 app.MapAuthEndpoints(oidc);
 app.MapGatherumApi();
+app.MapMcp("/mcp").RequireAuthorization("Mcp");
 
 app.MapGet("/healthz", async (GatherumDbContext db) =>
 {
