@@ -74,6 +74,7 @@ namespace Gatherum.Infrastructure.Data.Migrations
                     ParentId = table.Column<Guid>(type: "uuid", nullable: true),
                     Position = table.Column<int>(type: "integer", nullable: false),
                     IsPrivate = table.Column<bool>(type: "boolean", nullable: false),
+                    PrivateToUserId = table.Column<Guid>(type: "uuid", nullable: true),
                     OwnerId = table.Column<Guid>(type: "uuid", nullable: false),
                     CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),

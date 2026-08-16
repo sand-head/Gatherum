@@ -1,6 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Gatherum.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Markdig" Version="1.3.2" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
   </ItemGroup>

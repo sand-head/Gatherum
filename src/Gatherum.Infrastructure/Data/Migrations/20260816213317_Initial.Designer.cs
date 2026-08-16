@@ -13,7 +13,7 @@ using NpgsqlTypes;
 namespace Gatherum.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(GatherumDbContext))]
-    [Migration("20260816212643_Initial")]
+    [Migration("20260816213317_Initial")]
     partial class Initial
     {
         /// <inheritdoc />
@@ -158,6 +158,9 @@ namespace Gatherum.Infrastructure.Data.Migrations
 
                     b.Property<int>("Position")
                         .HasColumnType("integer");
+
+                    b.Property<Guid?>("PrivateToUserId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("SearchText")
                         .IsRequired()

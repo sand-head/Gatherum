@@ -156,6 +156,9 @@ namespace Gatherum.Infrastructure.Data.Migrations
                     b.Property<int>("Position")
                         .HasColumnType("integer");
 
+                    b.Property<Guid?>("PrivateToUserId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("SearchText")
                         .IsRequired()
                         .HasColumnType("text");

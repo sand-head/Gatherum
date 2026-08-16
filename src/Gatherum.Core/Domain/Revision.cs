@@ -6,8 +6,8 @@ public class Revision
     public Guid Id { get; init; }
     public Guid NodeId { get; init; }
     public int Number { get; init; }
-    public required string Title { get; init; }
-    public required string Doc { get; init; }
+    public required string Title { get; set; }
+    public required string Doc { get; set; }
     public Guid AuthorId { get; init; }
     public User? Author { get; init; }
     public DateTimeOffset CreatedAt { get; init; }

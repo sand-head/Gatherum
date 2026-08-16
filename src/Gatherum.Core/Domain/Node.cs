@@ -16,7 +16,14 @@ public class Node
     public Guid? ParentId { get; set; }
     public Node? Parent { get; set; }
     public int Position { get; set; }
+
+    /// <summary>Marks this node as the root of a subtree visible only to its owner.</summary>
     public bool IsPrivate { get; set; }
+
+    /// <summary>Owner of the nearest private ancestor (or self), denormalized so
+    /// visibility is a single-column filter instead of an ancestor walk. Maintained
+    /// by NodeService on privacy changes and moves.</summary>
+    public Guid? PrivateToUserId { get; set; }
     public Guid OwnerId { get; init; }
     public User? Owner { get; init; }
     public DateTimeOffset CreatedAt { get; init; }
