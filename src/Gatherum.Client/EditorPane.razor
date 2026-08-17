@@ -29,7 +29,12 @@
         <div class="editor-surface">
             @if (document is not null)
             {
-                <EditorView Grid="document" OnChange="OnChanged" AriaLabel="Document editor" />
+                @* ForceRaster: SKGLView.Dispose throws an NRE when the island unmounts on
+                   navigation, which kills the WASM renderer for the rest of the session;
+                   the raster SKCanvasView tears down cleanly. Revisit when SkiaSharp (or
+                   slopedit) guards the WebGL dispose path. *@
+                <EditorView Grid="document" OnChange="OnChanged" AriaLabel="Document editor"
+                            ForceRaster="true" />
             }
             else
             {
@@ -85,6 +90,9 @@
 
     private record SearchHit(Guid Id, string Kind, string Title, string Snippet);
     private record PresenceState(string[] Editors, int HeadVersion);
+    private record SaveResult(int Version);
+
+    private int lastKnownHead;
 
     protected override async Task OnInitializedAsync()
     {
@@ -117,6 +125,8 @@
         var response = await Http.PutAsJsonAsync($"/api/text/{NodeId}", new { text = document.Text });
         if (response.IsSuccessStatusCode)
         {
+            var saved = await response.Content.ReadFromJsonAsync<SaveResult>();
+            lastKnownHead = saved?.Version ?? lastKnownHead;
             savedGeneration = saving;
             staleWarning = false;
             saveLabel = generation == savedGeneration ? "Saved" : saveLabel;
@@ -140,6 +150,10 @@
             if (state is null)
                 return;
             othersEditing = state.Editors.ToList();
+            if (lastKnownHead == 0)
+                lastKnownHead = state.HeadVersion;
+            else if (state.HeadVersion > lastKnownHead)
+                staleWarning = true;
             StateHasChanged();
         }
         catch (HttpRequestException)

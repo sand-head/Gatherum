@@ -36,15 +36,15 @@ public static class MediaTypes
     };
 
     /// <summary>Resolves the stored media type for an upload: a meaningful declared
-    /// type wins, known extensions refine the generic ones.</summary>
+    /// type wins, known extensions refine the generic ones browsers fall back to.</summary>
     public static string Resolve(string? declared, string fileName)
     {
         var extension = Path.GetExtension(fileName);
-        if (ByExtension.TryGetValue(extension, out var known) &&
-            (string.IsNullOrWhiteSpace(declared) || declared is Binary or PlainText))
+        var generic = string.IsNullOrWhiteSpace(declared) || declared is Binary or PlainText;
+        if (!generic)
+            return declared!;
+        if (ByExtension.TryGetValue(extension, out var known))
             return known;
-        if (!string.IsNullOrWhiteSpace(declared))
-            return declared;
         return TextExtensions.Contains(extension) ? PlainText : Binary;
     }
 

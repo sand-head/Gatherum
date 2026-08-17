@@ -1,24 +1,21 @@
-# Stage 1: bundle the editor JavaScript (the runtime image needs no Node).
-FROM node:22-alpine AS client
-WORKDIR /client
-COPY src/Gatherum.Web/package.json src/Gatherum.Web/package-lock.json ./
-RUN npm ci --no-audit --no-fund
-COPY src/Gatherum.Web/Scripts ./Scripts
-RUN npx esbuild Scripts/editor.js --bundle --format=esm --minify --outfile=dist/editor.js
-
-# Stage 2: compile and publish the app.
+# Stage 1: compile and publish. The WebAssembly editor island relinks the .NET
+# runtime with SkiaSharp's native library, which needs the wasm-tools workload.
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+# Emscripten (the wasm relink toolchain) shells out to python.
+RUN apt-get update && apt-get install -y --no-install-recommends python3 \
+    && rm -rf /var/lib/apt/lists/* \
+    && dotnet workload install wasm-tools
 WORKDIR /src
-COPY Directory.Build.props Gatherum.slnx ./
+COPY Directory.Build.props Gatherum.slnx nuget.config ./
 COPY src/Gatherum.Core/Gatherum.Core.csproj src/Gatherum.Core/
+COPY src/Gatherum.Client/Gatherum.Client.csproj src/Gatherum.Client/
 COPY src/Gatherum.Infrastructure/Gatherum.Infrastructure.csproj src/Gatherum.Infrastructure/
 COPY src/Gatherum.Web/Gatherum.Web.csproj src/Gatherum.Web/
 RUN dotnet restore src/Gatherum.Web
 COPY src ./src
-COPY --from=client /client/dist src/Gatherum.Web/wwwroot/js/dist
-RUN dotnet publish src/Gatherum.Web -c Release -o /app -p:SkipClientBundle=true
+RUN dotnet publish src/Gatherum.Web -c Release -o /app
 
-# Stage 3: runtime, non-root.
+# Stage 2: runtime, non-root.
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 COPY --from=build /app .
