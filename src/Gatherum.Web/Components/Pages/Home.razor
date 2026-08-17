@@ -1,17 +1,12 @@
 @page "/"
-@inherits GatherumComponent
-@inject TreeState Tree
 
 <PageTitle>Gatherum</PageTitle>
 
 <div class="home">
     <h1>Gatherum</h1>
     <p>
-        One tree for pages and files alike. Create a page or drop a file into the
-        sidebar, press <kbd>Ctrl</kbd>+<kbd>K</kbd> (or <kbd>⌘K</kbd>) to search everything.
+        One tree where pages and files are the same kind of thing — a page is simply a
+        Markdown file. Create one or drop a file into the sidebar, press
+        <kbd>Ctrl</kbd>+<kbd>K</kbd> (or <kbd>⌘K</kbd>) to search everything.
     </p>
-    @if (Tree.Nodes.Count == 0)
-    {
-        <p class="hint">The tree is empty — start with “＋ New page” in the sidebar.</p>
-    }
 </div>

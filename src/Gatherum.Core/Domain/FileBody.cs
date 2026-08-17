@@ -18,11 +18,11 @@ public class FileVersion
     public Guid Id { get; init; }
     public Guid NodeId { get; init; }
     public int Number { get; init; }
-    public required string Hash { get; init; }
+    public required string Hash { get; set; }
     public required string MediaType { get; init; }
     public required string FileName { get; init; }
-    public long SizeBytes { get; init; }
-    public string ExtractedText { get; init; } = "";
+    public long SizeBytes { get; set; }
+    public string ExtractedText { get; set; } = "";
     public Guid UploadedById { get; init; }
     public User? UploadedBy { get; init; }
     public DateTimeOffset UploadedAt { get; init; }

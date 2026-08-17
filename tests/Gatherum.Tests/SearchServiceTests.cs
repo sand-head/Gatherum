@@ -1,6 +1,5 @@
-using Gatherum.Core.Data;
+using System.Text;
 using Gatherum.Core.Domain;
-using Gatherum.Core.Markdown;
 using Gatherum.Core.Services;
 
 namespace Gatherum.Tests;
@@ -8,32 +7,26 @@ namespace Gatherum.Tests;
 [Collection("postgres")]
 public class SearchServiceTests(PostgresFixture postgres) : IAsyncLifetime
 {
-    private GatherumDbContext db = null!;
-    private NodeService nodes = null!;
-    private SearchService search = null!;
+    private ServiceHarness harness = null!;
     private Guid jess;
     private Guid sam;
 
     public async Task InitializeAsync()
     {
-        db = PostgresFixture.CreateContext(await postgres.CreateDatabaseAsync());
-        var authorizer = new DefaultNodeAuthorizer();
-        nodes = new NodeService(db, authorizer, TimeProvider.System);
-        search = new SearchService(db, authorizer);
-        jess = await AddUserAsync("jess");
-        sam = await AddUserAsync("sam");
+        harness = new ServiceHarness(await postgres.CreateDatabaseAsync());
+        jess = await harness.AddUserAsync("jess");
+        sam = await harness.AddUserAsync("sam");
     }
 
-    public async Task DisposeAsync() => await db.DisposeAsync();
+    public async Task DisposeAsync() => await harness.DisposeAsync();
 
     [Fact]
     public async Task Finds_pages_by_body_text_with_kind_and_snippet()
     {
-        var page = await nodes.CreatePageAsync(jess, null, "Deployment notes");
-        await nodes.SavePageAsync(jess, page.Id,
-            PageMarkdown.ToDocJson("Rootless Podman quadlets restart cleanly after reboot."));
+        var page = await harness.Files.CreateTextNodeAsync(jess, null, "Deployment notes",
+            "Rootless Podman quadlets restart cleanly after reboot.");
 
-        var results = await search.SearchAsync(jess, "quadlets");
+        var results = await harness.Search.SearchAsync(jess, "quadlets");
 
         var hit = Assert.Single(results);
         Assert.Equal(page.Id, hit.Id);
@@ -44,11 +37,11 @@ public class SearchServiceTests(PostgresFixture postgres) : IAsyncLifetime
     [Fact]
     public async Task Title_matches_rank_above_body_matches()
     {
-        var bodyMatch = await nodes.CreatePageAsync(jess, null, "Random notes");
-        await nodes.SavePageAsync(jess, bodyMatch.Id, PageMarkdown.ToDocJson("something about kestrel"));
-        var titleMatch = await nodes.CreatePageAsync(jess, null, "Kestrel tuning");
+        await harness.Files.CreateTextNodeAsync(jess, null, "Random notes",
+            "something about kestrel");
+        var titleMatch = await harness.Files.CreateTextNodeAsync(jess, null, "Kestrel tuning");
 
-        var results = await search.SearchAsync(jess, "kestrel");
+        var results = await harness.Search.SearchAsync(jess, "kestrel");
 
         Assert.Equal(titleMatch.Id, results.First().Id);
         Assert.Equal(2, results.Count);
@@ -57,31 +50,34 @@ public class SearchServiceTests(PostgresFixture postgres) : IAsyncLifetime
     [Fact]
     public async Task Tags_are_searchable()
     {
-        var page = await nodes.CreatePageAsync(jess, null, "Chapter 3");
-        await nodes.AddTagAsync(jess, page.Id, "worldbuilding");
+        var page = await harness.Files.CreateTextNodeAsync(jess, null, "Chapter 3");
+        await harness.Nodes.AddTagAsync(jess, page.Id, "worldbuilding");
 
-        var results = await search.SearchAsync(jess, "worldbuilding");
+        var results = await harness.Search.SearchAsync(jess, "worldbuilding");
 
         Assert.Equal([page.Id], results.Select(r => r.Id));
     }
 
     [Fact]
-    public async Task Kind_filter_narrows_results()
+    public async Task Uploaded_file_text_is_searchable_and_kind_filters_split_pages_from_files()
     {
-        var page = await nodes.CreatePageAsync(jess, null, "ferret care");
+        await harness.Files.CreateTextNodeAsync(jess, null, "ferret care page", "about ferrets");
+        var upload = new MemoryStream(Encoding.UTF8.GetBytes("ferret feeding schedule"));
+        await harness.Files.CreateFileNodeAsync(jess, null, "schedule.txt", "text/plain", upload);
 
-        Assert.Single(await search.SearchAsync(jess, "ferret", NodeKind.Page));
-        Assert.Empty(await search.SearchAsync(jess, "ferret", NodeKind.File));
+        Assert.Equal(2, (await harness.Search.SearchAsync(jess, "ferret")).Count);
+        Assert.Single(await harness.Search.SearchAsync(jess, "ferret", NodeKind.Page));
+        Assert.Single(await harness.Search.SearchAsync(jess, "ferret", NodeKind.File));
     }
 
     [Fact]
     public async Task Private_nodes_never_leak_into_other_users_results()
     {
-        var page = await nodes.CreatePageAsync(jess, null, "hidden treasure map");
-        await nodes.SetPrivateAsync(jess, page.Id, true);
+        var page = await harness.Files.CreateTextNodeAsync(jess, null, "hidden treasure map");
+        await harness.Nodes.SetPrivateAsync(jess, page.Id, true);
 
-        Assert.Single(await search.SearchAsync(jess, "treasure"));
-        Assert.Empty(await search.SearchAsync(sam, "treasure"));
+        Assert.Single(await harness.Search.SearchAsync(jess, "treasure"));
+        Assert.Empty(await harness.Search.SearchAsync(sam, "treasure"));
     }
 
     [Fact]
@@ -96,19 +92,5 @@ public class SearchServiceTests(PostgresFixture postgres) : IAsyncLifetime
         Assert.StartsWith("…", snippet);
         Assert.EndsWith("…", snippet);
         Assert.True(snippet.Length < 220);
-    }
-
-    private async Task<Guid> AddUserAsync(string name)
-    {
-        var user = new User
-        {
-            Id = Guid.NewGuid(),
-            Subject = name,
-            Email = $"{name}@example.org",
-            DisplayName = name,
-        };
-        db.Users.Add(user);
-        await db.SaveChangesAsync();
-        return user.Id;
     }
 }

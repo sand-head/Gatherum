@@ -1,5 +1,4 @@
 using Gatherum.Core.Domain;
-using Gatherum.Core.Markdown;
 using Gatherum.Core.Services;
 
 namespace Gatherum.Web.Api;
@@ -18,7 +17,8 @@ public record NodeDto(
     FileInfoDto? File)
 {
     /// <summary>The one node → wire-format mapping, shared by the REST API and MCP so
-    /// both surfaces always say the same thing.</summary>
+    /// both surfaces always say the same thing. Markdown is the body itself for
+    /// Markdown nodes; other kinds expose their extracted text in File.</summary>
     public static NodeDto From(Node node) => new(
         node.Id,
         node.Kind.ToString(),
@@ -29,7 +29,9 @@ public record NodeDto(
         node.Tags.Select(t => t.Tag!.Name).Order().ToList(),
         node.CreatedAt,
         node.UpdatedAt,
-        node.Page is { } page ? PageMarkdown.ToMarkdown(page.Doc) : null,
+        node is { MediaType: MediaTypes.Markdown, File.Versions.Count: > 0 }
+            ? node.File.Current.ExtractedText
+            : null,
         node.File is { Versions.Count: > 0 } file ? FileInfoDto.From(file) : null);
 }
 
@@ -58,10 +60,11 @@ public record NodeSummaryDto(Guid Id, string Kind, string Title, Guid? ParentId,
         new(node.Id, node.Kind.ToString(), node.Title, node.ParentId, node.Position);
 }
 
-public record RevisionDto(int Number, string Title, DateTimeOffset CreatedAt, Guid AuthorId)
+public record VersionDto(int Number, string FileName, string MediaType, long SizeBytes,
+    DateTimeOffset UploadedAt, Guid UploadedById)
 {
-    public static RevisionDto From(Revision revision) =>
-        new(revision.Number, revision.Title, revision.CreatedAt, revision.AuthorId);
+    public static VersionDto From(FileVersion version) => new(version.Number, version.FileName,
+        version.MediaType, version.SizeBytes, version.UploadedAt, version.UploadedById);
 }
 
 public record SearchResultDto(Guid Id, string Kind, string Title, string Snippet)
@@ -72,9 +75,12 @@ public record SearchResultDto(Guid Id, string Kind, string Title, string Snippet
 
 public record CreatePageRequest(Guid? ParentId, string Title, string? Markdown);
 public record UpdatePageRequest(string Markdown, string? Title);
+public record SaveTextRequest(string Text);
+public record RenderRequest(string Markdown);
 public record MoveNodeRequest(Guid? NewParentId, int? Position);
 public record RenameRequest(string Title);
 public record TagRequest(string Tag);
 public record CreateKeyRequest(string Name);
 public record SetPrivateRequest(bool IsPrivate);
 public record DescriptionRequest(string Description);
+public record PresenceDto(IReadOnlyList<string> Editors, int HeadVersion);

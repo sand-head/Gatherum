@@ -1,0 +1,103 @@
+@inherits GatherumComponent
+@inject AppOperations Ops
+@inject NavigationManager Navigation
+@using Gatherum.Core.Domain
+@using Gatherum.Web.Services
+
+<section class="version-panel">
+    <button class="ghost" @onclick="ToggleAsync">
+        @(open ? "Hide history" : $"History")
+    </button>
+    @if (open)
+    {
+        <table>
+            <tbody>
+                @foreach (var version in versions)
+                {
+                    <tr class="@(previewing == version.Number ? "selected" : "")">
+                        <td>#@version.Number</td>
+                        <td>@version.FileName</td>
+                        <td>@FormatSize(version.SizeBytes)</td>
+                        <td><time>@version.UploadedAt.LocalDateTime.ToString("g")</time></td>
+                        <td>
+                            @if (MediaTypes.IsText(version.MediaType, version.FileName))
+                            {
+                                <button class="ghost" @onclick="() => PreviewAsync(version)">view</button>
+                            }
+                            <a href="/api/files/@NodeId/download?version=@version.Number">download</a>
+                            @if (version.Number != versions.Max(v => v.Number))
+                            {
+                                <button class="ghost restore"
+                                        @onclick="() => RestoreAsync(version.Number)">restore</button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+        @if (previewHtml is not null)
+        {
+            <div class="history-preview page-content">@((MarkupString)previewHtml)</div>
+        }
+        else if (previewText is not null)
+        {
+            <pre class="history-preview"><code>@previewText</code></pre>
+        }
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public Guid NodeId { get; set; }
+
+    private bool open;
+    private List<FileVersion> versions = [];
+    private int? previewing;
+    private string? previewHtml;
+    private string? previewText;
+
+    private async Task ToggleAsync()
+    {
+        open = !open;
+        previewing = null;
+        previewHtml = previewText = null;
+        if (open)
+            await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        var node = await Ops.Nodes(s => s.GetWithBodyAsync(UserId, NodeId));
+        versions = (node.File?.Versions ?? []).OrderByDescending(v => v.Number).ToList();
+    }
+
+    private Task PreviewAsync(FileVersion version)
+    {
+        previewing = version.Number;
+        if (version.MediaType == MediaTypes.Markdown)
+        {
+            previewHtml = MarkdownRender.ToHtml(version.ExtractedText);
+            previewText = null;
+        }
+        else
+        {
+            previewText = version.ExtractedText;
+            previewHtml = null;
+        }
+        return Task.CompletedTask;
+    }
+
+    private async Task RestoreAsync(int number)
+    {
+        await Ops.Files(s => s.RestoreVersionAsync(UserId, NodeId, number));
+        // The editor island reads the node at mount; a full reload re-seeds it.
+        Navigation.Refresh(forceReload: true);
+    }
+
+    private static string FormatSize(long bytes) => bytes switch
+    {
+        < 1024 => $"{bytes} B",
+        < 1024 * 1024 => $"{bytes / 1024.0:0.#} KB",
+        < 1024 * 1024 * 1024 => $"{bytes / (1024.0 * 1024):0.#} MB",
+        _ => $"{bytes / (1024.0 * 1024 * 1024):0.##} GB",
+    };
+}

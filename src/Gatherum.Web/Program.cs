@@ -16,27 +16,14 @@ if (!builder.Environment.IsDevelopment())
     builder.Logging.ClearProviders().AddJsonConsole();
 
 builder.Services.AddGatherum(builder.Configuration);
-builder.Services.AddRazorComponents().AddInteractiveServerComponents();
+builder.Services.AddRazorComponents()
+    .AddInteractiveServerComponents()
+    .AddInteractiveWebAssemblyComponents();
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<Gatherum.Web.Services.AppOperations>();
 builder.Services.AddScoped<Gatherum.Web.Services.TreeState>();
-
-builder.Services.AddSingleton<YDotNet.Server.Storage.IDocumentStorage,
-    Gatherum.Infrastructure.Collaboration.YjsDocumentStorage>();
-builder.Services.AddYDotNet().AddWebSockets(options =>
-    options.OnAuthenticateAsync = async (http, document) =>
-    {
-        // The websocket handshake carries the auth cookie; anything less than a
-        // signed-in user with visibility of the page is rejected before sync starts.
-        if (http.User.Identity?.IsAuthenticated != true ||
-            !Guid.TryParse(document.DocumentName, out var nodeId))
-            throw new UnauthorizedAccessException("Not allowed to join this document.");
-        var nodes = http.RequestServices.GetRequiredService<Gatherum.Core.Services.NodeService>();
-        var node = await nodes.GetVisibleAsync(http.User.GetUserId(), nodeId);
-        if (node.Kind != Gatherum.Core.Domain.NodeKind.Page)
-            throw new UnauthorizedAccessException("Only pages have live documents.");
-    });
+builder.Services.AddSingleton<Gatherum.Web.Services.PresenceTracker>();
 builder.Services.AddMcpServer(options => options.ServerInfo = new ModelContextProtocol.Protocol.Implementation
     {
         Name = "gatherum",
@@ -141,11 +128,11 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseAntiforgery();
 
-app.UseWebSockets();
-app.Map("/collab", collab => collab.UseYDotnetWebSockets());
-
 app.MapStaticAssets().AllowAnonymous();
-app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
+app.MapRazorComponents<App>()
+    .AddInteractiveServerRenderMode()
+    .AddInteractiveWebAssemblyRenderMode()
+    .AddAdditionalAssemblies(typeof(Gatherum.Client.EditorPane).Assembly);
 app.MapAuthEndpoints(oidc);
 app.MapGatherumApi();
 app.MapMcp("/mcp").RequireAuthorization("Mcp");

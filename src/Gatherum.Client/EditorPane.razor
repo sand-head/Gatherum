@@ -1,0 +1,205 @@
+@using SlopEdit.Blazor
+@using SlopEdit.Core.Document
+@using SlopEdit.Core.Highlighting
+@implements IDisposable
+@inject HttpClient Http
+
+<div class="editor-pane">
+    <div class="editor-toolbar">
+        <span class="presence">
+            @foreach (var editor in othersEditing)
+            {
+                <span class="presence-chip">@editor is editing</span>
+            }
+        </span>
+        @if (staleWarning)
+        {
+            <span class="stale-warning">Newer version saved by someone else — your next save
+                makes a new version; theirs stays in history.</span>
+        }
+        <button class="ghost" @onclick="OpenMentionDialog">Link node…</button>
+        @if (IsMarkdown)
+        {
+            <button class="ghost" @onclick="TogglePreview">@(showPreview ? "Hide preview" : "Preview")</button>
+        }
+        <span class="save-indicator">@saveLabel</span>
+    </div>
+
+    <div class="editor-split @(showPreview ? "with-preview" : "")">
+        <div class="editor-surface">
+            @if (document is not null)
+            {
+                <EditorView Grid="document" OnChange="OnChanged" AriaLabel="Document editor" />
+            }
+            else
+            {
+                <div class="editor-loading">Loading…</div>
+            }
+        </div>
+        @if (showPreview)
+        {
+            <div class="editor-preview page-content">
+                @((MarkupString)previewHtml)
+            </div>
+        }
+    </div>
+
+    @if (mentionOpen)
+    {
+        <div class="mention-dialog">
+            <input placeholder="Search nodes…" value="@mentionQuery"
+                   @oninput="OnMentionQuery" @onkeydown="OnMentionKey" autofocus />
+            <div class="mention-results">
+                @foreach (var result in mentionResults)
+                {
+                    <button @onclick="() => InsertMention(result)">
+                        <span class="kind">@result.Kind</span> @result.Title
+                    </button>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Guid NodeId { get; set; }
+    [Parameter, EditorRequired] public string FileName { get; set; } = "";
+    [Parameter, EditorRequired] public string MediaType { get; set; } = "";
+
+    private EditorDocument? document;
+    private string saveLabel = "";
+    private bool showPreview;
+    private string previewHtml = "";
+    private bool staleWarning;
+    private List<string> othersEditing = [];
+    private System.Threading.Timer? saveTimer;
+    private System.Threading.Timer? presenceTimer;
+    private int savedGeneration;
+    private int generation;
+
+    private bool IsMarkdown => MediaType == "text/markdown";
+
+    private bool mentionOpen;
+    private string mentionQuery = "";
+    private List<SearchHit> mentionResults = [];
+
+    private record SearchHit(Guid Id, string Kind, string Title, string Snippet);
+    private record PresenceState(string[] Editors, int HeadVersion);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var text = await Http.GetStringAsync($"/api/files/{NodeId}/content");
+        document = new EditorDocument(text)
+        {
+            Lexer = LexerRegistry.ForPath(FileName),
+        };
+        presenceTimer = new System.Threading.Timer(_ => _ = InvokeAsync(HeartbeatAsync),
+            null, 0, 5000);
+    }
+
+    private void OnChanged(string changedText)
+    {
+        generation++;
+        saveLabel = "Saving…";
+        saveTimer?.Dispose();
+        saveTimer = new System.Threading.Timer(_ => _ = InvokeAsync(SaveAsync),
+            null, 1200, Timeout.Infinite);
+        if (showPreview)
+            _ = InvokeAsync(RefreshPreviewAsync);
+        StateHasChanged();
+    }
+
+    private async Task SaveAsync()
+    {
+        if (document is null)
+            return;
+        var saving = generation;
+        var response = await Http.PutAsJsonAsync($"/api/text/{NodeId}", new { text = document.Text });
+        if (response.IsSuccessStatusCode)
+        {
+            savedGeneration = saving;
+            staleWarning = false;
+            saveLabel = generation == savedGeneration ? "Saved" : saveLabel;
+        }
+        else
+        {
+            saveLabel = "Save failed — retrying";
+            saveTimer?.Dispose();
+            saveTimer = new System.Threading.Timer(_ => _ = InvokeAsync(SaveAsync),
+                null, 3000, Timeout.Infinite);
+        }
+        StateHasChanged();
+    }
+
+    private async Task HeartbeatAsync()
+    {
+        try
+        {
+            var state = await Http.GetFromJsonAsync<PresenceState>(
+                $"/api/nodes/{NodeId}/presence?editing=true");
+            if (state is null)
+                return;
+            othersEditing = state.Editors.ToList();
+            StateHasChanged();
+        }
+        catch (HttpRequestException)
+        {
+            // The next heartbeat retries; a blip shouldn't disturb typing.
+        }
+    }
+
+    private async Task TogglePreview()
+    {
+        showPreview = !showPreview;
+        if (showPreview)
+            await RefreshPreviewAsync();
+    }
+
+    private async Task RefreshPreviewAsync()
+    {
+        if (document is null)
+            return;
+        var response = await Http.PostAsJsonAsync("/api/markdown/render", new { markdown = document.Text });
+        previewHtml = await response.Content.ReadAsStringAsync();
+        StateHasChanged();
+    }
+
+    private void OpenMentionDialog()
+    {
+        mentionOpen = true;
+        mentionQuery = "";
+        mentionResults = [];
+    }
+
+    private async Task OnMentionQuery(ChangeEventArgs e)
+    {
+        mentionQuery = e.Value?.ToString() ?? "";
+        if (mentionQuery.Length == 0)
+        {
+            mentionResults = [];
+            return;
+        }
+        mentionResults = await Http.GetFromJsonAsync<List<SearchHit>>(
+            $"/api/search?query={Uri.EscapeDataString(mentionQuery)}&limit=8") ?? [];
+    }
+
+    private void OnMentionKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+            mentionOpen = false;
+    }
+
+    private void InsertMention(SearchHit hit)
+    {
+        document?.Insert($"[@{hit.Title}](node://{hit.Id})");
+        mentionOpen = false;
+        OnChanged("");
+    }
+
+    public void Dispose()
+    {
+        saveTimer?.Dispose();
+        presenceTimer?.Dispose();
+        _ = Http.PostAsync($"/api/nodes/{NodeId}/presence/leave", null);
+    }
+}

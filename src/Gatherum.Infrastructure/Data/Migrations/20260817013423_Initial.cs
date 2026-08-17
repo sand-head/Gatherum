@@ -69,8 +69,8 @@ namespace Gatherum.Infrastructure.Data.Migrations
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    Kind = table.Column<string>(type: "character varying(10)", maxLength: 10, nullable: false),
                     Title = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: false),
+                    MediaType = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: false),
                     ParentId = table.Column<Guid>(type: "uuid", nullable: true),
                     Position = table.Column<int>(type: "integer", nullable: false),
                     IsPrivate = table.Column<bool>(type: "boolean", nullable: false),
@@ -165,72 +165,6 @@ namespace Gatherum.Infrastructure.Data.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "PageBodies",
-                columns: table => new
-                {
-                    NodeId = table.Column<Guid>(type: "uuid", nullable: false),
-                    Doc = table.Column<string>(type: "jsonb", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_PageBodies", x => x.NodeId);
-                    table.ForeignKey(
-                        name: "FK_PageBodies_Nodes_NodeId",
-                        column: x => x.NodeId,
-                        principalTable: "Nodes",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "Revisions",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uuid", nullable: false),
-                    NodeId = table.Column<Guid>(type: "uuid", nullable: false),
-                    Number = table.Column<int>(type: "integer", nullable: false),
-                    Title = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: false),
-                    Doc = table.Column<string>(type: "jsonb", nullable: false),
-                    AuthorId = table.Column<Guid>(type: "uuid", nullable: false),
-                    CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_Revisions", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_Revisions_Nodes_NodeId",
-                        column: x => x.NodeId,
-                        principalTable: "Nodes",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                    table.ForeignKey(
-                        name: "FK_Revisions_Users_AuthorId",
-                        column: x => x.AuthorId,
-                        principalTable: "Users",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "YjsDocs",
-                columns: table => new
-                {
-                    NodeId = table.Column<Guid>(type: "uuid", nullable: false),
-                    State = table.Column<byte[]>(type: "bytea", nullable: false),
-                    UpdatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_YjsDocs", x => x.NodeId);
-                    table.ForeignKey(
-                        name: "FK_YjsDocs_Nodes_NodeId",
-                        column: x => x.NodeId,
-                        principalTable: "Nodes",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
-
-            migrationBuilder.CreateTable(
                 name: "FileVersions",
                 columns: table => new
                 {
@@ -311,17 +245,6 @@ namespace Gatherum.Infrastructure.Data.Migrations
                 column: "TagId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_Revisions_AuthorId",
-                table: "Revisions",
-                column: "AuthorId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_Revisions_NodeId_Number",
-                table: "Revisions",
-                columns: new[] { "NodeId", "Number" },
-                unique: true);
-
-            migrationBuilder.CreateIndex(
                 name: "IX_Tags_Name",
                 table: "Tags",
                 column: "Name",
@@ -348,15 +271,6 @@ namespace Gatherum.Infrastructure.Data.Migrations
 
             migrationBuilder.DropTable(
                 name: "NodeTags");
-
-            migrationBuilder.DropTable(
-                name: "PageBodies");
-
-            migrationBuilder.DropTable(
-                name: "Revisions");
-
-            migrationBuilder.DropTable(
-                name: "YjsDocs");
 
             migrationBuilder.DropTable(
                 name: "FileBodies");

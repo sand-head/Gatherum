@@ -15,16 +15,21 @@ public class SearchService(GatherumDbContext db, INodeAuthorizer authorizer)
         limit = Math.Clamp(limit, 1, 100);
 
         var matches = await authorizer.VisibleTo(db.Nodes, userId)
-            .Where(n => kind == null || n.Kind == kind)
+            .Where(n => kind == null ||
+                (kind == NodeKind.Page
+                    ? n.MediaType == MediaTypes.Markdown
+                    : n.MediaType != MediaTypes.Markdown))
             .Where(n => n.SearchVector.Matches(EF.Functions.WebSearchToTsQuery("english", query)))
             .OrderByDescending(n =>
                 n.SearchVector.Rank(EF.Functions.WebSearchToTsQuery("english", query)))
             .Take(limit)
-            .Select(n => new { n.Id, n.Title, n.Kind, n.SearchText })
+            .Select(n => new { n.Id, n.Title, n.MediaType, n.SearchText })
             .ToListAsync(ct);
 
         return matches
-            .Select(n => new SearchResult(n.Id, n.Title, n.Kind, Snippet(n.SearchText, query)))
+            .Select(n => new SearchResult(n.Id, n.Title,
+                n.MediaType == MediaTypes.Markdown ? NodeKind.Page : NodeKind.File,
+                Snippet(n.SearchText, query)))
             .ToList();
     }
 

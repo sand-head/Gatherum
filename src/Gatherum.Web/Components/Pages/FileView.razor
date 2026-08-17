@@ -1,104 +1,91 @@
 @inherits GatherumComponent
 @inject AppOperations Ops
+@using Gatherum.Core.Domain
 
-@{
-    var file = Node.File!;
+@if (node?.File is { Versions.Count: > 0 } file)
+{
     var current = file.Current;
-    var contentUrl = $"/api/files/{Node.Id}/content";
+    var contentUrl = $"/api/files/{NodeId}/content";
+
+    <div class="file-view">
+        <div class="file-preview">
+            @if (current.MediaType.StartsWith("image/"))
+            {
+                <img src="@contentUrl" alt="@current.FileName" />
+            }
+            else if (current.MediaType == "application/pdf")
+            {
+                <iframe src="@contentUrl" title="@current.FileName"></iframe>
+            }
+            else if (current.MediaType.StartsWith("video/"))
+            {
+                <video src="@contentUrl" controls></video>
+            }
+            else if (current.MediaType.StartsWith("audio/"))
+            {
+                <audio src="@contentUrl" controls></audio>
+            }
+            else if (current.ExtractedText.Length > 0)
+            {
+                <pre class="file-text"><code>@current.ExtractedText</code></pre>
+            }
+            else
+            {
+                <div class="file-fallback">No inline preview for @current.MediaType.</div>
+            }
+        </div>
+
+        <dl class="file-facts">
+            <dt>File</dt><dd>@current.FileName</dd>
+            <dt>Type</dt><dd>@current.MediaType</dd>
+            <dt>Size</dt><dd>@FormatSize(current.SizeBytes)</dd>
+            <dt>SHA-256</dt><dd class="hash">@current.Hash</dd>
+            <dt></dt>
+            <dd class="file-actions">
+                <a class="button" href="/api/files/@NodeId/download" target="_blank">Download</a>
+                <label class="upload-label button">
+                    Upload new version
+                    <InputFile OnChange="UploadVersionAsync" />
+                </label>
+            </dd>
+        </dl>
+
+        <section class="file-description">
+            <h3>Description</h3>
+            <textarea value="@description" @onchange='e => description = e.Value?.ToString() ?? ""'
+                      placeholder="What is this file?"></textarea>
+            <button class="primary" @onclick="SaveDescriptionAsync"
+                    disabled="@(description == file.Description)">Save description</button>
+        </section>
+    </div>
 }
 
-<div class="file-view">
-    <div class="file-preview">
-        @if (current.MediaType.StartsWith("image/"))
-        {
-            <img src="@contentUrl" alt="@current.FileName" />
-        }
-        else if (current.MediaType == "application/pdf")
-        {
-            <iframe src="@contentUrl" title="@current.FileName"></iframe>
-        }
-        else if (current.MediaType.StartsWith("video/"))
-        {
-            <video src="@contentUrl" controls></video>
-        }
-        else if (current.MediaType.StartsWith("audio/"))
-        {
-            <audio src="@contentUrl" controls></audio>
-        }
-        else if (current.ExtractedText.Length > 0)
-        {
-            <pre class="file-text"><code>@current.ExtractedText</code></pre>
-        }
-        else
-        {
-            <div class="file-fallback">No inline preview for @current.MediaType.</div>
-        }
-    </div>
-
-    <dl class="file-facts">
-        <dt>File</dt><dd>@current.FileName</dd>
-        <dt>Type</dt><dd>@current.MediaType</dd>
-        <dt>Size</dt><dd>@FormatSize(current.SizeBytes)</dd>
-        <dt>SHA-256</dt><dd class="hash">@current.Hash</dd>
-        <dt></dt>
-        <dd><a class="button" href="/api/files/@Node.Id/download" target="_blank">Download</a></dd>
-    </dl>
-
-    <section class="file-description">
-        <h3>Description</h3>
-        <textarea value="@description" @onchange='e => description = e.Value?.ToString() ?? ""'
-                  placeholder="What is this file?"></textarea>
-        <button class="primary" @onclick="SaveDescriptionAsync"
-                disabled="@(description == file.Description)">Save description</button>
-    </section>
-
-    <section class="file-versions">
-        <h3>Versions</h3>
-        <label class="upload-label button">
-            Upload new version
-            <InputFile OnChange="UploadVersionAsync" />
-        </label>
-        <table>
-            <tbody>
-                @foreach (var version in file.Versions.OrderByDescending(v => v.Number))
-                {
-                    <tr>
-                        <td>#@version.Number</td>
-                        <td>@version.FileName</td>
-                        <td>@FormatSize(version.SizeBytes)</td>
-                        <td><time>@version.UploadedAt.LocalDateTime.ToString("g")</time></td>
-                        <td>
-                            <a href="/api/files/@Node.Id/download?version=@version.Number">download</a>
-                        </td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </section>
-</div>
-
 @code {
-    [Parameter, EditorRequired] public Node Node { get; set; } = null!;
-    [Parameter] public EventCallback OnChanged { get; set; }
+    [Parameter, EditorRequired] public Guid NodeId { get; set; }
 
+    private Node? node;
     private string description = "";
 
-    protected override void OnParametersSet() => description = Node.File!.Description;
+    protected override async Task OnParametersSetAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        node = await Ops.Nodes(s => s.GetWithBodyAsync(UserId, NodeId));
+        description = node.File?.Description ?? "";
+    }
 
     private async Task SaveDescriptionAsync()
     {
-        await Ops.Files(s => s.SetDescriptionAsync(UserId, Node.Id, description));
-        await OnChanged.InvokeAsync();
+        await Ops.Files(s => s.SetDescriptionAsync(UserId, NodeId, description));
+        await ReloadAsync();
     }
 
     private async Task UploadVersionAsync(InputFileChangeEventArgs e)
     {
         var file = e.File;
         await using var stream = file.OpenReadStream(maxAllowedSize: 512 * 1024 * 1024);
-        await Ops.Files(s => s.UploadVersionAsync(UserId, Node.Id, file.Name,
-            string.IsNullOrWhiteSpace(file.ContentType) ? "application/octet-stream" : file.ContentType,
-            stream));
-        await OnChanged.InvokeAsync();
+        await Ops.Files(s => s.UploadVersionAsync(UserId, NodeId, file.Name, file.ContentType, stream));
+        await ReloadAsync();
     }
 
     private static string FormatSize(long bytes) => bytes switch

@@ -78,7 +78,7 @@
 
     public async Task CreatePageAsync(Guid? parentId)
     {
-        var node = await Ops.Nodes(s => s.CreatePageAsync(UserId, parentId, "Untitled"));
+        var node = await Ops.Files(s => s.CreateTextNodeAsync(UserId, parentId, "Untitled"));
         if (parentId is { } id)
             expanded.Add(id);
         await Tree.RefreshAsync(UserId);
@@ -92,8 +92,7 @@
         {
             await using var stream = file.OpenReadStream(maxAllowedSize: 512 * 1024 * 1024);
             var node = await Ops.Files(s => s.CreateFileNodeAsync(UserId, parentId, file.Name,
-                string.IsNullOrWhiteSpace(file.ContentType) ? "application/octet-stream" : file.ContentType,
-                stream));
+                file.ContentType, stream));
             lastId = node.Id;
         }
         if (parentId is { } id)

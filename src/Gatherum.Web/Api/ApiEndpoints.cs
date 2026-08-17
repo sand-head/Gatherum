@@ -1,8 +1,8 @@
 using Gatherum.Core;
 using Gatherum.Core.Domain;
-using Gatherum.Core.Markdown;
 using Gatherum.Core.Services;
 using Gatherum.Web.Auth;
+using Gatherum.Web.Services;
 
 namespace Gatherum.Web.Api;
 
@@ -39,21 +39,52 @@ public static class ApiEndpoints
             return Results.Ok(roots.Select(NodeSummaryDto.From));
         });
 
-        api.MapPost("/pages", async (NodeService nodes, HttpContext http, CreatePageRequest request) =>
+        api.MapPost("/pages", async (FileService files, NodeService nodes, HttpContext http,
+            CreatePageRequest request) =>
         {
-            var doc = request.Markdown is null ? null : PageMarkdown.ToDocJson(request.Markdown);
-            var node = await nodes.CreatePageAsync(http.User.GetUserId(), request.ParentId,
-                request.Title, doc);
+            var node = await files.CreateTextNodeAsync(http.User.GetUserId(), request.ParentId,
+                request.Title, request.Markdown ?? "");
             var created = await nodes.GetWithBodyAsync(http.User.GetUserId(), node.Id);
             return Results.Created($"/api/nodes/{node.Id}", NodeDto.From(created));
         });
 
-        api.MapPut("/pages/{id:guid}", async (NodeService nodes, HttpContext http, Guid id,
-            UpdatePageRequest request) =>
+        api.MapPut("/pages/{id:guid}", async (FileService files, NodeService nodes,
+            HttpContext http, Guid id, UpdatePageRequest request) =>
         {
-            var node = await nodes.SavePageAsync(http.User.GetUserId(), id,
-                PageMarkdown.ToDocJson(request.Markdown), request.Title, resetCollabState: true);
-            return Results.Ok(NodeDto.From(node));
+            var userId = http.User.GetUserId();
+            if (request.Title is not null)
+                await nodes.RenameAsync(userId, id, request.Title);
+            await files.SaveTextAsync(userId, id, request.Markdown);
+            return Results.Ok(NodeDto.From(await nodes.GetWithBodyAsync(userId, id)));
+        });
+
+        // The editor island saves any editable text node — pages included — through here.
+        api.MapPut("/text/{id:guid}", async (FileService files, HttpContext http, Guid id,
+            SaveTextRequest request) =>
+        {
+            var version = await files.SaveTextAsync(http.User.GetUserId(), id, request.Text);
+            return Results.Ok(new { version = version.Number });
+        });
+
+        api.MapPost("/markdown/render", (RenderRequest request) =>
+            Results.Text(MarkdownRender.ToHtml(request.Markdown), "text/html"));
+
+        api.MapGet("/nodes/{id:guid}/presence", async (PresenceTracker presence, NodeService nodes,
+            HttpContext http, Guid id, bool? editing) =>
+        {
+            var userId = http.User.GetUserId();
+            if (editing == true)
+                presence.Heartbeat(id, userId, http.User.Identity?.Name ?? "someone");
+            var node = await nodes.GetWithBodyAsync(userId, id);
+            var head = node.File is { Versions.Count: > 0 } file ? file.Current.Number : 0;
+            return Results.Ok(new PresenceDto(presence.OthersEditing(id, userId), head));
+        });
+
+        api.MapPost("/nodes/{id:guid}/presence/leave", (PresenceTracker presence,
+            HttpContext http, Guid id) =>
+        {
+            presence.Leave(id, http.User.GetUserId());
+            return Results.NoContent();
         });
 
         api.MapPost("/nodes/{id:guid}/move", async (NodeService nodes, HttpContext http, Guid id,
@@ -112,31 +143,17 @@ public static class ApiEndpoints
             return Results.Ok(backlinks.Select(NodeSummaryDto.From));
         });
 
-        api.MapGet("/nodes/{id:guid}/revisions", async (NodeService nodes, HttpContext http, Guid id) =>
+        api.MapGet("/nodes/{id:guid}/versions", async (NodeService nodes, HttpContext http, Guid id) =>
         {
-            var revisions = await nodes.GetRevisionsAsync(http.User.GetUserId(), id);
-            return Results.Ok(revisions.Select(RevisionDto.From));
+            var node = await nodes.GetWithBodyAsync(http.User.GetUserId(), id);
+            var versions = (node.File?.Versions ?? []).OrderByDescending(v => v.Number);
+            return Results.Ok(versions.Select(VersionDto.From));
         });
 
-        api.MapGet("/nodes/{id:guid}/revisions/{number:int}", async (NodeService nodes,
+        api.MapPost("/nodes/{id:guid}/versions/{number:int}/restore", async (FileService files,
             HttpContext http, Guid id, int number) =>
         {
-            var revisions = await nodes.GetRevisionsAsync(http.User.GetUserId(), id);
-            var revision = revisions.FirstOrDefault(r => r.Number == number)
-                ?? throw new NotFoundException($"Revision {number} of node {id} not found.");
-            return Results.Ok(new
-            {
-                revision.Number,
-                revision.Title,
-                revision.CreatedAt,
-                Markdown = PageMarkdown.ToMarkdown(revision.Doc),
-            });
-        });
-
-        api.MapPost("/nodes/{id:guid}/revisions/{number:int}/restore", async (NodeService nodes,
-            HttpContext http, Guid id, int number) =>
-        {
-            var node = await nodes.RestoreRevisionAsync(http.User.GetUserId(), id, number);
+            var node = await files.RestoreVersionAsync(http.User.GetUserId(), id, number);
             return Results.Ok(NodeDto.From(node));
         });
 
@@ -145,7 +162,7 @@ public static class ApiEndpoints
         {
             await using var stream = file.OpenReadStream();
             var node = await files.CreateFileNodeAsync(http.User.GetUserId(), parentId,
-                file.FileName, ContentType(file), stream);
+                file.FileName, file.ContentType, stream);
             var created = await nodes.GetWithBodyAsync(http.User.GetUserId(), node.Id);
             return Results.Created($"/api/nodes/{node.Id}", NodeDto.From(created));
         }).DisableAntiforgery();
@@ -155,7 +172,7 @@ public static class ApiEndpoints
         {
             await using var stream = file.OpenReadStream();
             await files.UploadVersionAsync(http.User.GetUserId(), id, file.FileName,
-                ContentType(file), stream);
+                file.ContentType, stream);
             var node = await nodes.GetWithBodyAsync(http.User.GetUserId(), id);
             return Results.Ok(NodeDto.From(node));
         }).DisableAntiforgery();
@@ -204,9 +221,6 @@ public static class ApiEndpoints
             return Results.NoContent();
         });
     }
-
-    private static string ContentType(IFormFile file) =>
-        string.IsNullOrWhiteSpace(file.ContentType) ? "application/octet-stream" : file.ContentType;
 
     private static async ValueTask<object?> TranslateDomainErrors(
         EndpointFilterInvocationContext context, EndpointFilterDelegate next)

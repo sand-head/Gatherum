@@ -6,23 +6,21 @@ namespace Gatherum.Core.Data;
 public class GatherumDbContext(DbContextOptions<GatherumDbContext> options) : DbContext(options)
 {
     public DbSet<Node> Nodes => Set<Node>();
-    public DbSet<PageBody> PageBodies => Set<PageBody>();
     public DbSet<FileBody> FileBodies => Set<FileBody>();
     public DbSet<FileVersion> FileVersions => Set<FileVersion>();
-    public DbSet<Revision> Revisions => Set<Revision>();
     public DbSet<Tag> Tags => Set<Tag>();
     public DbSet<NodeTag> NodeTags => Set<NodeTag>();
     public DbSet<NodeLink> NodeLinks => Set<NodeLink>();
     public DbSet<User> Users => Set<User>();
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
-    public DbSet<YjsDoc> YjsDocs => Set<YjsDoc>();
 
     protected override void OnModelCreating(ModelBuilder model)
     {
         model.Entity<Node>(node =>
         {
             node.Property(n => n.Title).HasMaxLength(500);
-            node.Property(n => n.Kind).HasConversion<string>().HasMaxLength(10);
+            node.Property(n => n.MediaType).HasMaxLength(255);
+            node.Ignore(n => n.Kind);
             node.HasOne(n => n.Parent).WithMany(n => n.Children)
                 .HasForeignKey(n => n.ParentId).OnDelete(DeleteBehavior.Cascade);
             node.HasOne(n => n.Owner).WithMany().HasForeignKey(n => n.OwnerId);
@@ -35,13 +33,6 @@ public class GatherumDbContext(DbContextOptions<GatherumDbContext> options) : Db
                     """,
                     stored: true);
             node.HasIndex(n => n.SearchVector).HasMethod("GIN");
-        });
-
-        model.Entity<PageBody>(page =>
-        {
-            page.HasKey(p => p.NodeId);
-            page.HasOne(p => p.Node).WithOne(n => n.Page).HasForeignKey<PageBody>(p => p.NodeId);
-            page.Property(p => p.Doc).HasColumnType("jsonb");
         });
 
         model.Entity<FileBody>(file =>
@@ -58,15 +49,6 @@ public class GatherumDbContext(DbContextOptions<GatherumDbContext> options) : Db
             version.Property(v => v.MediaType).HasMaxLength(255);
             version.Property(v => v.FileName).HasMaxLength(500);
             version.HasIndex(v => new { v.NodeId, v.Number }).IsUnique();
-        });
-
-        model.Entity<Revision>(revision =>
-        {
-            revision.Property(r => r.Title).HasMaxLength(500);
-            revision.Property(r => r.Doc).HasColumnType("jsonb");
-            revision.HasIndex(r => new { r.NodeId, r.Number }).IsUnique();
-            revision.HasOne<Node>().WithMany(n => n.Revisions)
-                .HasForeignKey(r => r.NodeId).OnDelete(DeleteBehavior.Cascade);
         });
 
         model.Entity<Tag>(tag =>
@@ -110,11 +92,5 @@ public class GatherumDbContext(DbContextOptions<GatherumDbContext> options) : Db
             key.Ignore(k => k.IsActive);
         });
 
-        model.Entity<YjsDoc>(doc =>
-        {
-            doc.HasKey(d => d.NodeId);
-            doc.HasOne(d => d.Node).WithOne().HasForeignKey<YjsDoc>(d => d.NodeId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
     }
 }

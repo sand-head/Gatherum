@@ -1,39 +1,38 @@
-using Gatherum.Core.Data;
 using Gatherum.Core.Domain;
-using Gatherum.Core.Markdown;
 using Gatherum.Core.Services;
-using Microsoft.EntityFrameworkCore;
 
 namespace Gatherum.Tests;
 
 [Collection("postgres")]
 public class NodeServiceTests(PostgresFixture postgres) : IAsyncLifetime
 {
-    private string connectionString = "";
-    private GatherumDbContext db = null!;
+    private ServiceHarness harness = null!;
     private NodeService nodes = null!;
-    private readonly ManualClock clock = new();
+    private FileService files = null!;
     private Guid jess;
     private Guid sam;
 
     public async Task InitializeAsync()
     {
-        connectionString = await postgres.CreateDatabaseAsync();
-        db = PostgresFixture.CreateContext(connectionString);
-        nodes = new NodeService(db, new DefaultNodeAuthorizer(), clock);
-        jess = await AddUserAsync("jess");
-        sam = await AddUserAsync("sam");
+        harness = new ServiceHarness(await postgres.CreateDatabaseAsync());
+        nodes = harness.Nodes;
+        files = harness.Files;
+        jess = await harness.AddUserAsync("jess");
+        sam = await harness.AddUserAsync("sam");
     }
 
-    public async Task DisposeAsync() => await db.DisposeAsync();
+    public async Task DisposeAsync() => await harness.DisposeAsync();
+
+    private Task<Node> NewPageAsync(Guid userId, Guid? parentId, string title, string content = "") =>
+        files.CreateTextNodeAsync(userId, parentId, title, content);
 
     [Fact]
     public async Task Children_are_ordered_and_positions_are_dense()
     {
-        var parent = await nodes.CreatePageAsync(jess, null, "parent");
-        var a = await nodes.CreatePageAsync(jess, parent.Id, "a");
-        var b = await nodes.CreatePageAsync(jess, parent.Id, "b");
-        var c = await nodes.CreatePageAsync(jess, parent.Id, "c");
+        var parent = await NewPageAsync(jess, null, "parent");
+        var a = await NewPageAsync(jess, parent.Id, "a");
+        var b = await NewPageAsync(jess, parent.Id, "b");
+        var c = await NewPageAsync(jess, parent.Id, "c");
 
         await nodes.DeleteAsync(jess, b.Id);
 
@@ -47,11 +46,11 @@ public class NodeServiceTests(PostgresFixture postgres) : IAsyncLifetime
     [Fact]
     public async Task Move_reparents_and_renumbers_both_sides()
     {
-        var source = await nodes.CreatePageAsync(jess, null, "source");
-        var target = await nodes.CreatePageAsync(jess, null, "target");
-        var one = await nodes.CreatePageAsync(jess, source.Id, "one");
-        var two = await nodes.CreatePageAsync(jess, source.Id, "two");
-        var existing = await nodes.CreatePageAsync(jess, target.Id, "existing");
+        var source = await NewPageAsync(jess, null, "source");
+        var target = await NewPageAsync(jess, null, "target");
+        var one = await NewPageAsync(jess, source.Id, "one");
+        var two = await NewPageAsync(jess, source.Id, "two");
+        var existing = await NewPageAsync(jess, target.Id, "existing");
 
         await nodes.MoveAsync(jess, two.Id, target.Id, position: 0);
 
@@ -67,10 +66,10 @@ public class NodeServiceTests(PostgresFixture postgres) : IAsyncLifetime
     [Fact]
     public async Task Reordering_within_the_same_parent_works()
     {
-        var parent = await nodes.CreatePageAsync(jess, null, "parent");
-        var a = await nodes.CreatePageAsync(jess, parent.Id, "a");
-        var b = await nodes.CreatePageAsync(jess, parent.Id, "b");
-        var c = await nodes.CreatePageAsync(jess, parent.Id, "c");
+        var parent = await NewPageAsync(jess, null, "parent");
+        var a = await NewPageAsync(jess, parent.Id, "a");
+        var b = await NewPageAsync(jess, parent.Id, "b");
+        var c = await NewPageAsync(jess, parent.Id, "c");
 
         await nodes.MoveAsync(jess, c.Id, parent.Id, position: 0);
 
@@ -81,9 +80,9 @@ public class NodeServiceTests(PostgresFixture postgres) : IAsyncLifetime
     [Fact]
     public async Task A_node_cannot_move_into_its_own_subtree()
     {
-        var root = await nodes.CreatePageAsync(jess, null, "root");
-        var child = await nodes.CreatePageAsync(jess, root.Id, "child");
-        var grandchild = await nodes.CreatePageAsync(jess, child.Id, "grandchild");
+        var root = await NewPageAsync(jess, null, "root");
+        var child = await NewPageAsync(jess, root.Id, "child");
+        var grandchild = await NewPageAsync(jess, child.Id, "grandchild");
 
         await Assert.ThrowsAsync<Gatherum.Core.ForbiddenException>(
             () => nodes.MoveAsync(jess, root.Id, grandchild.Id));
@@ -94,8 +93,8 @@ public class NodeServiceTests(PostgresFixture postgres) : IAsyncLifetime
     [Fact]
     public async Task Private_subtrees_hide_from_everyone_but_the_owner()
     {
-        var secret = await nodes.CreatePageAsync(jess, null, "secret");
-        var inside = await nodes.CreatePageAsync(jess, secret.Id, "inside");
+        var secret = await NewPageAsync(jess, null, "secret");
+        var inside = await NewPageAsync(jess, secret.Id, "inside");
         await nodes.SetPrivateAsync(jess, secret.Id, true);
 
         Assert.Equal(2, (await nodes.GetTreeAsync(jess)).Count);
@@ -110,9 +109,9 @@ public class NodeServiceTests(PostgresFixture postgres) : IAsyncLifetime
     [Fact]
     public async Task Moving_into_a_private_subtree_inherits_privacy()
     {
-        var secret = await nodes.CreatePageAsync(jess, null, "secret");
+        var secret = await NewPageAsync(jess, null, "secret");
         await nodes.SetPrivateAsync(jess, secret.Id, true);
-        var wanderer = await nodes.CreatePageAsync(sam, null, "wanderer");
+        var wanderer = await NewPageAsync(sam, null, "wanderer");
 
         // Sam can't see jess's private node, so jess performs the move.
         await nodes.MoveAsync(jess, wanderer.Id, secret.Id);
@@ -125,96 +124,54 @@ public class NodeServiceTests(PostgresFixture postgres) : IAsyncLifetime
     [Fact]
     public async Task Only_the_owner_can_toggle_privacy()
     {
-        var page = await nodes.CreatePageAsync(jess, null, "mine");
+        var page = await NewPageAsync(jess, null, "mine");
 
         await Assert.ThrowsAsync<Gatherum.Core.ForbiddenException>(
             () => nodes.SetPrivateAsync(sam, page.Id, true));
     }
 
     [Fact]
-    public async Task Saving_a_page_with_mentions_creates_backlinks()
+    public async Task Saving_markdown_with_mentions_creates_backlinks()
     {
-        var target = await nodes.CreatePageAsync(jess, null, "target");
-        var source = await nodes.CreatePageAsync(jess, null, "source");
-        var doc = PageMarkdown.ToDocJson($"See [@target](node://{target.Id}).");
+        var target = await NewPageAsync(jess, null, "target");
+        var source = await NewPageAsync(jess, null, "source");
 
-        await nodes.SavePageAsync(jess, source.Id, doc);
+        await files.SaveTextAsync(jess, source.Id, $"See [@target](node://{target.Id}).");
 
         var backlinks = await nodes.GetBacklinksAsync(jess, target.Id);
         Assert.Equal([source.Id], backlinks.Select(n => n.Id));
 
-        await nodes.SavePageAsync(jess, source.Id, PageMarkdown.EmptyDoc);
+        await files.SaveTextAsync(jess, source.Id, "no more links");
         Assert.Empty(await nodes.GetBacklinksAsync(jess, target.Id));
     }
 
     [Fact]
     public async Task Tags_contribute_to_search_text_and_can_be_removed()
     {
-        var page = await nodes.CreatePageAsync(jess, null, "quadlets");
+        var page = await NewPageAsync(jess, null, "quadlets");
         await nodes.AddTagAsync(jess, page.Id, " Podman ");
         await nodes.AddTagAsync(jess, page.Id, "podman");
 
-        var fresh = await ReloadAsync(page.Id);
+        var fresh = await harness.ReloadAsync(jess, page.Id);
         Assert.Contains("podman", fresh.SearchText);
         Assert.Single(fresh.Tags);
 
         await nodes.RemoveTagAsync(jess, page.Id, "PODMAN");
-        fresh = await ReloadAsync(page.Id);
+        fresh = await harness.ReloadAsync(jess, page.Id);
         Assert.DoesNotContain("podman", fresh.SearchText);
         Assert.DoesNotContain(await nodes.ListTagsAsync(jess), t => t.Name == "podman");
     }
 
     [Fact]
-    public async Task Distinct_saves_create_revisions_and_rapid_saves_collapse()
+    public async Task A_new_page_is_a_markdown_file_node()
     {
-        var page = await nodes.CreatePageAsync(jess, null, "draft");
-        await nodes.SavePageAsync(jess, page.Id, PageMarkdown.ToDocJson("first"));
-        await nodes.SavePageAsync(jess, page.Id, PageMarkdown.ToDocJson("first, revised"));
+        var page = await NewPageAsync(jess, null, "My Notes", "# hello");
 
-        Assert.Single(await nodes.GetRevisionsAsync(jess, page.Id));
-
-        clock.Advance(TimeSpan.FromMinutes(10));
-        await nodes.SavePageAsync(jess, page.Id, PageMarkdown.ToDocJson("second"));
-
-        var revisions = await nodes.GetRevisionsAsync(jess, page.Id);
-        Assert.Equal(2, revisions.Count);
-        Assert.Equal("second", PageMarkdown.ToPlainText(revisions[0].Doc));
-        Assert.Equal("first, revised", PageMarkdown.ToPlainText(revisions[1].Doc));
-    }
-
-    [Fact]
-    public async Task Restoring_a_revision_brings_back_its_content_as_a_new_revision()
-    {
-        var page = await nodes.CreatePageAsync(jess, null, "draft");
-        await nodes.SavePageAsync(jess, page.Id, PageMarkdown.ToDocJson("original"));
-        clock.Advance(TimeSpan.FromMinutes(10));
-        await nodes.SavePageAsync(jess, page.Id, PageMarkdown.ToDocJson("rewritten"));
-        clock.Advance(TimeSpan.FromMinutes(10));
-
-        await nodes.RestoreRevisionAsync(jess, page.Id, 1);
-
-        var fresh = await ReloadAsync(page.Id);
-        Assert.Equal("original", PageMarkdown.ToPlainText(fresh.Page!.Doc));
-        Assert.Equal(3, (await nodes.GetRevisionsAsync(jess, page.Id)).Count);
-    }
-
-    private async Task<Node> ReloadAsync(Guid id)
-    {
-        db.ChangeTracker.Clear();
-        return await nodes.GetWithBodyAsync(jess, id);
-    }
-
-    private async Task<Guid> AddUserAsync(string name)
-    {
-        var user = new User
-        {
-            Id = Guid.NewGuid(),
-            Subject = name,
-            Email = $"{name}@example.org",
-            DisplayName = name,
-        };
-        db.Users.Add(user);
-        await db.SaveChangesAsync();
-        return user.Id;
+        var fresh = await harness.ReloadAsync(jess, page.Id);
+        Assert.Equal(NodeKind.Page, fresh.Kind);
+        Assert.Equal(MediaTypes.Markdown, fresh.MediaType);
+        Assert.Equal("My Notes.md", fresh.File!.Current.FileName);
+        Assert.Equal("# hello", fresh.File.Current.ExtractedText);
+        Assert.Equal("# hello", await files.GetTextAsync(jess, page.Id));
     }
 }

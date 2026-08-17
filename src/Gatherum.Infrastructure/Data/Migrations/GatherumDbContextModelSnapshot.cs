@@ -142,10 +142,10 @@ namespace Gatherum.Infrastructure.Data.Migrations
                     b.Property<bool>("IsPrivate")
                         .HasColumnType("boolean");
 
-                    b.Property<string>("Kind")
+                    b.Property<string>("MediaType")
                         .IsRequired()
-                        .HasMaxLength(10)
-                        .HasColumnType("character varying(10)");
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
 
                     b.Property<Guid>("OwnerId")
                         .HasColumnType("uuid");
@@ -220,57 +220,6 @@ namespace Gatherum.Infrastructure.Data.Migrations
                     b.ToTable("NodeTags");
                 });
 
-            modelBuilder.Entity("Gatherum.Core.Domain.PageBody", b =>
-                {
-                    b.Property<Guid>("NodeId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Doc")
-                        .IsRequired()
-                        .HasColumnType("jsonb");
-
-                    b.HasKey("NodeId");
-
-                    b.ToTable("PageBodies");
-                });
-
-            modelBuilder.Entity("Gatherum.Core.Domain.Revision", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("AuthorId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Doc")
-                        .IsRequired()
-                        .HasColumnType("jsonb");
-
-                    b.Property<Guid>("NodeId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Number")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AuthorId");
-
-                    b.HasIndex("NodeId", "Number")
-                        .IsUnique();
-
-                    b.ToTable("Revisions");
-                });
-
             modelBuilder.Entity("Gatherum.Core.Domain.Tag", b =>
                 {
                     b.Property<Guid>("Id")
@@ -323,23 +272,6 @@ namespace Gatherum.Infrastructure.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("Users");
-                });
-
-            modelBuilder.Entity("Gatherum.Core.Domain.YjsDoc", b =>
-                {
-                    b.Property<Guid>("NodeId")
-                        .HasColumnType("uuid");
-
-                    b.Property<byte[]>("State")
-                        .IsRequired()
-                        .HasColumnType("bytea");
-
-                    b.Property<DateTimeOffset>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("NodeId");
-
-                    b.ToTable("YjsDocs");
                 });
 
             modelBuilder.Entity("Gatherum.Core.Domain.ApiKey", b =>
@@ -437,45 +369,6 @@ namespace Gatherum.Infrastructure.Data.Migrations
                     b.Navigation("Tag");
                 });
 
-            modelBuilder.Entity("Gatherum.Core.Domain.PageBody", b =>
-                {
-                    b.HasOne("Gatherum.Core.Domain.Node", "Node")
-                        .WithOne("Page")
-                        .HasForeignKey("Gatherum.Core.Domain.PageBody", "NodeId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Node");
-                });
-
-            modelBuilder.Entity("Gatherum.Core.Domain.Revision", b =>
-                {
-                    b.HasOne("Gatherum.Core.Domain.User", "Author")
-                        .WithMany()
-                        .HasForeignKey("AuthorId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Gatherum.Core.Domain.Node", null)
-                        .WithMany("Revisions")
-                        .HasForeignKey("NodeId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Author");
-                });
-
-            modelBuilder.Entity("Gatherum.Core.Domain.YjsDoc", b =>
-                {
-                    b.HasOne("Gatherum.Core.Domain.Node", "Node")
-                        .WithOne()
-                        .HasForeignKey("Gatherum.Core.Domain.YjsDoc", "NodeId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Node");
-                });
-
             modelBuilder.Entity("Gatherum.Core.Domain.FileBody", b =>
                 {
                     b.Navigation("Versions");
@@ -490,10 +383,6 @@ namespace Gatherum.Infrastructure.Data.Migrations
                     b.Navigation("InboundLinks");
 
                     b.Navigation("OutboundLinks");
-
-                    b.Navigation("Page");
-
-                    b.Navigation("Revisions");
 
                     b.Navigation("Tags");
                 });

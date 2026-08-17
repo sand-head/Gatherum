@@ -12,7 +12,6 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="PdfPig" Version="0.1.15" />
-    <PackageReference Include="YDotNet.Server" Version="0.6.0" />
   </ItemGroup>
 
 </Project>

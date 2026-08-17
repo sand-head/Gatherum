@@ -3,6 +3,10 @@
 @inject NavigationManager Navigation
 @inject IJSRuntime Js
 
+<button class="search-trigger" @onclick="Open" title="Search (Ctrl+K)">
+    <span>Search</span><kbd>⌘K</kbd>
+</button>
+
 @if (isOpen)
 {
     <div class="palette-backdrop" @onclick="Close">
@@ -38,6 +42,7 @@
     private bool searching;
     private ElementReference input;
     private System.Threading.Timer? debounce;
+    private bool focusPending;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -52,8 +57,6 @@
             await input.FocusAsync();
         }
     }
-
-    private bool focusPending;
 
     [JSInvokable]
     public void Open()
