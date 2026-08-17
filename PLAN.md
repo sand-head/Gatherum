@@ -79,3 +79,10 @@ Two directions landed after the MVP shipped, both at the owner's request:
   export endpoint is a tree walk plus a zip stream. Still TODO.
 - Syntax highlighting: shipped for the editor (slopedit lexers); file *previews* of
   non-edited text render plain.
+
+### Post-revision: the editor joined the server circuit
+
+slopedit 1.7.0 added Interactive Server support (server-side Skia, frames streamed
+over the circuit), so the WebAssembly island, the `Gatherum.Client` project, and the
+wasm-tools toolchain were all removed. The app is back to a single global Interactive
+Server render mode, and the editor calls the application services directly.

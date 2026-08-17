@@ -185,6 +185,16 @@ public class FileService(
         return new FileContent(stream, version.MediaType, version.FileName, version.SizeBytes);
     }
 
+    /// <summary>The latest version number, cheaply — the editor polls this to notice
+    /// someone else's save.</summary>
+    public async Task<int> GetHeadVersionAsync(Guid userId, Guid nodeId, CancellationToken ct = default)
+    {
+        await nodes.GetVisibleAsync(userId, nodeId, ct);
+        return await db.FileVersions
+            .Where(v => v.NodeId == nodeId)
+            .MaxAsync(v => (int?)v.Number, ct) ?? 0;
+    }
+
     /// <summary>The editable text of a text node — read from storage, so it is exact
     /// even where extraction truncates.</summary>
     public async Task<string> GetTextAsync(Guid userId, Guid nodeId, CancellationToken ct = default)

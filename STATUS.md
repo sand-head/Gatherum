@@ -1,6 +1,6 @@
 # Status
 
-As of the pages-are-files / no-JavaScript revision. Everything listed as working has
+As of the slopedit-server revision (no WebAssembly, one Interactive Server circuit). Everything listed as working has
 been exercised end-to-end (unit/integration tests, API smoke tests, or scripted
 browser sessions — including against the built container).
 
@@ -13,14 +13,16 @@ browser sessions — including against the built container).
   always get separate versions, and restore is a row insert (content addressing means
   no byte copies).
 - **Native editing** — Markdown and every text file (code, configs, notes) open in
-  slopedit's `EditorView`: a from-scratch C# editor on a SkiaSharp canvas running as
-  a WebAssembly island. Syntax highlighting by extension, autosave with indicator,
-  server-rendered live Markdown preview, "Link node…" mention search, version
-  history with view/restore. The only JavaScript in the app is a ~30-line interop
-  file (Ctrl-K, drag-drop upload).
+  slopedit's `EditorView` (1.7.0): a from-scratch C# editor that paints with native
+  SkiaSharp on the server and streams frames over the Blazor circuit — no WebAssembly
+  project, no wasm-tools. Syntax highlighting by extension, autosave with indicator,
+  live Markdown preview, "Link node…" mention search, version history with
+  view/restore (restore remounts the editor in place). The only JavaScript in the
+  app is a ~30-line interop file (Ctrl-K, drag-drop upload).
 - **Awareness** — heartbeat presence ("Sam is editing", verified cross-user) and a
-  newer-version warning in the editor. Concurrent saves are serialized per node;
-  nobody's save is ever lost — it's a version.
+  newer-version warning in the editor (verified: fires when another user saves the
+  open document). Concurrent saves are serialized per node; nobody's save is ever
+  lost — it's a version.
 - **Tree + search** — sidebar tree mixing all nodes (create, rename, delete, menu
   move up/down/move-to, drag-drop upload), Ctrl/⌘-K palette with kind badges and
   snippets, Postgres FTS with `websearch_to_tsquery`, title ranked above body.
@@ -38,11 +40,10 @@ browser sessions — including against the built container).
   same services; page bodies are Markdown verbatim in both directions.
 - **Privacy** — per-subtree private flag enforced by one `INodeAuthorizer` in every
   read path.
-- **Ops** — multi-stage Dockerfile (wasm-tools workload for the editor island,
-  non-root runtime; built and exercised against a postgres container, editor
-  verified in-browser against the containerized app), compose.yaml, Podman Quadlets,
-  `/healthz`, JSON console logs outside Development, migrations on startup with
-  opt-out.
+- **Ops** — multi-stage Dockerfile (plain SDK build, non-root runtime; built and
+  exercised against a postgres container, editor verified in-browser against the
+  containerized app), compose.yaml, Podman Quadlets, `/healthz`, JSON console logs
+  outside Development, migrations on startup with opt-out.
 - **Tests** — 39 passing: markdown links/rendering, tree ops, privacy, versions
   (collapse, restore, re-upload, cross-author), search, API keys, storage/extraction,
   and integration tests booting the app on Testcontainers Postgres (create page →
@@ -60,8 +61,8 @@ browser sessions — including against the built container).
 
 - No live co-editing: presence + versions instead of CRDT merging (DECISIONS.md; the
   trade was chosen deliberately with the no-JS direction).
-- The editor uses the raster canvas: SKGLView's dispose crashes the WASM renderer on
-  navigation (DECISIONS.md has the upstream pointer).
+- Editor keystrokes and frames cross the server circuit (slopedit Interactive Server
+  mode); fine for two users on a decent link, not an offline-capable editor.
 - Editor is capped to text files ≤ 4 MB; larger text files fall back to FileView.
 - File bytes are never garbage-collected when nodes are deleted.
 - Saves serialize per node in-process; scaling beyond one app instance needs a
@@ -70,7 +71,7 @@ browser sessions — including against the built container).
 ## Run it
 
 ```sh
-# Local (Postgres on localhost, wasm-tools workload installed; see README):
+# Local (Postgres on localhost; see README):
 dotnet run --project src/Gatherum.Web        # http://localhost:5140
 
 # Containers:

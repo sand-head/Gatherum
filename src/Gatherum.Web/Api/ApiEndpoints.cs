@@ -66,27 +66,6 @@ public static class ApiEndpoints
             return Results.Ok(new { version = version.Number });
         });
 
-        api.MapPost("/markdown/render", (RenderRequest request) =>
-            Results.Text(MarkdownRender.ToHtml(request.Markdown), "text/html"));
-
-        api.MapGet("/nodes/{id:guid}/presence", async (PresenceTracker presence, NodeService nodes,
-            HttpContext http, Guid id, bool? editing) =>
-        {
-            var userId = http.User.GetUserId();
-            if (editing == true)
-                presence.Heartbeat(id, userId, http.User.Identity?.Name ?? "someone");
-            var node = await nodes.GetWithBodyAsync(userId, id);
-            var head = node.File is { Versions.Count: > 0 } file ? file.Current.Number : 0;
-            return Results.Ok(new PresenceDto(presence.OthersEditing(id, userId), head));
-        });
-
-        api.MapPost("/nodes/{id:guid}/presence/leave", (PresenceTracker presence,
-            HttpContext http, Guid id) =>
-        {
-            presence.Leave(id, http.User.GetUserId());
-            return Results.NoContent();
-        });
-
         api.MapPost("/nodes/{id:guid}/move", async (NodeService nodes, HttpContext http, Guid id,
             MoveNodeRequest request) =>
         {

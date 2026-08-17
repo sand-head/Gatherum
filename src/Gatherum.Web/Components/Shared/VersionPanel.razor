@@ -1,6 +1,5 @@
 @inherits GatherumComponent
 @inject AppOperations Ops
-@inject NavigationManager Navigation
 @using Gatherum.Core.Domain
 @using Gatherum.Web.Services
 
@@ -48,6 +47,7 @@
 
 @code {
     [Parameter, EditorRequired] public Guid NodeId { get; set; }
+    [Parameter] public EventCallback OnRestored { get; set; }
 
     private bool open;
     private List<FileVersion> versions = [];
@@ -89,8 +89,10 @@
     private async Task RestoreAsync(int number)
     {
         await Ops.Files(s => s.RestoreVersionAsync(UserId, NodeId, number));
-        // The editor island reads the node at mount; a full reload re-seeds it.
-        Navigation.Refresh(forceReload: true);
+        await ReloadAsync();
+        previewing = null;
+        previewHtml = previewText = null;
+        await OnRestored.InvokeAsync();
     }
 
     private static string FormatSize(long bytes) => bytes switch

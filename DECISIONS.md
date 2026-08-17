@@ -77,3 +77,15 @@ SKGLView (SkiaSharp 4.148) throws in Dispose when the editor island unmounts dur
 enhanced navigation, and an unhandled renderer exception kills the WASM runtime for
 the rest of the session. The raster SKCanvasView tears down cleanly, so EditorPane
 sets ForceRaster. Revisit when SkiaSharp or slopedit guards the WebGL dispose path.
+
+## The editor moved into the server circuit (slopedit 1.7.0)
+slopedit gained Interactive Server support: EditorView paints with native SkiaSharp on
+the server and streams PNG frames to a plain canvas over the existing circuit, keeping
+the client-side input surface. Gatherum dropped its WebAssembly island: Gatherum.Client
+is gone, the app is back to one global Interactive Server render mode, EditorPane calls
+the application services directly instead of going through /api, presence reads the
+tracker in-process, and wasm-tools/python3 left the toolchain and Dockerfile. The
+known costs, accepted: every keystroke and frame crosses the circuit (fine on a LAN or
+decent link for two users), and offline editing is off the table. The two prior
+entries about the WASM island and the raster-canvas workaround are superseded — Server
+mode is always raster by design, and the SKGLView dispose bug can't reach us here.

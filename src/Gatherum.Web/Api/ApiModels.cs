@@ -76,11 +76,9 @@ public record SearchResultDto(Guid Id, string Kind, string Title, string Snippet
 public record CreatePageRequest(Guid? ParentId, string Title, string? Markdown);
 public record UpdatePageRequest(string Markdown, string? Title);
 public record SaveTextRequest(string Text);
-public record RenderRequest(string Markdown);
 public record MoveNodeRequest(Guid? NewParentId, int? Position);
 public record RenameRequest(string Title);
 public record TagRequest(string Tag);
 public record CreateKeyRequest(string Name);
 public record SetPrivateRequest(bool IsPrivate);
 public record DescriptionRequest(string Description);
-public record PresenceDto(IReadOnlyList<string> Editors, int HeadVersion);

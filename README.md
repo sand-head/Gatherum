@@ -8,11 +8,11 @@ photo all live in one tree, one search, one login, one API. Built almost entirel
 C#/Blazor — the only JavaScript is a ~30-line interop file.
 
 - **Editing**: Markdown and every text file (code, configs, notes) edit in place in
-  [slopedit](https://git.sand.town/sand_head/slopedit), a from-scratch C# editor
-  rendered on a SkiaSharp canvas (syntax highlighting, selection, undo/redo), with
-  autosave, a live rendered preview for Markdown, and mention insertion that links
-  nodes together. Every save is a version; old versions are viewable, downloadable,
-  and restorable.
+  [slopedit](https://git.sand.town/sand_head/slopedit), a from-scratch C# editor —
+  SkiaSharp renders on the server and streams frames over the Blazor circuit (syntax
+  highlighting, selection, undo/redo), with autosave, a live rendered preview for
+  Markdown, and mention insertion that links nodes together. Every save is a version;
+  old versions are viewable, downloadable, and restorable.
 - **Files**: drag-drop or picker upload anywhere in the tree, content-addressed
   storage (SHA-256) on disk, inline previews (images, PDF, video, audio), descriptions,
   tags, and re-upload as a new version with old bytes retrievable. Text extraction
@@ -29,9 +29,7 @@ C#/Blazor — the only JavaScript is a ~30-line interop file.
 
 ## Run it locally
 
-Requires the .NET 10 SDK with the `wasm-tools` workload
-(`dotnet workload install wasm-tools`; emscripten also wants `python3` on PATH)
-and a PostgreSQL 16+:
+Requires the .NET 10 SDK and a PostgreSQL 16+:
 
 ```sh
 docker run -d --name gatherum-pg -p 5432:5432 \
@@ -145,7 +143,7 @@ path goes through.
 ## Development
 
 ```sh
-dotnet build                 # needs the wasm-tools workload for the editor island
+dotnet build
 dotnet test                  # unit + integration tests; Postgres via Testcontainers
 ```
 

@@ -9,14 +9,13 @@ A self-hosted knowledge base for two people where **pages and files are the same
 of thing**: every item is a `Node` in one tree with tags, links, versions, and
 searchable text — and a page is simply a node whose file is Markdown. One tree, one
 search, one login, one API, plus an MCP server so agents are first-class users.
-C#/Blazor end to end (the only JS is `wwwroot/js/gatherum.js`, ~30 lines), PostgreSQL,
-deployed as a single rootless Podman container behind a TLS-terminating reverse proxy
-with Authelia for OIDC.
+C#/Blazor end to end under one Interactive Server render mode (the only JS is
+`wwwroot/js/gatherum.js`, ~30 lines), PostgreSQL, deployed as a single rootless Podman
+container behind a TLS-terminating reverse proxy with Authelia for OIDC.
 
 ## Build, run, test
 
 ```sh
-dotnet workload install wasm-tools     # once; the editor island relinks SkiaSharp
 # Postgres (once):
 docker run -d --name gatherum-pg -p 5432:5432 -e POSTGRES_DB=gatherum \
   -e POSTGRES_USER=gatherum -e POSTGRES_PASSWORD=gatherum postgres:16-alpine
@@ -40,20 +39,16 @@ auto-login. Migrations: `dotnet ef migrations add <Name> -p src/Gatherum.Infrast
   conventions), and the three seam interfaces in `Abstractions/`.
 - `src/Gatherum.Infrastructure` — implementations with real dependencies: filesystem
   storage, text extractors, EF migrations.
-- `src/Gatherum.Web` — Blazor components (`Components/`), REST API (`Api/`), MCP tools
-  (`Mcp/`), auth (`Auth/`), presence + Markdown HTML rendering (`Services/`).
-- `src/Gatherum.Client` — the WebAssembly island: `EditorPane` hosting slopedit's
-  `EditorView`. Talks to the server exclusively through `/api` with cookie auth.
+- `src/Gatherum.Web` — Blazor components (`Components/`, including `EditorPane`
+  hosting slopedit's `EditorView` — SkiaSharp paints server-side and streams frames
+  over the circuit), REST API (`Api/`), MCP tools (`Mcp/`), auth (`Auth/`), presence +
+  Markdown HTML rendering (`Services/`).
 - `tests/Gatherum.Tests` — unit tests plus `AppIntegrationTests` booting the real app.
 
-Render modes: the shell is static SSR; tree, search palette, node header, file view,
-version panel, tags, and settings are **Interactive Server** islands; the editor is
-the one **Interactive WebAssembly** island (SkiaSharp renders only under WASM — and a
-WASM child cannot live under a server-interactive parent, which is why the shell is
-static). UI components, API endpoints, and MCP tools are all thin: they parse input,
-call a Core service, map the result (`Api/ApiModels.cs` DTOs are shared by REST and
-MCP). Server islands run each operation in a fresh DI scope via
-`Services/AppOperations`.
+The whole app runs under one global Interactive Server render mode. UI components,
+API endpoints, and MCP tools are all thin: they parse input, call a Core service, map
+the result (`Api/ApiModels.cs` DTOs are shared by REST and MCP). Components run each
+operation in a fresh DI scope via `Services/AppOperations`.
 
 ## Rules that don't bend
 
@@ -74,8 +69,7 @@ MCP). Server islands run each operation in a fresh DI scope via
 
 C# is modern and terse: primary constructors, records for values, expression-bodied
 members where they read well. File placement follows the map above; one public type per
-file, named for the type. Razor components live under `Components/{Layout,Pages,Shared}`
-in Web, islands in Client.
+file, named for the type. Razor components live under `Components/{Layout,Pages,Shared}`.
 
 **Make a new format editable/previewable**:
 1. Teach `MediaTypes` (`src/Gatherum.Core/Domain/MediaTypes.cs`) the extension.
@@ -116,8 +110,7 @@ commit messages alone don't count.
 
 ## What not to do
 
-- No new projects without a real boundary that demands one (Client exists because
-  WASM is a different runtime; that bar).
+- No new projects without a real boundary that demands one.
 - No third-party state/MVVM libraries; no JS libraries, vendored or fetched.
 - No speculative abstractions, no repository layer over EF.
 - No features beyond `PLAN.md` scope without asking.

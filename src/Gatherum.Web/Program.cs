@@ -16,9 +16,7 @@ if (!builder.Environment.IsDevelopment())
     builder.Logging.ClearProviders().AddJsonConsole();
 
 builder.Services.AddGatherum(builder.Configuration);
-builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents()
-    .AddInteractiveWebAssemblyComponents();
+builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<Gatherum.Web.Services.AppOperations>();
@@ -129,10 +127,7 @@ app.UseAuthorization();
 app.UseAntiforgery();
 
 app.MapStaticAssets().AllowAnonymous();
-app.MapRazorComponents<App>()
-    .AddInteractiveServerRenderMode()
-    .AddInteractiveWebAssemblyRenderMode()
-    .AddAdditionalAssemblies(typeof(Gatherum.Client.EditorPane).Assembly);
+app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
 app.MapAuthEndpoints(oidc);
 app.MapGatherumApi();
 app.MapMcp("/mcp").RequireAuthorization("Mcp");
