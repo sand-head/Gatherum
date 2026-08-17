@@ -2,20 +2,25 @@
 
 A self-hosted, web-first knowledge base for two people, built on one idea: **pages and
 files are the same kind of thing.** Every item is a *node* — it has a title, a place in
-one tree, tags, links, backlinks, revision history, and searchable text. Only the body
-differs: a rich-text page or an uploaded file. A fic chapter, a Podman quadlet, a PDF,
-and a photo live in one tree, one search, one login, one API.
+one tree, tags, links, backlinks, version history, and searchable text. A page is
+simply a node whose file is Markdown; a fic chapter, a Podman quadlet, a PDF, and a
+photo all live in one tree, one search, one login, one API. Built almost entirely in
+C#/Blazor — the only JavaScript is a ~30-line interop file.
 
-- **Pages**: block editor (slash commands, markdown shortcuts, tables, callouts, task
-  lists, code blocks), autosave with revision history, `@`-mentions that create links,
-  and live collaboration — two people on the same page see each other's cursors and
-  their edits merge conflict-free (Yjs CRDTs, served by the app itself over WebSockets).
-- **Files**: drag-drop or picker upload anywhere in the tree, content-addressed storage
-  (SHA-256), inline previews (images, PDF, video, audio, text/code), descriptions, tags,
-  version history where re-upload keeps the old bytes retrievable, and text extraction
-  (plain text/markdown/code, PDF via PdfPig, image metadata) feeding search.
+- **Editing**: Markdown and every text file (code, configs, notes) edit in place in
+  [slopedit](https://git.sand.town/sand_head/slopedit), a from-scratch C# editor
+  rendered on a SkiaSharp canvas (syntax highlighting, selection, undo/redo), with
+  autosave, a live rendered preview for Markdown, and mention insertion that links
+  nodes together. Every save is a version; old versions are viewable, downloadable,
+  and restorable.
+- **Files**: drag-drop or picker upload anywhere in the tree, content-addressed
+  storage (SHA-256) on disk, inline previews (images, PDF, video, audio), descriptions,
+  tags, and re-upload as a new version with old bytes retrievable. Text extraction
+  (plain text/markdown/code verbatim, PDF via PdfPig, image metadata) feeds search.
 - **Search**: PostgreSQL full-text (`tsvector` + GIN, `websearch_to_tsquery`) over
-  titles, tags, page bodies, and extracted file text. `Ctrl`/`⌘`+`K` anywhere.
+  titles, tags, and text. `Ctrl`/`⌘`+`K` anywhere.
+- **Awareness**: presence shows who else is editing a document, and the editor warns
+  when someone saved a newer version (their save stays in history either way).
 - **Access**: OIDC sign-in only (built for Authelia; any discovery-capable IdP works),
   API keys for scripts, a REST API under `/api`, and an MCP server at `/mcp` so agents
   like Claude Code can read and write the same knowledge base (see [MCP.md](MCP.md)).
@@ -24,7 +29,9 @@ and a photo live in one tree, one search, one login, one API.
 
 ## Run it locally
 
-Requires the .NET 10 SDK, Node 20+ (for the editor bundle), and a PostgreSQL 16+:
+Requires the .NET 10 SDK with the `wasm-tools` workload
+(`dotnet workload install wasm-tools`; emscripten also wants `python3` on PATH)
+and a PostgreSQL 16+:
 
 ```sh
 docker run -d --name gatherum-pg -p 5432:5432 \
@@ -63,8 +70,8 @@ stored hashed, revocable, and sent as `Authorization: Bearer gk_…` to `/api` a
 
 ## Deploying behind a reverse proxy
 
-Gatherum expects a proxy that terminates TLS and **forwards WebSockets** (live
-collaboration runs over `/collab`, Blazor over `/_blazor`). The container sets
+Gatherum expects a proxy that terminates TLS and **forwards WebSockets** (the app's
+interactive UI runs over Blazor's `/_blazor` connection). The container sets
 `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true`, so pass `X-Forwarded-For` and
 `X-Forwarded-Proto`. Caddy example:
 
@@ -113,9 +120,10 @@ Then set `Gatherum__Oidc__Authority=https://auth.example.org`, the client id, an
 Two things hold all state:
 
 1. **The database** — `pg_dump gatherum > gatherum.sql` (or snapshot the
-   `gatherum-db` volume).
+   `gatherum-db` volume). Metadata, tags, links, versions, search text.
 2. **The file store** — the directory behind `Gatherum__Storage__Root` (the
-   `gatherum-files` volume). Files are content-addressed, so this rsyncs cheaply.
+   `gatherum-files` volume). Every body — pages included — is a content-addressed
+   blob here, so this rsyncs cheaply.
 
 Restore = restore both, start the container.
 
@@ -137,7 +145,7 @@ path goes through.
 ## Development
 
 ```sh
-dotnet build                 # also bundles the editor JS via esbuild (needs npm)
+dotnet build                 # needs the wasm-tools workload for the editor island
 dotnet test                  # unit + integration tests; Postgres via Testcontainers
 ```
 

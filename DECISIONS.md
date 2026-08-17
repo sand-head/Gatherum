@@ -48,3 +48,32 @@ edits as CRDT transactions server-side) has a clear seam in `SavePageAsync`.
 Concurrent autosaves from two live editors raced on revision numbers and link rows.
 `SavePageAsync` takes a per-node semaphore. Process-wide is sufficient because Gatherum
 deploys as a single container; scaling out would move this to a database lock.
+
+## Pages are Markdown files (owner direction)
+The unification got completed from the other side: instead of a page body table, a
+page is a node whose file version is `text/markdown` bytes in the content-addressed
+store. Kind is derived, `FileVersion` is the only history mechanism, and "revision"
+and "file version" stopped being different things. Uploaded `.md` files and in-app
+pages are indistinguishable — which is the thesis, applied to itself.
+
+## No JavaScript: slopedit as the editor (owner direction)
+TipTap+Yjs (and with them YDotNet, npm, esbuild) were replaced by
+[slopedit](https://git.sand.town/sand_head/slopedit), the owner's from-scratch C#
+editor on a SkiaSharp canvas. Because SkiaSharp.Views.Blazor renders only under
+WebAssembly, the app moved from global Interactive Server to per-component render
+modes: static shell, server islands for chrome and pages, one WASM island for the
+editor. The editor talks to the server over /api with cookie auth. Remaining
+JavaScript: one ~30-line static file for the Ctrl-K shortcut and drag-drop upload.
+
+## Live collaboration downgraded to presence + versions (accepted trade)
+Dropping Yjs means no shared cursors and no character-level merging. In their place:
+heartbeat presence ("X is editing"), a newer-version warning in the editor, and
+last-writer-wins where the loser's save survives as its own version (different
+authors never collapse into one version). Chosen knowingly over keeping a JS editor
+island; the seam for something richer later is SaveTextAsync.
+
+## Raster canvas, not WebGL, for the editor
+SKGLView (SkiaSharp 4.148) throws in Dispose when the editor island unmounts during
+enhanced navigation, and an unhandled renderer exception kills the WASM runtime for
+the rest of the session. The raster SKCanvasView tears down cleanly, so EditorPane
+sets ForceRaster. Revisit when SkiaSharp or slopedit guards the WebGL dispose path.

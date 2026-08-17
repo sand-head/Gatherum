@@ -36,8 +36,8 @@ claude mcp add --transport http gatherum http://localhost:5140/mcp \
 | `search` | `query`, `kind?` (`page`/`file`), `limit?` | Matches with kind and snippet |
 | `get_node` | `id` | Metadata + Markdown body (pages) or extracted text + file metadata (files) |
 | `list_children` | `id?` (omit for roots) | Children in tree order |
-| `create_page` | `title`, `markdown`, `parentId?` | The created node |
-| `update_page` | `id`, `markdown`, `title?` | The updated node (a new revision is recorded) |
+| `create_page` | `title`, `markdown`, `parentId?` | The created node (a Markdown file) |
+| `update_page` | `id`, `markdown`, `title?` | The updated node (a new version is recorded) |
 | `move_node` | `id`, `newParentId?`, `position?` | Confirmation |
 | `add_tag` | `id`, `tag` | Confirmation |
 | `list_tags` | — | Tags with node counts |
@@ -45,7 +45,7 @@ claude mcp add --transport http gatherum http://localhost:5140/mcp \
 
 ## Markdown conventions
 
-Page bodies round-trip between the editor and Markdown. Two Gatherum-specific forms:
+Pages *are* Markdown files, so bodies round-trip verbatim. Two Gatherum-specific forms:
 
 - **Mentions**: `[@Some Node](node://<node-id>)` — renders as an @-mention in the editor
   and creates a link (and therefore a backlink on the target).

@@ -50,3 +50,32 @@ every item is a node in one tree with tags, links, revisions, and full-text sear
   no code ships.
 - Export Markdown/HTML/zip: **stubbed** — TODO; `get_node` already produces Markdown, so
   export is a walk over the same converter.
+
+## Revision: pages are files, and no JavaScript (post-MVP)
+
+Two directions landed after the MVP shipped, both at the owner's request:
+
+10. **Pages become Markdown files.** The stored `Kind` column is gone — a page is a
+    node whose file is `text/markdown`, and every text file is editable and viewable
+    the way pages are. Bodies live as bytes in the content-addressed store;
+    `FileVersion` is the single history mechanism for everything (text autosaves
+    collapse within a window; restore is a row insert). `PageBody`, `Revision`, and
+    the Yjs state table are gone.
+11. **Native C#/Blazor everywhere possible.** TipTap, Yjs, YDotNet, npm, and esbuild
+    are removed. The editor is [slopedit](https://git.sand.town/sand_head/slopedit)'s
+    `EditorView` — a from-scratch C# editor on a SkiaSharp canvas — running as a
+    WebAssembly island (static shell, per-component render modes; server islands for
+    tree/search/pages). Live collaboration became presence + optimistic versioning:
+    "X is editing", a newer-version notice, and history keeps everyone's saves. The
+    only JavaScript is a ~30-line static interop file (Ctrl-K, drag-drop upload).
+
+### Shoulds — status (updated)
+
+- Tag pages with autocomplete: shipped.
+- Dark mode: shipped.
+- Drag-and-drop reorder/reparent: still TODO (menu move ships).
+- Public share links: still TODO.
+- Export Markdown/zip: closer than ever — bodies *are* Markdown files on disk; an
+  export endpoint is a tree walk plus a zip stream. Still TODO.
+- Syntax highlighting: shipped for the editor (slopedit lexers); file *previews* of
+  non-edited text render plain.
