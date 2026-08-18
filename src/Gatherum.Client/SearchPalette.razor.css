@@ -1,16 +1,16 @@
-/* Sidebar trigger, styled like the Google search box: a tonal pill that
+/* Header trigger, styled like the Google search box: a tonal pill that
    lifts to a white card on hover. */
 .search-trigger {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
     width: 100%;
     font: 400 14px/1.5 var(--font-ui);
     color: var(--on-surface-dim);
     background: light-dark(#e9eef6, #303134);
     border: none;
     border-radius: var(--radius-full);
-    padding: 9px 14px;
+    padding: 10px 18px;
     transition: background-color 0.15s, box-shadow 0.15s;
 
     &:hover {

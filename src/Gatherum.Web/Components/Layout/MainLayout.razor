@@ -3,6 +3,9 @@
 <div class="shell">
     <header class="topbar">
         <a class="brand" href="/">Gatherum</a>
+        <div class="topbar-search">
+            <SearchPalette @rendermode="InteractiveAuto" />
+        </div>
         <div class="topbar-actions">
             <button type="button" id="theme-toggle" class="theme-toggle"
                     title="Theme: system → light → dark" aria-label="Toggle color theme">
@@ -27,9 +30,6 @@
     </header>
     <div class="body">
         <aside class="sidebar">
-            <div class="sidebar-head">
-                <SearchPalette @rendermode="InteractiveAuto" />
-            </div>
             <NodeTree @rendermode="InteractiveAuto" />
             <nav class="sidebar-foot">
                 <NavLink href="/tags">Tags</NavLink>

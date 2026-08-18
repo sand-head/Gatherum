@@ -9,12 +9,17 @@
     height: 100dvh;
 }
 
+/* Brand left, a wide search pill dead-center, actions right — the 1fr side
+   columns keep the search centered regardless of how the sides differ. */
 .topbar {
-    display: flex;
+    display: grid;
+    grid-template-columns: 1fr minmax(240px, 680px) 1fr;
     align-items: center;
     gap: 16px;
     padding: 10px 16px 8px 20px;
 }
+
+.topbar-search { width: 100%; }
 
 .brand {
     font-size: 20px;
@@ -25,7 +30,7 @@
 }
 
 .topbar-actions {
-    margin-left: auto;
+    justify-self: end;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -62,10 +67,8 @@
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
-    padding: 2px 12px 8px;
+    padding: 6px 12px 8px;
 }
-
-.sidebar-head { padding: 2px 4px 12px; }
 
 .sidebar-foot {
     margin-top: auto;
@@ -112,7 +115,11 @@
 }
 
 @media (max-width: 900px) {
-    .topbar { padding: 8px 10px 6px 14px; }
+    .topbar {
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        gap: 10px;
+        padding: 8px 10px 6px 14px;
+    }
     .sidebar { width: 236px; }
     .content { margin: 0 6px 6px 0; padding: 20px; }
 }
