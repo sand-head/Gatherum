@@ -324,17 +324,19 @@ input:focus, textarea:focus, select:focus { outline: 2px solid var(--accent); ou
 }
 .stale-warning { font-size: 12px; color: var(--danger); }
 
-.editor-split { display: flex; gap: 16px; min-height: 65vh; }
 .editor-surface {
-  flex: 1; min-width: 0; height: 65vh;
+  height: 65vh;
   border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
 }
-.editor-split.with-preview .editor-surface { flex: 1; }
-.editor-preview {
-  flex: 1; min-width: 0; height: 65vh; overflow-y: auto;
-  border: 1px solid var(--border); border-radius: 8px; padding: 4px 18px;
+
+/* DocumentView in page-scroll mode pins a sticky strip to the nearest scroll
+   container (.content). overflow: clip keeps the rounded clipping without
+   creating a scroll container that would trap the strip. */
+.document-surface {
+  min-height: 40vh;
+  border-radius: 8px;
+  overflow: clip;
 }
-.editor-loading { color: var(--text-dim); padding: 24px; }
 
 .mention-dialog {
   position: fixed; top: 18vh; left: 50%; transform: translateX(-50%); z-index: 120;

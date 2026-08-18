@@ -82,3 +82,4 @@ public record TagRequest(string Tag);
 public record CreateKeyRequest(string Name);
 public record SetPrivateRequest(bool IsPrivate);
 public record DescriptionRequest(string Description);
+public record PresenceDto(IReadOnlyList<string> Editors, int HeadVersion);

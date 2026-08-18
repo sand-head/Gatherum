@@ -2,6 +2,7 @@
 @inherits GatherumComponent
 @inject AppOperations Ops
 @using Gatherum.Core.Domain
+@using Gatherum.Client
 
 @if (notFound)
 {
@@ -12,20 +13,20 @@ else if (node is not null)
 {
     <PageTitle>@node.Title — Gatherum</PageTitle>
     <article class="node">
-        <NodeHeader NodeId="@node.Id" Title="@node.Title"
+        <NodeHeader @rendermode="InteractiveServer" NodeId="@node.Id" Title="@node.Title"
                     IsPrivate="@node.IsPrivate" Tags="@tags.ToArray()" />
 
         @if (editable)
         {
-            <EditorPane @key="editorEpoch" NodeId="@node.Id" FileName="@fileName"
+            <NodeEditor @rendermode="InteractiveAuto" NodeId="@node.Id" FileName="@fileName"
                         MediaType="@node.MediaType" />
         }
         else
         {
-            <FileView NodeId="@node.Id" />
+            <FileView @rendermode="InteractiveServer" NodeId="@node.Id" />
         }
 
-        <VersionPanel NodeId="@node.Id" OnRestored="OnRestoredAsync" />
+        <VersionPanel @rendermode="InteractiveServer" NodeId="@node.Id" />
 
         @if (backlinks.Count > 0)
         {
@@ -51,11 +52,8 @@ else if (node is not null)
     private string fileName = "";
     private bool editable;
     private bool notFound;
-    private int editorEpoch;
 
-    protected override async Task OnParametersSetAsync() => await ReloadAsync();
-
-    private async Task ReloadAsync()
+    protected override async Task OnParametersSetAsync()
     {
         try
         {
@@ -72,12 +70,5 @@ else if (node is not null)
             node = null;
             notFound = true;
         }
-    }
-
-    private async Task OnRestoredAsync()
-    {
-        // Remounting the editor re-reads the restored content.
-        editorEpoch++;
-        await ReloadAsync();
     }
 }

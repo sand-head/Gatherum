@@ -1,0 +1,234 @@
+@implements IAsyncDisposable
+@inject IEditorData Data
+@using SlopEdit.Blazor
+@using SlopEdit.Core.Document
+@using SlopEdit.Core.Highlighting
+@using SlopEdit.Core.Input
+@using SlopEdit.Core.Rich
+
+<div class="editor-pane">
+    <div class="editor-toolbar">
+        <span class="presence">
+            @foreach (var editor in othersEditing)
+            {
+                <span class="presence-chip">@editor is editing</span>
+            }
+        </span>
+        @if (staleWarning)
+        {
+            <span class="stale-warning">Someone saved a newer version — your next save
+                makes a new one; theirs stays in history.</span>
+        }
+        <button class="ghost" @onclick="OpenMentionDialog">Link node…</button>
+        @if (IsMarkdown)
+        {
+            <button class="ghost" @onclick="ToggleSource">
+                @(sourceMode ? "Document" : "Source")
+            </button>
+        }
+        <span class="save-indicator">@saveLabel</span>
+        <span class="render-home" title="Where the editor is rendering">
+            @(RendererInfo.IsInteractive ? RendererInfo.Name : "…")
+        </span>
+    </div>
+
+    @if (richDoc is not null && !sourceMode)
+    {
+        <div class="document-surface">
+            <DocumentView Grid="richDoc" OnChange="OnChanged" ImageSource="Data.GetImageAsync"
+                          AriaLabel="Document editor" />
+        </div>
+    }
+    else if (sourceDoc is not null)
+    {
+        <div class="editor-surface">
+            <EditorView Grid="sourceDoc" OnChange="OnChanged" AriaLabel="Source editor" />
+        </div>
+    }
+
+    @if (mentionOpen)
+    {
+        <div class="mention-dialog">
+            <input placeholder="Search nodes…" value="@mentionQuery"
+                   @oninput="OnMentionQuery" @onkeydown="OnMentionKey" autofocus />
+            <div class="mention-results">
+                @foreach (var result in mentionResults)
+                {
+                    <button @onclick="() => InsertMention(result)">
+                        <span class="kind">@result.Kind</span> @result.Title
+                    </button>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Guid NodeId { get; set; }
+    [Parameter, EditorRequired] public string FileName { get; set; } = "";
+    [Parameter, EditorRequired] public string MediaType { get; set; } = "";
+
+    private RichDocument? richDoc;
+    private EditorDocument? sourceDoc;
+    private bool sourceMode;
+    private string saveLabel = "";
+    private bool staleWarning;
+    private int lastKnownHead;
+    private IReadOnlyList<string> othersEditing = [];
+    private System.Threading.Timer? saveTimer;
+    private System.Threading.Timer? presenceTimer;
+
+    private bool IsMarkdown => MediaType == "text/markdown";
+
+    private bool mentionOpen;
+    private string mentionQuery = "";
+    private IReadOnlyList<SearchHit> mentionResults = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var payload = await Data.LoadAsync(NodeId);
+        lastKnownHead = payload.HeadVersion;
+        if (IsMarkdown)
+            richDoc = MarkdownSerializer.FromMarkdown(payload.Text);
+        else
+        {
+            sourceDoc = new EditorDocument(payload.Text) { Lexer = LexerRegistry.ForPath(FileName) };
+            sourceMode = true;
+        }
+        presenceTimer = new System.Threading.Timer(
+            _ => _ = InvokeAsync(HeartbeatAsync), null, 0, 5000);
+    }
+
+    private string CurrentText => sourceMode || richDoc is null
+        ? sourceDoc?.Text ?? ""
+        : MarkdownSerializer.ToMarkdown(richDoc);
+
+    private void OnChanged(string changedText)
+    {
+        saveLabel = "Saving…";
+        saveTimer?.Dispose();
+        saveTimer = new System.Threading.Timer(
+            _ => _ = InvokeAsync(SaveAsync), null, 1200, Timeout.Infinite);
+        StateHasChanged();
+    }
+
+    private async Task SaveAsync()
+    {
+        if (disposed)
+            return;
+        try
+        {
+            lastKnownHead = await Data.SaveTextAsync(NodeId, CurrentText);
+            staleWarning = false;
+            saveLabel = "Saved";
+        }
+        catch (Exception) when (!disposed)
+        {
+            // A background save must not take the circuit down with it; retry instead.
+            saveLabel = "Save failed — retrying";
+            saveTimer?.Dispose();
+            saveTimer = new System.Threading.Timer(
+                _ => _ = InvokeAsync(SaveAsync), null, 3000, Timeout.Infinite);
+        }
+        catch (Exception)
+        {
+            return;
+        }
+        StateHasChanged();
+    }
+
+    private async Task HeartbeatAsync()
+    {
+        if (disposed)
+            return;
+        try
+        {
+            var presence = await Data.HeartbeatAsync(NodeId);
+            othersEditing = presence.Editors;
+            if (presence.HeadVersion > lastKnownHead)
+                staleWarning = true;
+            StateHasChanged();
+        }
+        catch (Exception)
+        {
+            // The next heartbeat retries; a blip (or teardown) must not kill the circuit.
+        }
+    }
+
+    /// <summary>Both editors hold the same content in different models; switching
+    /// converts through Markdown, which the Markdown profile round-trips losslessly.</summary>
+    private void ToggleSource()
+    {
+        if (sourceMode)
+        {
+            richDoc = MarkdownSerializer.FromMarkdown(sourceDoc?.Text ?? "");
+            sourceMode = false;
+        }
+        else
+        {
+            sourceDoc = new EditorDocument(MarkdownSerializer.ToMarkdown(richDoc!))
+            {
+                Lexer = LexerRegistry.ForPath(FileName),
+            };
+            sourceMode = true;
+        }
+    }
+
+    private void OpenMentionDialog()
+    {
+        mentionOpen = true;
+        mentionQuery = "";
+        mentionResults = [];
+    }
+
+    private async Task OnMentionQuery(ChangeEventArgs e)
+    {
+        mentionQuery = e.Value?.ToString() ?? "";
+        mentionResults = mentionQuery.Length == 0 ? [] : await Data.SearchAsync(mentionQuery);
+    }
+
+    private void OnMentionKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+            mentionOpen = false;
+    }
+
+    private void InsertMention(SearchHit hit)
+    {
+        var label = $"@{hit.Title}";
+        var url = $"node://{hit.Id}";
+        if (!sourceMode && richDoc is not null)
+        {
+            // The rich model has no markup: insert the label, select it backwards,
+            // link the selection, then collapse the caret past it.
+            richDoc.Insert(label);
+            for (var i = 0; i < label.Length; i++)
+                richDoc.Execute(EditorCommand.MoveLeft, extend: true);
+            richDoc.SetLink(url);
+            richDoc.Execute(EditorCommand.MoveRight, extend: false);
+        }
+        else
+        {
+            sourceDoc?.Insert($"[{label}]({url})");
+        }
+        mentionOpen = false;
+        OnChanged("");
+    }
+
+    private bool disposed;
+
+    public async ValueTask DisposeAsync()
+    {
+        disposed = true;
+        saveTimer?.Dispose();
+        presenceTimer?.Dispose();
+        try
+        {
+            await Data.LeaveAsync(NodeId);
+        }
+        catch (Exception)
+        {
+            // Teardown races the circuit's own shutdown; presence expiry covers a miss.
+        }
+    }
+}

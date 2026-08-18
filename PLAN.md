@@ -86,3 +86,12 @@ slopedit 1.7.0 added Interactive Server support (server-side Skia, frames stream
 over the circuit), so the WebAssembly island, the `Gatherum.Client` project, and the
 wasm-tools toolchain were all removed. The app is back to a single global Interactive
 Server render mode, and the editor calls the application services directly.
+
+### Post-revision: slopedit 2.0 — the document editor
+
+Pages now edit in `DocumentView` (rich document, Markdown-lossless) with a Source
+toggle; the editor returned to an island — Interactive Auto from `Gatherum.Client`
+over a dual `IEditorData` seam — though Blazor's mode-matching keeps it in the Server
+home while the chrome is Server islands. Blazor's 32 KB hub message cap, which killed
+tall documents silently, is raised to 2 MB. docx editing is mapped and seamed but
+waits on the SlopEdit.Docx package publish.

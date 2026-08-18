@@ -16,12 +16,18 @@ if (!builder.Environment.IsDevelopment())
     builder.Logging.ClearProviders().AddJsonConsole();
 
 builder.Services.AddGatherum(builder.Configuration);
-builder.Services.AddRazorComponents().AddInteractiveServerComponents();
+builder.Services.AddRazorComponents()
+    // slopedit's editor interop can exceed Blazor's 32 KB default client→server
+    // message cap once a document gets tall; a tight cap kills the circuit silently.
+    .AddInteractiveServerComponents(options => { })
+    .AddHubOptions(options => options.MaximumReceiveMessageSize = 2 * 1024 * 1024)
+    .AddInteractiveWebAssemblyComponents();
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<Gatherum.Web.Services.AppOperations>();
 builder.Services.AddScoped<Gatherum.Web.Services.TreeState>();
 builder.Services.AddSingleton<Gatherum.Web.Services.PresenceTracker>();
+builder.Services.AddScoped<Gatherum.Client.IEditorData, Gatherum.Web.Services.ServerEditorData>();
 builder.Services.AddMcpServer(options => options.ServerInfo = new ModelContextProtocol.Protocol.Implementation
     {
         Name = "gatherum",
@@ -127,7 +133,10 @@ app.UseAuthorization();
 app.UseAntiforgery();
 
 app.MapStaticAssets().AllowAnonymous();
-app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
+app.MapRazorComponents<App>()
+    .AddInteractiveServerRenderMode()
+    .AddInteractiveWebAssemblyRenderMode()
+    .AddAdditionalAssemblies(typeof(Gatherum.Client.NodeEditor).Assembly);
 app.MapAuthEndpoints(oidc);
 app.MapGatherumApi();
 app.MapMcp("/mcp").RequireAuthorization("Mcp");

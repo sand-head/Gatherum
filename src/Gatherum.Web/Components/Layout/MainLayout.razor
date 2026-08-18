@@ -4,9 +4,9 @@
     <aside class="sidebar">
         <div class="sidebar-head">
             <a class="brand" href="/">Gatherum</a>
-            <SearchPalette />
+            <SearchPalette @rendermode="InteractiveServer" />
         </div>
-        <NodeTree />
+        <NodeTree @rendermode="InteractiveServer" />
         <nav class="sidebar-foot">
             <NavLink href="/tags">Tags</NavLink>
             <NavLink href="/settings">Settings</NavLink>

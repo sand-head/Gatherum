@@ -20,6 +20,7 @@ public static class MediaTypes
         [".csv"] = "text/csv",
         [".svg"] = "image/svg+xml",
         [".pdf"] = "application/pdf",
+        [".docx"] = "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     };
 
     /// <summary>Extensions whose content is text even when the upload says otherwise —

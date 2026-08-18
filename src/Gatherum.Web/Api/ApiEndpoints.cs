@@ -66,6 +66,25 @@ public static class ApiEndpoints
             return Results.Ok(new { version = version.Number });
         });
 
+        // The editor's WebAssembly home reaches presence through these; the server
+        // home talks to the tracker directly.
+        api.MapGet("/nodes/{id:guid}/presence", async (PresenceTracker presence, FileService files,
+            HttpContext http, Guid id, bool? editing) =>
+        {
+            var userId = http.User.GetUserId();
+            if (editing == true)
+                presence.Heartbeat(id, userId, http.User.Identity?.Name ?? "someone");
+            var head = await files.GetHeadVersionAsync(userId, id);
+            return Results.Ok(new PresenceDto(presence.OthersEditing(id, userId), head));
+        });
+
+        api.MapPost("/nodes/{id:guid}/presence/leave", (PresenceTracker presence,
+            HttpContext http, Guid id) =>
+        {
+            presence.Leave(id, http.User.GetUserId());
+            return Results.NoContent();
+        });
+
         api.MapPost("/nodes/{id:guid}/move", async (NodeService nodes, HttpContext http, Guid id,
             MoveNodeRequest request) =>
         {

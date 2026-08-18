@@ -1,5 +1,6 @@
 @inherits GatherumComponent
 @inject AppOperations Ops
+@inject NavigationManager Navigation
 @using Gatherum.Core.Domain
 @using Gatherum.Web.Services
 
@@ -89,10 +90,9 @@
     private async Task RestoreAsync(int number)
     {
         await Ops.Files(s => s.RestoreVersionAsync(UserId, NodeId, number));
-        await ReloadAsync();
-        previewing = null;
-        previewHtml = previewText = null;
         await OnRestored.InvokeAsync();
+        // The editor lives in another island; a full reload re-seeds it.
+        Navigation.Refresh(forceReload: true);
     }
 
     private static string FormatSize(long bytes) => bytes switch

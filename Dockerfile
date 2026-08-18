@@ -1,8 +1,14 @@
-# Stage 1: compile and publish.
+# Stage 1: compile and publish. The editor's Interactive Auto island relinks the
+# WebAssembly runtime with SkiaSharp's native library — that needs the wasm-tools
+# workload, and emscripten shells out to python.
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+RUN apt-get update && apt-get install -y --no-install-recommends python3 \
+    && rm -rf /var/lib/apt/lists/* \
+    && dotnet workload install wasm-tools
 WORKDIR /src
 COPY Directory.Build.props Gatherum.slnx nuget.config ./
 COPY src/Gatherum.Core/Gatherum.Core.csproj src/Gatherum.Core/
+COPY src/Gatherum.Client/Gatherum.Client.csproj src/Gatherum.Client/
 COPY src/Gatherum.Infrastructure/Gatherum.Infrastructure.csproj src/Gatherum.Infrastructure/
 COPY src/Gatherum.Web/Gatherum.Web.csproj src/Gatherum.Web/
 RUN dotnet restore src/Gatherum.Web

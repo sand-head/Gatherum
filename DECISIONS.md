@@ -89,3 +89,37 @@ known costs, accepted: every keystroke and frame crosses the circuit (fine on a 
 decent link for two users), and offline editing is off the table. The two prior
 entries about the WASM island and the raster-canvas workaround are superseded — Server
 mode is always raster by design, and the SKGLView dispose bug can't reach us here.
+
+## slopedit 2.0: DocumentView is the page editor
+Pages now edit in slopedit's rich document editor — proportional layout, styled runs,
+formatting as the model — with `MarkdownSerializer` moving content in and out of the
+Markdown-profile document, which round-trips losslessly by construction. A Source
+toggle swaps the same content into `EditorView` with the Markdown lexer; code and
+other text files stay in `EditorView`. Mentions insert as real link runs (insert the
+label, select it, `SetLink`). Images resolve through the editor-data seam so only
+in-app `/api/files/…/content` URLs load — external images stay placeholders.
+
+## Interactive Auto is wired, but resolves to Server on today's pages
+The editor island runs `@rendermode="InteractiveAuto"` from Gatherum.Client, with one
+`IEditorData` contract implemented twice: direct services on the server circuit, HTTP
+in WebAssembly. The WASM runtime downloads and caches — but Blazor's Auto mode matches
+the render mode already interactive on the page, and Gatherum's chrome (tree, search,
+header, versions) are Interactive Server islands, so the editor renders in the Server
+home on every visit. Local WebAssembly rendering would require converting the whole
+chrome to WASM-capable components (HTTP data flow throughout); recorded as an open
+follow-up rather than done silently.
+
+## Blazor's 32 KB hub cap kills tall documents — raised to 2 MB
+The circuit died silently (no server log, "connection closed with an error" in the
+browser) whenever a document was tall enough — first seen with a wrapping heading.
+Root cause: slopedit's editor interop exceeds SignalR's default 32 KB client→server
+`MaximumReceiveMessageSize`. `AddHubOptions` raises it to 2 MB. Upstream note for
+slopedit: hosts need this documented (or the payload chunked); the failure mode is
+brutal to diagnose because nothing reaches the server logs.
+
+## docx editing is blocked on the SlopEdit.Docx package
+The `.docx` media type is mapped and the dispatch seam is ready, but SlopEdit.Docx
+2.0.0 is not on the package feed yet (only Blazor/Core/TreeSitter are). When it
+publishes: reference it, add a `DocxConverter.ToRichDocument/FromRichDocument` case
+beside the Markdown one in NodeEditor, and a docx text extractor via
+`DocxConverter.ToMarkdown` for search.
