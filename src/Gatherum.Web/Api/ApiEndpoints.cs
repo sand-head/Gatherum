@@ -22,7 +22,10 @@ public static class ApiEndpoints
         });
 
         api.MapGet("/nodes/tree", async (NodeService nodes, HttpContext http) =>
-            Results.Ok(await nodes.GetTreeAsync(http.User.GetUserId())));
+        {
+            var tree = await nodes.GetTreeAsync(http.User.GetUserId());
+            return Results.Ok(tree.Select(TreeNodeDto.From));
+        });
 
         api.MapGet("/nodes/{id:guid}", async (NodeService nodes, HttpContext http, Guid id) =>
             Results.Ok(NodeDto.From(await nodes.GetWithBodyAsync(http.User.GetUserId(), id))));
@@ -201,16 +204,14 @@ public static class ApiEndpoints
         api.MapGet("/keys", async (ApiKeyService keys, HttpContext http) =>
         {
             var list = await keys.ListAsync(http.User.GetUserId());
-            return Results.Ok(list.Select(k => new
-            {
-                k.Id, k.Name, k.Prefix, k.CreatedAt, k.RevokedAt, k.LastUsedAt,
-            }));
+            return Results.Ok(list.Select(KeyDto.From));
         });
 
         api.MapPost("/keys", async (ApiKeyService keys, HttpContext http, CreateKeyRequest request) =>
         {
             var created = await keys.CreateAsync(http.User.GetUserId(), request.Name);
-            return Results.Ok(new { created.Key.Id, created.Key.Name, Token = created.PlaintextToken });
+            return Results.Ok(new CreatedKeyDto(created.Key.Id, created.Key.Name,
+                created.PlaintextToken));
         });
 
         api.MapDelete("/keys/{id:guid}", async (ApiKeyService keys, HttpContext http, Guid id) =>

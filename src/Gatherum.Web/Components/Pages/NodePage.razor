@@ -13,7 +13,7 @@ else if (node is not null)
 {
     <PageTitle>@node.Title — Gatherum</PageTitle>
     <article class="node">
-        <NodeHeader @rendermode="InteractiveServer" NodeId="@node.Id" Title="@node.Title"
+        <NodeHeader @rendermode="InteractiveAuto" NodeId="@node.Id" Title="@node.Title"
                     IsPrivate="@node.IsPrivate" Tags="@tags.ToArray()" />
 
         @if (editable)
@@ -23,10 +23,10 @@ else if (node is not null)
         }
         else
         {
-            <FileView @rendermode="InteractiveServer" NodeId="@node.Id" />
+            <FileView @rendermode="InteractiveAuto" NodeId="@node.Id" />
         }
 
-        <VersionPanel @rendermode="InteractiveServer" NodeId="@node.Id" />
+        <VersionPanel @rendermode="InteractiveAuto" NodeId="@node.Id" />
 
         @if (backlinks.Count > 0)
         {

@@ -1,5 +1,5 @@
 @implements IAsyncDisposable
-@inject IEditorData Data
+@inject IAppData Data
 @using SlopEdit.Blazor
 @using SlopEdit.Core.Document
 @using SlopEdit.Core.Highlighting
@@ -184,7 +184,7 @@
     private async Task OnMentionQuery(ChangeEventArgs e)
     {
         mentionQuery = e.Value?.ToString() ?? "";
-        mentionResults = mentionQuery.Length == 0 ? [] : await Data.SearchAsync(mentionQuery);
+        mentionResults = mentionQuery.Length == 0 ? [] : await Data.SearchAsync(mentionQuery, limit: 8);
     }
 
     private void OnMentionKey(KeyboardEventArgs e)

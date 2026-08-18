@@ -1,45 +1,42 @@
-@inherits GatherumComponent
-@inject AppOperations Ops
-@using Gatherum.Core.Domain
+@inject IAppData Data
 
-@if (node?.File is { Versions.Count: > 0 } file)
+@if (node?.File is { } file)
 {
-    var current = file.Current;
     var contentUrl = $"/api/files/{NodeId}/content";
 
     <div class="file-view">
         <div class="file-preview">
-            @if (current.MediaType.StartsWith("image/"))
+            @if (file.MediaType.StartsWith("image/"))
             {
-                <img src="@contentUrl" alt="@current.FileName" />
+                <img src="@contentUrl" alt="@file.FileName" />
             }
-            else if (current.MediaType == "application/pdf")
+            else if (file.MediaType == "application/pdf")
             {
-                <iframe src="@contentUrl" title="@current.FileName"></iframe>
+                <iframe src="@contentUrl" title="@file.FileName"></iframe>
             }
-            else if (current.MediaType.StartsWith("video/"))
+            else if (file.MediaType.StartsWith("video/"))
             {
                 <video src="@contentUrl" controls></video>
             }
-            else if (current.MediaType.StartsWith("audio/"))
+            else if (file.MediaType.StartsWith("audio/"))
             {
                 <audio src="@contentUrl" controls></audio>
             }
-            else if (current.ExtractedText.Length > 0)
+            else if (file.ExtractedText.Length > 0)
             {
-                <pre class="file-text"><code>@current.ExtractedText</code></pre>
+                <pre class="file-text"><code>@file.ExtractedText</code></pre>
             }
             else
             {
-                <div class="file-fallback">No inline preview for @current.MediaType.</div>
+                <div class="file-fallback">No inline preview for @file.MediaType.</div>
             }
         </div>
 
         <dl class="file-facts">
-            <dt>File</dt><dd>@current.FileName</dd>
-            <dt>Type</dt><dd>@current.MediaType</dd>
-            <dt>Size</dt><dd>@FormatSize(current.SizeBytes)</dd>
-            <dt>SHA-256</dt><dd class="hash">@current.Hash</dd>
+            <dt>File</dt><dd>@file.FileName</dd>
+            <dt>Type</dt><dd>@file.MediaType</dd>
+            <dt>Size</dt><dd>@FormatSize(file.SizeBytes)</dd>
+            <dt>SHA-256</dt><dd class="hash">@file.Sha256</dd>
             <dt></dt>
             <dd class="file-actions">
                 <a class="button" href="/api/files/@NodeId/download" target="_blank">Download</a>
@@ -63,28 +60,28 @@
 @code {
     [Parameter, EditorRequired] public Guid NodeId { get; set; }
 
-    private Node? node;
+    private NodeInfo? node;
     private string description = "";
 
     protected override async Task OnParametersSetAsync() => await ReloadAsync();
 
     private async Task ReloadAsync()
     {
-        node = await Ops.Nodes(s => s.GetWithBodyAsync(UserId, NodeId));
+        node = await Data.GetNodeAsync(NodeId);
         description = node.File?.Description ?? "";
     }
 
     private async Task SaveDescriptionAsync()
     {
-        await Ops.Files(s => s.SetDescriptionAsync(UserId, NodeId, description));
+        await Data.SetDescriptionAsync(NodeId, description);
         await ReloadAsync();
     }
 
     private async Task UploadVersionAsync(InputFileChangeEventArgs e)
     {
         var file = e.File;
-        await using var stream = file.OpenReadStream(maxAllowedSize: 512 * 1024 * 1024);
-        await Ops.Files(s => s.UploadVersionAsync(UserId, NodeId, file.Name, file.ContentType, stream));
+        await using var stream = file.OpenReadStream(maxAllowedSize: IAppData.MaxUploadBytes);
+        await Data.UploadVersionAsync(NodeId, file.Name, file.ContentType, stream);
         await ReloadAsync();
     }
 

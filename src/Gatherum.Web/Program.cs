@@ -25,9 +25,11 @@ builder.Services.AddRazorComponents()
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<Gatherum.Web.Services.AppOperations>();
-builder.Services.AddScoped<Gatherum.Web.Services.TreeState>();
 builder.Services.AddSingleton<Gatherum.Web.Services.PresenceTracker>();
-builder.Services.AddScoped<Gatherum.Client.IEditorData, Gatherum.Web.Services.ServerEditorData>();
+builder.Services.AddScoped<Gatherum.Client.IAppData, Gatherum.Web.Services.ServerAppData>();
+builder.Services.AddScoped<Gatherum.Client.TreeState>();
+builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
+    options.MultipartBodyLengthLimit = Gatherum.Client.IAppData.MaxUploadBytes);
 builder.Services.AddMcpServer(options => options.ServerInfo = new ModelContextProtocol.Protocol.Implementation
     {
         Name = "gatherum",
@@ -127,6 +129,20 @@ app.UseWhen(
         !context.Request.Path.StartsWithSegments("/mcp"),
     browser => browser.UseStatusCodePagesWithReExecute(
         "/not-found", createScopeForStatusCodePages: true));
+
+// Kestrel's default body cap (~30 MB) is far below the upload ceiling the file
+// endpoints promise; raise it for them before the endpoint reads the body.
+app.Use((context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/api/files"))
+    {
+        var sizeFeature = context.Features
+            .Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>();
+        if (sizeFeature is { IsReadOnly: false })
+            sizeFeature.MaxRequestBodySize = Gatherum.Client.IAppData.MaxUploadBytes;
+    }
+    return next(context);
+});
 
 app.UseAuthentication();
 app.UseAuthorization();

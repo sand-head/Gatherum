@@ -7,6 +7,7 @@ builder.Services.AddScoped(_ => new HttpClient
 {
     BaseAddress = new Uri(builder.HostEnvironment.BaseAddress),
 });
-builder.Services.AddScoped<IEditorData, HttpEditorData>();
+builder.Services.AddScoped<IAppData, HttpAppData>();
+builder.Services.AddScoped<TreeState>();
 
 await builder.Build().RunAsync();

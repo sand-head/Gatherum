@@ -60,12 +60,29 @@ public record NodeSummaryDto(Guid Id, string Kind, string Title, Guid? ParentId,
         new(node.Id, node.Kind.ToString(), node.Title, node.ParentId, node.Position);
 }
 
+public record TreeNodeDto(Guid Id, Guid? ParentId, string Title, string MediaType, string Kind,
+    int Position, bool IsPrivate)
+{
+    public static TreeNodeDto From(TreeNode node) => new(node.Id, node.ParentId, node.Title,
+        node.MediaType, node.Kind.ToString(), node.Position, node.IsPrivate);
+}
+
 public record VersionDto(int Number, string FileName, string MediaType, long SizeBytes,
-    DateTimeOffset UploadedAt, Guid UploadedById)
+    DateTimeOffset UploadedAt, Guid UploadedById, bool IsText)
 {
     public static VersionDto From(FileVersion version) => new(version.Number, version.FileName,
-        version.MediaType, version.SizeBytes, version.UploadedAt, version.UploadedById);
+        version.MediaType, version.SizeBytes, version.UploadedAt, version.UploadedById,
+        MediaTypes.IsText(version.MediaType, version.FileName));
 }
+
+public record KeyDto(Guid Id, string Name, string Prefix, DateTimeOffset CreatedAt,
+    DateTimeOffset? LastUsedAt, bool IsActive)
+{
+    public static KeyDto From(ApiKey key) =>
+        new(key.Id, key.Name, key.Prefix, key.CreatedAt, key.LastUsedAt, key.IsActive);
+}
+
+public record CreatedKeyDto(Guid Id, string Name, string Token);
 
 public record SearchResultDto(Guid Id, string Kind, string Title, string Snippet)
 {

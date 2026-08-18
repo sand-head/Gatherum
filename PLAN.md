@@ -95,3 +95,14 @@ over a dual `IEditorData` seam — though Blazor's mode-matching keeps it in the
 home while the chrome is Server islands. Blazor's 32 KB hub message cap, which killed
 tall documents silently, is raised to 2 MB. docx editing is mapped and seamed but
 waits on the SlopEdit.Docx package publish.
+
+### Post-revision: the whole chrome went Interactive Auto
+
+To let the Auto editor actually resolve to WebAssembly, every interactive island —
+tree, search palette, node header, tags, version panel, file view, settings keys —
+moved into `Gatherum.Client` as Interactive Auto components over a widened `IAppData`
+seam (services on the server circuit, `/api` in WASM); the tags page became static
+SSR. First visit renders on the server circuit while the runtime downloads; every
+later visit runs fully local with zero websockets. `MarkdownRender` is gone (version
+previews use a read-only `DocumentView`), and the upload endpoints' body cap now
+matches the 512 MB the pickers promise.

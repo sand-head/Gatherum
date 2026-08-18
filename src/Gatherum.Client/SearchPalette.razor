@@ -1,5 +1,4 @@
-@inherits GatherumComponent
-@inject AppOperations Ops
+@inject IAppData Data
 @inject NavigationManager Navigation
 @inject IJSRuntime Js
 
@@ -18,7 +17,7 @@
                 {
                     <button class="palette-result @(index == selected ? "selected" : "")"
                             @onclick="() => Go(result.Id)">
-                        <span class="kind-badge @(result.Kind == NodeKind.Page ? "page" : "file")">
+                        <span class="kind-badge @(result.Kind == "Page" ? "page" : "file")">
                             @result.Kind
                         </span>
                         <span class="result-title">@result.Title</span>
@@ -37,7 +36,7 @@
 @code {
     private bool isOpen;
     private string query = "";
-    private List<SearchResult> results = [];
+    private IReadOnlyList<SearchHit> results = [];
     private int selected;
     private bool searching;
     private ElementReference input;
@@ -92,7 +91,7 @@
             return;
         }
         searching = true;
-        var found = await Ops.Search(s => s.SearchAsync(UserId, current, limit: 15));
+        var found = await Data.SearchAsync(current, limit: 15);
         if (current == query)
         {
             results = found;

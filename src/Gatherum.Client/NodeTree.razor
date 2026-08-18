@@ -1,8 +1,8 @@
-@inherits GatherumComponent
 @implements IDisposable
-@inject AppOperations Ops
+@inject IAppData Data
 @inject TreeState Tree
 @inject NavigationManager Navigation
+@inject IJSRuntime Js
 
 <div class="tree" @ref="dropZone">
     @foreach (var root in Tree.ByParent[null])
@@ -28,7 +28,7 @@
             {
                 @if (candidate.Id != movingNode.Id && !IsInSubtree(candidate.Id, movingNode.Id))
                 {
-                    <option value="@candidate.Id">@(new string(' ', depth * 3))@candidate.Title</option>
+                    <option value="@candidate.Id">@(new string(' ', depth * 3))@candidate.Title</option>
                 }
             }
         </select>
@@ -41,18 +41,15 @@
 
 @code {
     private ElementReference dropZone;
-    private TreeNode? moving;
+    private TreeNodeInfo? moving;
     private string moveTargetId = "";
     private readonly HashSet<Guid> expanded = [];
-
-    [Inject] private IJSRuntime Js { get; set; } = null!;
     private IJSObjectReference? module;
 
     protected override async Task OnInitializedAsync()
     {
-        await base.OnInitializedAsync();
         Tree.Changed += OnTreeChanged;
-        await Tree.RefreshAsync(UserId);
+        await Tree.RefreshAsync();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -66,7 +63,7 @@
     }
 
     [JSInvokable]
-    public async Task OnFilesDropped() => await Tree.RefreshAsync(UserId);
+    public async Task OnFilesDropped() => await Tree.RefreshAsync();
 
     public bool IsExpanded(Guid id) => expanded.Contains(id);
 
@@ -78,11 +75,11 @@
 
     public async Task CreatePageAsync(Guid? parentId)
     {
-        var node = await Ops.Files(s => s.CreateTextNodeAsync(UserId, parentId, "Untitled"));
+        var nodeId = await Data.CreatePageAsync(parentId, "Untitled");
         if (parentId is { } id)
             expanded.Add(id);
-        await Tree.RefreshAsync(UserId);
-        Navigation.NavigateTo($"/nodes/{node.Id}");
+        await Tree.RefreshAsync();
+        Navigation.NavigateTo($"/nodes/{nodeId}");
     }
 
     public async Task UploadAsync(InputFileChangeEventArgs e, Guid? parentId)
@@ -90,26 +87,24 @@
         Guid lastId = default;
         foreach (var file in e.GetMultipleFiles())
         {
-            await using var stream = file.OpenReadStream(maxAllowedSize: 512 * 1024 * 1024);
-            var node = await Ops.Files(s => s.CreateFileNodeAsync(UserId, parentId, file.Name,
-                file.ContentType, stream));
-            lastId = node.Id;
+            await using var stream = file.OpenReadStream(maxAllowedSize: IAppData.MaxUploadBytes);
+            lastId = await Data.UploadFileAsync(parentId, file.Name, file.ContentType, stream);
         }
         if (parentId is { } id)
             expanded.Add(id);
-        await Tree.RefreshAsync(UserId);
+        await Tree.RefreshAsync();
         if (lastId != default)
             Navigation.NavigateTo($"/nodes/{lastId}");
     }
 
-    public async Task MoveBy(TreeNode node, int delta)
+    public async Task MoveBy(TreeNodeInfo node, int delta)
     {
         var position = Math.Max(0, node.Position + delta);
-        await Ops.Nodes(s => s.MoveAsync(UserId, node.Id, node.ParentId, position));
-        await Tree.RefreshAsync(UserId);
+        await Data.MoveAsync(node.Id, node.ParentId, position);
+        await Tree.RefreshAsync();
     }
 
-    public void BeginMove(TreeNode node)
+    public void BeginMove(TreeNodeInfo node)
     {
         moving = node;
         moveTargetId = "";
@@ -120,27 +115,25 @@
         if (moving is null)
             return;
         Guid? target = Guid.TryParse(moveTargetId, out var id) ? id : null;
-        await Ops.Nodes(s => s.MoveAsync(UserId, moving.Id, target));
+        await Data.MoveAsync(moving.Id, target);
         moving = null;
-        await Tree.RefreshAsync(UserId);
+        await Tree.RefreshAsync();
     }
 
-    public async Task DeleteAsync(TreeNode node)
+    public async Task DeleteAsync(TreeNodeInfo node)
     {
-        await Ops.Nodes(s => s.DeleteAsync(UserId, node.Id));
-        await Tree.RefreshAsync(UserId);
+        await Data.DeleteAsync(node.Id);
+        await Tree.RefreshAsync();
         Navigation.NavigateTo("/");
     }
 
-    public async Task TogglePrivateAsync(TreeNode node)
+    public async Task TogglePrivateAsync(TreeNodeInfo node)
     {
-        await Ops.Nodes(s => s.SetPrivateAsync(UserId, node.Id, !node.IsPrivate));
-        await Tree.RefreshAsync(UserId);
+        await Data.SetPrivateAsync(node.Id, !node.IsPrivate);
+        await Tree.RefreshAsync();
     }
 
-    public async Task RefreshAsync() => await Tree.RefreshAsync(UserId);
-
-    private IEnumerable<(TreeNode Node, int Depth)> Flatten(Guid? parentId = null, int depth = 0)
+    private IEnumerable<(TreeNodeInfo Node, int Depth)> Flatten(Guid? parentId = null, int depth = 0)
     {
         foreach (var node in Tree.ByParent[parentId])
         {

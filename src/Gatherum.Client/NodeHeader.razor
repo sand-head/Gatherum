@@ -1,5 +1,4 @@
-@inherits GatherumComponent
-@inject AppOperations Ops
+@inject IAppData Data
 @inject TreeState Tree
 
 <header class="node-header">
@@ -33,14 +32,11 @@
     {
         if (newTitle.Length == 0 || newTitle == title)
             return;
-        await Ops.Nodes(s => s.RenameAsync(UserId, NodeId, newTitle));
+        await Data.RenameAsync(NodeId, newTitle);
         title = newTitle;
-        await Tree.RefreshAsync(UserId);
+        await Tree.RefreshAsync();
     }
 
-    private async Task ReloadTagsAsync()
-    {
-        var node = await Ops.Nodes(s => s.GetWithBodyAsync(UserId, NodeId));
-        tags = node.Tags.Select(t => t.Tag!.Name).Order().ToList();
-    }
+    private async Task ReloadTagsAsync() =>
+        tags = (await Data.GetNodeAsync(NodeId)).Tags;
 }

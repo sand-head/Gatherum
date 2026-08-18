@@ -144,7 +144,7 @@ path goes through.
 ## Development
 
 ```sh
-dotnet build                 # needs the wasm-tools workload (editor island)
+dotnet build                 # needs the wasm-tools workload (the Auto islands)
 dotnet test                  # unit + integration tests; Postgres via Testcontainers
 ```
 

@@ -9,10 +9,11 @@ A self-hosted knowledge base for two people where **pages and files are the same
 of thing**: every item is a `Node` in one tree with tags, links, versions, and
 searchable text — and a page is simply a node whose file is Markdown. One tree, one
 search, one login, one API, plus an MCP server so agents are first-class users.
-C#/Blazor end to end — static shell, Interactive Server islands for the chrome, and
-one Interactive Auto island for the editor (the only JS is `wwwroot/js/gatherum.js`,
-~30 lines) — PostgreSQL, deployed as a single rootless Podman container behind a
-TLS-terminating reverse proxy with Authelia for OIDC.
+C#/Blazor end to end — static shell with Interactive Auto islands for everything
+interactive: the first visit renders on a server circuit while the WASM runtime
+downloads, every later visit runs fully in WebAssembly over `/api` (the only JS is
+`wwwroot/js/gatherum.js`, ~30 lines) — PostgreSQL, deployed as a single rootless
+Podman container behind a TLS-terminating reverse proxy with Authelia for OIDC.
 
 ## Build, run, test
 
@@ -41,21 +42,26 @@ auto-login. Migrations: `dotnet ef migrations add <Name> -p src/Gatherum.Infrast
   conventions), and the three seam interfaces in `Abstractions/`.
 - `src/Gatherum.Infrastructure` — implementations with real dependencies: filesystem
   storage, text extractors, EF migrations.
-- `src/Gatherum.Web` — Blazor components (`Components/`), REST API (`Api/`), MCP
-  tools (`Mcp/`), auth (`Auth/`), presence + Markdown HTML rendering + the server
-  implementation of the editor-data seam (`Services/`).
-- `src/Gatherum.Client` — the editor island: `NodeEditor` hosts slopedit's
-  `DocumentView` (pages) and `EditorView` (code/source) under Interactive Auto, and
-  `IEditorData` is its only view of the world — implemented over the services on the
-  server circuit and over `/api` in WebAssembly.
+- `src/Gatherum.Web` — the static pages and layout (`Components/`), REST API
+  (`Api/`), MCP tools (`Mcp/`), auth (`Auth/`), presence + `ServerAppData`, the
+  server implementation of the interactive components' data seam (`Services/`).
+- `src/Gatherum.Client` — every interactive component, all Interactive Auto: the
+  editor (`NodeEditor` hosting slopedit's `DocumentView` for pages, `EditorView` for
+  code/source), tree, search palette, node header, tags, version panel, file view,
+  and settings keys. `IAppData` (`AppData.cs`) is their only view of the world —
+  implemented by `ServerAppData` over the services on the server circuit and by
+  `HttpAppData` over `/api` in WebAssembly.
 - `tests/Gatherum.Tests` — unit tests plus `AppIntegrationTests` booting the real app.
 
-Render modes: static shell; Server islands for tree, search, node chrome, tags, and
-settings; the editor is Interactive Auto (today it resolves to the Server home — see
-DECISIONS.md). UI components, API endpoints, and MCP tools are all thin: they parse
-input, call a Core service, map the result (`Api/ApiModels.cs` DTOs are shared by
-REST and MCP). Server components run each operation in a fresh DI scope via
-`Services/AppOperations`.
+Render modes: static SSR for pages and layout; every interactive component is an
+Interactive Auto island from Gatherum.Client. Blazor's Auto mode matches the mode
+already interactive on the page, so keeping the chrome free of Server-only islands is
+what lets the whole screen resolve to WebAssembly — don't add an Interactive Server
+component without realizing it pins every Auto island back to the circuit. UI
+components, API endpoints, and MCP tools are all thin: they parse input, call a Core
+service (through `IAppData` in Client components), map the result (`Api/ApiModels.cs`
+DTOs are shared by REST and MCP). On the server, each `IAppData` operation runs in a
+fresh DI scope via `Services/AppOperations`.
 
 ## Rules that don't bend
 
@@ -76,14 +82,14 @@ REST and MCP). Server components run each operation in a fresh DI scope via
 
 C# is modern and terse: primary constructors, records for values, expression-bodied
 members where they read well. File placement follows the map above; one public type per
-file, named for the type. Razor components live under `Components/{Layout,Pages,Shared}`
-in Web; the editor island lives in Client and touches the server only through
-`IEditorData`.
+file, named for the type. Static pages and layout live under
+`Components/{Layout,Pages}` in Web; interactive components live flat in Client and
+touch the server only through `IAppData`.
 
 **Make a new format editable/previewable**:
 1. Teach `MediaTypes` (`src/Gatherum.Core/Domain/MediaTypes.cs`) the extension.
 2. Editable text just works once `MediaTypes.IsText` says yes; for a richer preview,
-   extend the media-type dispatch in `Components/Pages/FileView.razor`.
+   extend the media-type dispatch in `src/Gatherum.Client/FileView.razor`.
 3. For syntax highlighting, add the lexer upstream in slopedit's `LexerRegistry`.
 
 **Add a text extractor**:

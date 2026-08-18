@@ -1,0 +1,77 @@
+@inject IAppData Data
+
+<section class="settings-keys">
+    <h2>API keys</h2>
+    <p>
+        Keys authenticate the REST API (<code>/api</code>) and the MCP server
+        (<code>/mcp</code>) as you. Send them as <code>Authorization: Bearer …</code>.
+    </p>
+
+    <form class="key-create" @onsubmit="CreateAsync">
+        <input placeholder="Key name (e.g. claude-code)" @bind="newKeyName" @bind:event="oninput" />
+        <button class="primary" type="submit" disabled="@(newKeyName.Trim().Length == 0)">
+            Create key
+        </button>
+    </form>
+
+    @if (freshToken is not null)
+    {
+        <div class="fresh-token">
+            <p>Copy this token now — it won't be shown again:</p>
+            <code>@freshToken</code>
+        </div>
+    }
+
+    <table class="key-table">
+        <thead>
+            <tr><th>Name</th><th>Key</th><th>Created</th><th>Last used</th><th></th></tr>
+        </thead>
+        <tbody>
+            @foreach (var key in keys)
+            {
+                <tr class="@(key.IsActive ? "" : "revoked")">
+                    <td>@key.Name</td>
+                    <td><code>@key.Prefix…</code></td>
+                    <td>@key.CreatedAt.LocalDateTime.ToString("d")</td>
+                    <td>@(key.LastUsedAt?.LocalDateTime.ToString("g") ?? "never")</td>
+                    <td>
+                        @if (key.IsActive)
+                        {
+                            <button class="danger" @onclick="() => RevokeAsync(key.Id)">Revoke</button>
+                        }
+                        else
+                        {
+                            <span>revoked</span>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</section>
+
+@code {
+    private IReadOnlyList<KeyInfo> keys = [];
+    private string newKeyName = "";
+    private string? freshToken;
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync() => keys = await Data.ListKeysAsync();
+
+    private async Task CreateAsync()
+    {
+        if (newKeyName.Trim().Length == 0)
+            return;
+        var created = await Data.CreateKeyAsync(newKeyName.Trim());
+        freshToken = created.Token;
+        newKeyName = "";
+        await ReloadAsync();
+    }
+
+    private async Task RevokeAsync(Guid id)
+    {
+        await Data.RevokeKeyAsync(id);
+        await ReloadAsync();
+    }
+}

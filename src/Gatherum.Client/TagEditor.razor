@@ -1,5 +1,4 @@
-@inherits GatherumComponent
-@inject AppOperations Ops
+@inject IAppData Data
 
 <div class="tag-editor">
     @foreach (var tag in Tags)
@@ -26,14 +25,12 @@
     [Parameter] public EventCallback OnChanged { get; set; }
 
     private string draft = "";
-    private List<TagSummary> suggestions = [];
+    private IReadOnlyList<TagInfo> suggestions = [];
 
     private async Task OnInput(ChangeEventArgs e)
     {
         draft = e.Value?.ToString() ?? "";
-        suggestions = draft.Length > 0
-            ? await Ops.Nodes(s => s.ListTagsAsync(UserId, draft))
-            : [];
+        suggestions = draft.Length > 0 ? await Data.ListTagsAsync(draft) : [];
     }
 
     private async Task OnKeyDown(KeyboardEventArgs e)
@@ -46,7 +43,7 @@
     {
         if (draft.Trim().Length == 0)
             return;
-        await Ops.Nodes(s => s.AddTagAsync(UserId, NodeId, draft));
+        await Data.AddTagAsync(NodeId, draft);
         draft = "";
         suggestions = [];
         await OnChanged.InvokeAsync();
@@ -54,7 +51,7 @@
 
     private async Task RemoveAsync(string tag)
     {
-        await Ops.Nodes(s => s.RemoveTagAsync(UserId, NodeId, tag));
+        await Data.RemoveTagAsync(NodeId, tag);
         await OnChanged.InvokeAsync();
     }
 }

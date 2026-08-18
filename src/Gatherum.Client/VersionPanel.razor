@@ -1,8 +1,7 @@
-@inherits GatherumComponent
-@inject AppOperations Ops
+@using SlopEdit.Blazor
+@using SlopEdit.Core.Rich
+@inject IAppData Data
 @inject NavigationManager Navigation
-@using Gatherum.Core.Domain
-@using Gatherum.Web.Services
 
 <section class="version-panel">
     <button class="ghost" @onclick="ToggleAsync">
@@ -20,7 +19,7 @@
                         <td>@FormatSize(version.SizeBytes)</td>
                         <td><time>@version.UploadedAt.LocalDateTime.ToString("g")</time></td>
                         <td>
-                            @if (MediaTypes.IsText(version.MediaType, version.FileName))
+                            @if (version.IsText)
                             {
                                 <button class="ghost" @onclick="() => PreviewAsync(version)">view</button>
                             }
@@ -35,9 +34,12 @@
                 }
             </tbody>
         </table>
-        @if (previewHtml is not null)
+        @if (previewDoc is not null)
         {
-            <div class="history-preview page-content">@((MarkupString)previewHtml)</div>
+            <div class="history-preview document-surface">
+                <DocumentView Grid="previewDoc" ReadOnly="true" ImageSource="Data.GetImageAsync"
+                              AriaLabel="Version preview" />
+            </div>
         }
         else if (previewText is not null)
         {
@@ -48,49 +50,42 @@
 
 @code {
     [Parameter, EditorRequired] public Guid NodeId { get; set; }
-    [Parameter] public EventCallback OnRestored { get; set; }
 
     private bool open;
-    private List<FileVersion> versions = [];
+    private IReadOnlyList<VersionInfo> versions = [];
     private int? previewing;
-    private string? previewHtml;
+    private RichDocument? previewDoc;
     private string? previewText;
 
     private async Task ToggleAsync()
     {
         open = !open;
         previewing = null;
-        previewHtml = previewText = null;
+        previewDoc = null;
+        previewText = null;
         if (open)
-            await ReloadAsync();
+            versions = await Data.GetVersionsAsync(NodeId);
     }
 
-    private async Task ReloadAsync()
-    {
-        var node = await Ops.Nodes(s => s.GetWithBodyAsync(UserId, NodeId));
-        versions = (node.File?.Versions ?? []).OrderByDescending(v => v.Number).ToList();
-    }
-
-    private Task PreviewAsync(FileVersion version)
+    private async Task PreviewAsync(VersionInfo version)
     {
         previewing = version.Number;
-        if (version.MediaType == MediaTypes.Markdown)
+        var text = await Data.GetVersionTextAsync(NodeId, version.Number);
+        if (version.MediaType == "text/markdown")
         {
-            previewHtml = MarkdownRender.ToHtml(version.ExtractedText);
+            previewDoc = MarkdownSerializer.FromMarkdown(text);
             previewText = null;
         }
         else
         {
-            previewText = version.ExtractedText;
-            previewHtml = null;
+            previewText = text;
+            previewDoc = null;
         }
-        return Task.CompletedTask;
     }
 
     private async Task RestoreAsync(int number)
     {
-        await Ops.Files(s => s.RestoreVersionAsync(UserId, NodeId, number));
-        await OnRestored.InvokeAsync();
+        await Data.RestoreVersionAsync(NodeId, number);
         // The editor lives in another island; a full reload re-seeds it.
         Navigation.Refresh(forceReload: true);
     }

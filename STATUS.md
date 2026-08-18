@@ -1,6 +1,7 @@
 # Status
 
-As of the slopedit 2.0 revision (DocumentView pages, Interactive Auto editor island). Everything listed as working has
+As of the all-Auto revision (the whole interactive UI renders in WebAssembly after
+the first visit). Everything listed as working has
 been exercised end-to-end (unit/integration tests, API smoke tests, or scripted
 browser sessions — including against the built container).
 
@@ -18,9 +19,15 @@ browser sessions — including against the built container).
   losslessly through `MarkdownSerializer`. A Source toggle swaps to `EditorView` with
   the Markdown lexer; code/config/text files edit in `EditorView` with syntax
   highlighting. Autosave with indicator, "Link node…" mention insertion as real link
-  runs, version history with restore. The editor is an Interactive Auto island
-  (Gatherum.Client) over a dual `IEditorData` seam — services on the server circuit,
-  HTTP under WebAssembly. The only JavaScript in the app is a ~30-line interop file.
+  runs, version history with restore (old Markdown previews in a read-only
+  `DocumentView`). Every interactive component — editor, tree, search palette, node
+  header, tags, versions, file view, settings keys — is an Interactive Auto island in
+  `Gatherum.Client` over one `IAppData` seam (services on the server circuit, HTTP
+  under WebAssembly): the first visit renders on the server while the runtime
+  downloads, and every visit after runs fully in WebAssembly with zero websockets
+  (verified in-browser: editing, autosave, rename, tags, history, restore, search,
+  keys, stale-version warning all exercised in the WASM home). The only JavaScript in
+  the app is a ~30-line interop file.
 - **Awareness** — heartbeat presence ("Sam is editing", verified cross-user) and a
   newer-version warning in the editor (verified: fires when another user saves the
   open document). Concurrent saves are serialized per node; nobody's save is ever
@@ -46,7 +53,7 @@ browser sessions — including against the built container).
   exercised against a postgres container, editor verified in-browser against the
   containerized app), compose.yaml, Podman Quadlets, `/healthz`, JSON console logs
   outside Development, migrations on startup with opt-out.
-- **Tests** — 39 passing: markdown links/rendering, tree ops, privacy, versions
+- **Tests** — 35 passing: markdown links, tree ops, privacy, versions
   (collapse, restore, re-upload, cross-author), search, API keys, storage/extraction,
   and integration tests booting the app on Testcontainers Postgres (create page →
   search → MCP `get_node`).
@@ -63,10 +70,9 @@ browser sessions — including against the built container).
 
 - No live co-editing: presence + versions instead of CRDT merging (DECISIONS.md; the
   trade was chosen deliberately with the no-JS direction).
-- The editor island is Interactive Auto, but Blazor's Auto mode matches the render
-  mode already on the page — and the chrome is Server islands, so the editor runs in
-  the Server home (streamed frames) in practice. True local rendering needs the whole
-  chrome converted to WASM-capable components; open follow-up.
+- The first visit in a fresh browser renders on the server circuit while the WASM
+  runtime downloads (~a minute on a slow link); local rendering starts from the next
+  visit. That's Blazor Auto working as designed, not a gap to fix.
 - docx viewing/editing waits on the SlopEdit.Docx package publish (DECISIONS.md).
 - Editor is capped to text files ≤ 4 MB; larger text files fall back to FileView.
 - File bytes are never garbage-collected when nodes are deleted.

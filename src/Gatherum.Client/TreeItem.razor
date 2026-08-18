@@ -15,7 +15,7 @@
             <span class="chevron"></span>
         }
         <NavLink class="tree-link" href="@($"/nodes/{Node.Id}")">
-            <span class="node-icon">@(Node.Kind == NodeKind.Page ? "▤" : "◈")</span>
+            <span class="node-icon">@(Node.Kind == "Page" ? "▤" : "◈")</span>
             <span class="node-title">@Node.Title</span>
             @if (Node.IsPrivate)
             {
@@ -51,7 +51,7 @@
 </div>
 
 @code {
-    [Parameter, EditorRequired] public TreeNode Node { get; set; } = null!;
+    [Parameter, EditorRequired] public TreeNodeInfo Node { get; set; } = null!;
     [Parameter] public int Depth { get; set; }
     [Parameter, EditorRequired] public NodeTree Tree { get; set; } = null!;
 

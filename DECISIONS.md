@@ -107,7 +107,8 @@ the render mode already interactive on the page, and Gatherum's chrome (tree, se
 header, versions) are Interactive Server islands, so the editor renders in the Server
 home on every visit. Local WebAssembly rendering would require converting the whole
 chrome to WASM-capable components (HTTP data flow throughout); recorded as an open
-follow-up rather than done silently.
+follow-up rather than done silently. *(Since done — see "The whole chrome went
+Interactive Auto" below.)*
 
 ## Blazor's 32 KB hub cap kills tall documents — raised to 2 MB
 The circuit died silently (no server log, "connection closed with an error" in the
@@ -123,3 +124,21 @@ The `.docx` media type is mapped and the dispatch seam is ready, but SlopEdit.Do
 publishes: reference it, add a `DocxConverter.ToRichDocument/FromRichDocument` case
 beside the Markdown one in NodeEditor, and a docx text extractor via
 `DocxConverter.ToMarkdown` for search.
+
+## The whole chrome went Interactive Auto — the app now renders in WebAssembly
+Blazor's Auto mode matches whatever render mode is already interactive on the page,
+so as long as any island was Interactive Server, the editor could never go local.
+The fix was to leave no such island: the tree, search palette, node header, tag
+editor, version panel, file view, and settings key panel all moved into
+Gatherum.Client as Interactive Auto components, and the editor's `IEditorData` seam
+widened into `IAppData` — one contract covering everything the interactive UI needs,
+implemented twice (`ServerAppData` over the application services, `HttpAppData` over
+`/api`). First visit still renders on the server circuit while the runtime downloads;
+every visit after that runs fully in WebAssembly with **zero websockets** — presence,
+autosave, and the stale-version warning all flow over HTTP. The tags page lost its
+interactivity requirement entirely and became static SSR. Two consequences worth
+naming: `MarkdownRender` (server-side Markdown→HTML) is gone — the version panel now
+previews old Markdown in a read-only `DocumentView`, so previews look exactly like
+the editor; and the file-upload endpoints raise the request body cap to the same
+512 MB the pickers promise, because WASM-home uploads arrive as multipart HTTP
+instead of streaming over a circuit.
