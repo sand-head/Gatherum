@@ -6,6 +6,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <base href="/" />
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    @* Theme bootstrap: apply the saved choice as early as possible and wire the
+       static sidebar toggle. The logic lives in gatherum.js (the one JS file);
+       this only loads and calls it. *@
+    <script type="module">import { initTheme } from './js/gatherum.js'; initTheme();</script>
     <ResourcePreloader />
     <link rel="stylesheet" href="@Assets["app.css"]" />
     <link rel="stylesheet" href="@Assets["Gatherum.Web.styles.css"]" />

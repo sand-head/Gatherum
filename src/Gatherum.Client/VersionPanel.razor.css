@@ -1,0 +1,37 @@
+.version-panel {
+    margin-top: 28px;
+    border-top: 1px solid var(--outline-dim);
+    padding-top: 10px;
+
+    & > button { color: var(--on-surface-dim); }
+}
+
+table {
+    border-collapse: collapse;
+    width: 100%;
+    margin-top: 8px;
+}
+
+td {
+    border-bottom: 1px solid var(--outline-dim);
+    padding: 8px 12px 8px 0;
+
+    & time { color: var(--on-surface-dim); font-size: 13px; }
+
+    & a { margin-inline: 4px; }
+}
+
+tr.selected td { background: var(--hover); }
+
+tr td:first-child {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--on-surface-dim);
+}
+
+.history-preview {
+    border: 1px solid var(--outline-dim);
+    border-radius: var(--radius);
+    padding: 12px 18px;
+    margin-top: 12px;
+}

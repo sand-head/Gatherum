@@ -5,7 +5,7 @@ files are the same kind of thing.** Every item is a *node* — it has a title, a
 one tree, tags, links, backlinks, version history, and searchable text. A page is
 simply a node whose file is Markdown; a fic chapter, a Podman quadlet, a PDF, and a
 photo all live in one tree, one search, one login, one API. Built almost entirely in
-C#/Blazor — the only JavaScript is a ~30-line interop file.
+C#/Blazor — the only JavaScript is a ~45-line interop file.
 
 - **Editing**: pages — and uploaded `.docx` documents — open in
   [slopedit](https://git.sand.town/sand_head/slopedit)'s rich document editor — a

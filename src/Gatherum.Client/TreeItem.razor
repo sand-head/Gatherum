@@ -8,21 +8,56 @@
     <div class="tree-row">
         @if (children.Count > 0)
         {
-            <button class="chevron" @onclick="() => Tree.Toggle(Node.Id)">@(isExpanded ? "▾" : "▸")</button>
+            <button class="chevron @(isExpanded ? "open" : "")" title="@(isExpanded ? "Collapse" : "Expand")"
+                    @onclick="() => Tree.Toggle(Node.Id)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="m9 6 6 6-6 6" />
+                </svg>
+            </button>
         }
         else
         {
             <span class="chevron"></span>
         }
         <NavLink class="tree-link" href="@($"/nodes/{Node.Id}")">
-            <span class="node-icon">@(Node.Kind == "Page" ? "▤" : "◈")</span>
+            <span class="node-icon">
+                @if (Node.Kind == "Page")
+                {
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                         stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <path d="M14 2v6h6M9 13h6M9 17h6" />
+                    </svg>
+                }
+                else
+                {
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                         stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <path d="M14 2v6h6" />
+                    </svg>
+                }
+            </span>
             <span class="node-title">@Node.Title</span>
             @if (Node.IsPrivate)
             {
-                <span class="node-private" title="Private">🔒</span>
+                <span class="node-private" title="Private">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                         stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <rect x="4" y="11" width="16" height="10" rx="2" />
+                        <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+                    </svg>
+                </span>
             }
         </NavLink>
-        <button class="row-menu" @onclick="() => menuOpen = !menuOpen">⋯</button>
+        <button class="row-menu" title="More actions" @onclick="() => menuOpen = !menuOpen">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <circle cx="12" cy="5" r="1.9" />
+                <circle cx="12" cy="12" r="1.9" />
+                <circle cx="12" cy="19" r="1.9" />
+            </svg>
+        </button>
     </div>
     @if (menuOpen)
     {

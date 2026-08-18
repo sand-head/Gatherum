@@ -158,3 +158,24 @@ previews old Markdown in a read-only `DocumentView`, so previews look exactly li
 the editor; and the file-upload endpoints raise the request body cap to the same
 512 MB the pickers promise, because WASM-home uploads arrive as multipart HTTP
 instead of streaming over a circuit.
+
+## The redesign: scoped CSS per component, tokens via light-dark(), a JS-free-ish theme toggle
+The UI went from one global `app.css` to Blazor CSS isolation: every component owns a
+`*.razor.css` next to it, written in native modern CSS (nesting, `color-mix()`, pill
+`100vmax` radii), and `app.css` shrank to the design system — color tokens, type, and
+base element styles. The look is "what if Google made Wikipedia": Material-style chrome
+(tonal ground, the content pane as a floating rounded sheet, pill search box and
+buttons, chips, state-layer hovers, the four-hue node-graph mark) around
+Wikipedia-style articles (serif titles over a thin rule, calm reading measure, blue
+links). Theming is one mechanism, not two stylesheets: every color token is a
+`light-dark()` pair resolved through `color-scheme`, so OS preference works with zero
+extra rules and the sidebar toggle just sets `data-theme` on `<html>`. The toggle's
+logic lives in `gatherum.js` (localStorage + a delegated click handler — genuinely not
+Blazor-doable, since it must run before any circuit exists and paint-stable across
+enhanced navigation), loaded from a two-line inline module in `App.razor`'s head.
+Two isolation sharp edges worth remembering: elements rendered by child components
+(NavLink's `<a>`, InputFile's `<input>`) never carry the parent's scope attribute, so
+their state classes need top-level `::deep` selectors — nested `&.active` gets the
+scope attribute appended and silently never matches; and shared primitives used across
+components (buttons, inputs, `.tag` chips, `.upload-label`, `.document-surface`) stay
+global in `app.css` rather than being duplicated per scope.

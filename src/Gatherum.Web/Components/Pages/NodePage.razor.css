@@ -1,0 +1,34 @@
+/* The article column: centered, Wikipedia-comfortable measure. */
+.node {
+    max-width: 840px;
+    margin-inline: auto;
+}
+
+.node-missing {
+    color: var(--on-surface-dim);
+    text-align: center;
+    margin-top: 18vh;
+    font-size: 15px;
+}
+
+.backlinks {
+    margin-top: 36px;
+    border-top: 1px solid var(--outline-dim);
+    padding-top: 12px;
+
+    & h3 {
+        font: 500 12px/1.6 var(--font-ui);
+        color: var(--on-surface-dim);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        margin: 0 0 6px;
+    }
+
+    & ul {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+    }
+
+    & li { padding: 3px 0; }
+}

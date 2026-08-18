@@ -1,3 +1,106 @@
+/* App shell: tonal ground, transparent sidebar, and the content pane as a
+   floating rounded sheet (the sheet itself is the scroll container —
+   slopedit pins its sticky strip to .content, keep it scrolling). */
+
+.shell { display: flex; height: 100dvh; }
+
+.sidebar {
+    width: 290px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 10px 12px 8px;
+}
+
+.sidebar-head {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 4px 4px 12px;
+}
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 20px;
+    letter-spacing: 0.1px;
+    color: var(--on-surface);
+
+    &:hover { text-decoration: none; }
+}
+
+.sidebar-foot {
+    margin-top: auto;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 8px 2px 4px;
+    border-top: 1px solid var(--outline-dim);
+}
+
+/* NavLink renders the <a> itself: keep these ::deep so the scope attribute
+   is not required on the link element. */
+.sidebar-foot ::deep a {
+    font-weight: 500;
+    font-size: 13px;
+    color: var(--on-surface-dim);
+    padding: 5px 11px;
+    border-radius: var(--radius-full);
+
+    &:hover { background: var(--hover); color: var(--on-surface); text-decoration: none; }
+}
+
+.sidebar-foot ::deep a.active { color: var(--primary); }
+
+.theme-toggle {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: none;
+    border-radius: var(--radius-full);
+    color: var(--on-surface-dim);
+
+    &:hover { background: var(--hover); color: var(--on-surface); }
+
+    & svg { display: none; grid-area: 1 / 1; }
+}
+
+/* The toggle shows the mode that is active right now. */
+:root:not([data-theme]) .icon-system { display: block; }
+:root[data-theme="light"] .icon-light { display: block; }
+:root[data-theme="dark"] .icon-dark { display: block; }
+
+.logout { margin-left: auto; }
+
+.logout button {
+    font-size: 13px;
+    color: var(--on-surface-dim);
+
+    &:hover { background: var(--hover); color: var(--on-surface); }
+}
+
+.content {
+    flex: 1;
+    min-width: 0;
+    margin: 10px 12px 10px 2px;
+    padding: 32px clamp(24px, 5vw, 56px) 48px;
+    background: var(--surface);
+    border: 1px solid var(--outline-dim);
+    border-radius: var(--radius-l);
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+}
+
+@media (max-width: 900px) {
+    .sidebar { width: 236px; }
+    .content { margin: 6px 6px 6px 0; padding: 20px; }
+}
+
+/* Blazor's built-in error bar — hidden in app.css; these rules style it if
+   a dev re-enables it. Light-only by design. */
 #blazor-error-ui {
     color-scheme: light only;
     background: lightyellow;
@@ -10,11 +113,11 @@
     position: fixed;
     width: 100%;
     z-index: 1000;
-}
 
-    #blazor-error-ui .dismiss {
+    & .dismiss {
         cursor: pointer;
         position: absolute;
         right: 0.75rem;
         top: 0.5rem;
     }
+}
