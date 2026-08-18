@@ -179,3 +179,27 @@ their state classes need top-level `::deep` selectors — nested `&.active` gets
 scope attribute appended and silently never matches; and shared primitives used across
 components (buttons, inputs, `.tag` chips, `.upload-label`, `.document-surface`) stay
 global in `app.css` rather than being duplicated per scope.
+
+## The sidebar became reading context; the tree moved to /pages
+The sidebar no longer mirrors the whole tree — a hierarchy crammed into 290 pixels
+got thinner and less useful with every node added. It now shows three
+Wikipedia-flavored sections: **Contents** (the open article's headings),
+**Similar** (related articles), and **Recent** (last visits) — with the full tree,
+drop-zone, row menus and move modal unchanged, promoted to its own `/pages` page
+behind an "All pages" footer link. Decisions worth recording:
+- **Contents comes from the editor island, not from parsed HTML** — slopedit renders
+  to canvas, so there are no heading anchors to scroll to. The editor publishes its
+  heading blocks into a scoped `OutlineState` (the same cross-island pattern as
+  `TreeState`), and a click travels back as a jump request the editor answers with a
+  caret move plus `RevealCaret()`. No JavaScript involved. `OutlineState` tracks its
+  publisher because, when navigating between two articles, the outgoing editor
+  disposes *after* the incoming one has published and must not wipe the new outline.
+- **Similar is scored in `NodeService`**: one point per shared tag, two for a body
+  link in either direction — a deliberate mention beats a shared label — ties to the
+  most recently updated. Visibility is resolved before scoring so a private node's
+  tags never leak into the other user's ranking.
+- **Recent lives in localStorage** (`gatherum-recents`), written by the sidebar
+  island through plain `localStorage.getItem`/`setItem` interop — no addition to
+  `gatherum.js`, because none of it needs to run before Blazor exists. Titles are
+  refreshed on every visit, so renames self-heal, and entries whose node has been
+  deleted (or made private by the other user) drop out on their next failed load.

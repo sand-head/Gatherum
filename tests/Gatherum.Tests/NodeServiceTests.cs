@@ -163,6 +163,43 @@ public class NodeServiceTests(PostgresFixture postgres) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Similar_ranks_a_link_above_shared_tags_and_hides_private_nodes()
+    {
+        var subject = await NewPageAsync(jess, null, "subject");
+        var linkedAndTagged = await NewPageAsync(jess, null, "linked and tagged");
+        var twoTags = await NewPageAsync(jess, null, "two tags");
+        var oneTag = await NewPageAsync(jess, null, "one tag");
+        await NewPageAsync(jess, null, "unrelated");
+        var hidden = await NewPageAsync(sam, null, "hidden");
+
+        foreach (var (owner, id) in new[]
+            { (jess, subject.Id), (jess, linkedAndTagged.Id), (jess, twoTags.Id),
+              (jess, oneTag.Id), (sam, hidden.Id) })
+            await nodes.AddTagAsync(owner, id, "alpha");
+        await nodes.AddTagAsync(jess, subject.Id, "beta");
+        await nodes.AddTagAsync(jess, twoTags.Id, "beta");
+        await files.SaveTextAsync(jess, subject.Id, $"See [@x](node://{linkedAndTagged.Id})");
+        await nodes.SetPrivateAsync(sam, hidden.Id, true);
+
+        var similar = await nodes.GetSimilarAsync(jess, subject.Id);
+
+        // linked + one shared tag (3) beats two shared tags (2) beats one (1);
+        // the untagged and the privately hidden nodes never appear.
+        Assert.Equal([linkedAndTagged.Id, twoTags.Id, oneTag.Id], similar.Select(s => s.Id));
+    }
+
+    [Fact]
+    public async Task Similar_counts_inbound_links_too()
+    {
+        var subject = await NewPageAsync(jess, null, "subject");
+        var fan = await NewPageAsync(jess, null, "fan", $"[@s](node://{subject.Id})");
+
+        var similar = await nodes.GetSimilarAsync(jess, subject.Id);
+
+        Assert.Equal([fan.Id], similar.Select(s => s.Id));
+    }
+
+    [Fact]
     public async Task A_new_page_is_a_markdown_file_node()
     {
         var page = await NewPageAsync(jess, null, "My Notes", "# hello");

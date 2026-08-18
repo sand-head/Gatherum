@@ -47,7 +47,8 @@ auto-login. Migrations: `dotnet ef migrations add <Name> -p src/Gatherum.Infrast
   server implementation of the interactive components' data seam (`Services/`).
 - `src/Gatherum.Client` — every interactive component, all Interactive Auto: the
   editor (`NodeEditor` hosting slopedit's `DocumentView` for pages and docx,
-  `EditorView` for code/source), tree, search palette, node header, tags, version
+  `EditorView` for code/source), tree, sidebar panels (contents/similar/recent),
+  search palette, node header, tags, version
   panel, file view, and settings keys. `IAppData` (`AppData.cs`) is their only view of the world —
   implemented by `ServerAppData` over the services on the server circuit and by
   `HttpAppData` over `/api` in WebAssembly.

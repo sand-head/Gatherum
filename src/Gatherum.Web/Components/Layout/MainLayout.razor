@@ -59,8 +59,11 @@
     </header>
     <div class="body">
         <aside class="sidebar">
-            <NodeTree @rendermode="InteractiveAuto" />
+            @* Reading context, not a file manager: the article's contents, similar
+               articles, and recent visits. The full tree lives at /pages. *@
+            <SidebarPanels @rendermode="InteractiveAuto" />
             <nav class="sidebar-foot">
+                <NavLink href="/pages">All pages</NavLink>
                 <NavLink href="/tags">Tags</NavLink>
             </nav>
         </aside>

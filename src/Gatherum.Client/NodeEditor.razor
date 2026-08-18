@@ -1,5 +1,6 @@
 @implements IAsyncDisposable
 @inject IAppData Data
+@inject OutlineState Outline
 @using SlopEdit.Blazor
 @using SlopEdit.Core.Document
 @using SlopEdit.Docx
@@ -36,14 +37,15 @@
     @if (richDoc is not null && !sourceMode)
     {
         <div class="document-surface">
-            <DocumentView Grid="richDoc" OnChange="OnChanged" ImageSource="Data.GetImageAsync"
-                          AriaLabel="Document editor" />
+            <DocumentView @ref="docView" Grid="richDoc" OnChange="OnChanged"
+                          ImageSource="Data.GetImageAsync" AriaLabel="Document editor" />
         </div>
     }
     else if (sourceDoc is not null)
     {
         <div class="editor-surface">
-            <EditorView Grid="sourceDoc" OnChange="OnChanged" AriaLabel="Source editor" />
+            <EditorView @ref="sourceView" Grid="sourceDoc" OnChange="OnChanged"
+                        AriaLabel="Source editor" />
         </div>
     }
 
@@ -71,6 +73,8 @@
 
     private RichDocument? richDoc;
     private EditorDocument? sourceDoc;
+    private DocumentView? docView;
+    private EditorView? sourceView;
     private bool sourceMode;
     private string saveLabel = "";
     private bool staleWarning;
@@ -110,6 +114,8 @@
         }
         presenceTimer = new System.Threading.Timer(
             _ => _ = InvokeAsync(HeartbeatAsync), null, 0, 5000);
+        Outline.JumpRequested += OnJumpRequested;
+        PublishOutline();
     }
 
     private string CurrentText => sourceMode || richDoc is null
@@ -132,6 +138,7 @@
 
     private void OnChanged(string changedText)
     {
+        PublishOutline();
         saveLabel = "Saving…";
         saveTimer?.Dispose();
         saveTimer = new System.Threading.Timer(
@@ -199,6 +206,79 @@
             };
             sourceMode = true;
         }
+        PublishOutline();
+    }
+
+    /// <summary>Hands the sidebar the current headings. Block index in document mode,
+    /// line index in source mode — OnJumpRequested interprets them the same way.</summary>
+    private void PublishOutline()
+    {
+        if (!sourceMode && richDoc is not null)
+        {
+            var entries = new List<OutlineEntry>();
+            for (var i = 0; i < richDoc.Blocks.Count; i++)
+            {
+                if (richDoc.Blocks[i] is { Kind: BlockKind.Heading } block)
+                    entries.Add(new OutlineEntry(i, block.HeadingLevel, block.Text));
+            }
+            Outline.Publish(this, entries);
+        }
+        else if (sourceMode && sourceDoc is not null && IsMarkdown)
+        {
+            Outline.Publish(this, MarkdownHeadings(sourceDoc.Text));
+        }
+        else
+        {
+            Outline.Clear(this);
+        }
+    }
+
+    private static List<OutlineEntry> MarkdownHeadings(string markdown)
+    {
+        var entries = new List<OutlineEntry>();
+        var inFence = false;
+        var lines = markdown.Split('\n');
+        for (var i = 0; i < lines.Length; i++)
+        {
+            var line = lines[i].TrimEnd();
+            if (line.StartsWith("```") || line.StartsWith("~~~"))
+            {
+                inFence = !inFence;
+                continue;
+            }
+            if (inFence)
+                continue;
+            var level = 0;
+            while (level < line.Length && level < 6 && line[level] == '#')
+                level++;
+            if (level > 0 && level < line.Length && line[level] == ' ')
+                entries.Add(new OutlineEntry(i, level, line[(level + 1)..].Trim()));
+        }
+        return entries;
+    }
+
+    private async Task OnJumpRequested(OutlineEntry entry)
+    {
+        if (!sourceMode && richDoc is not null && docView is not null)
+        {
+            for (var row = 0; row < richDoc.LineCount; row++)
+            {
+                var info = richDoc.RowInfoAt(row);
+                if (info.Block == entry.Block && info.FirstRowOfBlock)
+                {
+                    richDoc.MoveTo(row, 0, extend: false);
+                    await docView.FocusAsync();
+                    docView.RevealCaret();
+                    break;
+                }
+            }
+        }
+        else if (sourceMode && sourceDoc is not null && sourceView is not null)
+        {
+            sourceDoc.MoveTo(Math.Min(entry.Block, sourceDoc.LineCount - 1), 0, extend: false);
+            await sourceView.FocusAsync();
+            sourceView.RevealCaret();
+        }
     }
 
     private void OpenMentionDialog()
@@ -247,6 +327,8 @@
     public async ValueTask DisposeAsync()
     {
         disposed = true;
+        Outline.JumpRequested -= OnJumpRequested;
+        Outline.Clear(this);
         saveTimer?.Dispose();
         presenceTimer?.Dispose();
         try

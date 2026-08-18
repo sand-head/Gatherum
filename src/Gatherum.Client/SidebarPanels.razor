@@ -1,0 +1,153 @@
+@implements IDisposable
+@inject IAppData Data
+@inject OutlineState Outline
+@inject NavigationManager Navigation
+@inject IJSRuntime Js
+@using System.Text.Json
+
+<div class="panels">
+    @if (Outline.Entries.Count > 0)
+    {
+        <section class="panel">
+            <h2>Contents</h2>
+            <ol class="contents">
+                @foreach (var entry in Outline.Entries)
+                {
+                    <li class="level-@entry.Level">
+                        <button type="button" title="@entry.Text"
+                                @onclick="() => Outline.JumpAsync(entry)">@entry.Text</button>
+                    </li>
+                }
+            </ol>
+        </section>
+    }
+    @if (similar.Count > 0)
+    {
+        <section class="panel">
+            <h2>Similar</h2>
+            <ul class="links">
+                @foreach (var item in similar)
+                {
+                    <li><a href="/nodes/@item.Id" title="@item.Title">@item.Title</a></li>
+                }
+            </ul>
+        </section>
+    }
+    @if (RecentToShow is { Count: > 0 } shown)
+    {
+        <section class="panel">
+            <h2>Recent</h2>
+            <ul class="links">
+                @foreach (var item in shown)
+                {
+                    <li><a href="/nodes/@item.Id" title="@item.Title">@item.Title</a></li>
+                }
+            </ul>
+        </section>
+    }
+    else if (hydrated && Outline.Entries.Count == 0 && similar.Count == 0)
+    {
+        <p class="empty">Articles you visit will show up here.</p>
+    }
+</div>
+
+@code {
+    private const string StorageKey = "gatherum-recents";
+    private const int StoredMax = 12;
+    private const int ShownMax = 6;
+
+    private Guid? currentId;
+    private List<RecentEntry> recents = [];
+    private IReadOnlyList<RelatedInfo> similar = [];
+    private bool hydrated;
+
+    private List<RecentEntry> RecentToShow =>
+        recents.Where(r => r.Id != currentId).Take(ShownMax).ToList();
+
+    protected override void OnInitialized()
+    {
+        Outline.Changed += OnOutlineChanged;
+        Navigation.LocationChanged += OnLocationChanged;
+        currentId = ParseNodeId(Navigation.Uri);
+    }
+
+    // Recents live in localStorage, which only exists once we're interactive —
+    // during prerender this island renders empty and fills in on hydration.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+            return;
+        try
+        {
+            var json = await Js.InvokeAsync<string?>("localStorage.getItem", StorageKey);
+            if (json is not null)
+                recents = JsonSerializer.Deserialize<List<RecentEntry>>(json) ?? [];
+        }
+        catch (JsonException)
+        {
+            recents = [];
+        }
+        hydrated = true;
+        await RefreshForCurrentAsync();
+    }
+
+    private void OnLocationChanged(object? sender,
+        Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        var id = ParseNodeId(e.Location);
+        if (id == currentId)
+            return;
+        currentId = id;
+        similar = [];
+        _ = InvokeAsync(RefreshForCurrentAsync);
+    }
+
+    private async Task RefreshForCurrentAsync()
+    {
+        if (!hydrated)
+            return;
+        if (currentId is { } id)
+        {
+            try
+            {
+                var node = await Data.GetNodeAsync(id);
+                recents.RemoveAll(r => r.Id == id);
+                recents.Insert(0, new RecentEntry(id, node.Title));
+                if (recents.Count > StoredMax)
+                    recents.RemoveRange(StoredMax, recents.Count - StoredMax);
+                await Js.InvokeVoidAsync("localStorage.setItem", StorageKey,
+                    JsonSerializer.Serialize(recents));
+                var related = await Data.GetSimilarAsync(id, 5);
+                // A quick further navigation may have raced these awaits; only the
+                // page still on screen gets its similar list applied.
+                if (id == currentId)
+                    similar = related;
+            }
+            catch (Exception)
+            {
+                // Deleted, or private to the other user: not recent, nothing similar.
+                recents.RemoveAll(r => r.Id == id);
+                similar = [];
+            }
+        }
+        StateHasChanged();
+    }
+
+    private static Guid? ParseNodeId(string uri)
+    {
+        var path = new Uri(uri).AbsolutePath;
+        const string prefix = "/nodes/";
+        return path.StartsWith(prefix, StringComparison.Ordinal) &&
+            Guid.TryParse(path[prefix.Length..].TrimEnd('/'), out var id) ? id : null;
+    }
+
+    private void OnOutlineChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Outline.Changed -= OnOutlineChanged;
+        Navigation.LocationChanged -= OnLocationChanged;
+    }
+
+    private record RecentEntry(Guid Id, string Title);
+}
