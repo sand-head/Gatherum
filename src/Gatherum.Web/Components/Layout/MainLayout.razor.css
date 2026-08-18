@@ -56,6 +56,62 @@
 :root[data-theme="light"] .icon-light { display: block; }
 :root[data-theme="dark"] .icon-dark { display: block; }
 
+.account-button {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border: none;
+    border-radius: var(--radius-full);
+    color: var(--on-surface-dim);
+
+    &:hover { background: var(--hover); color: var(--on-surface); }
+}
+
+/* A native popover renders in the top layer with light-dismiss; pin it under
+   the button's corner and dress it like the other Material menus. */
+.account-menu {
+    position: fixed;
+    inset: auto;
+    top: 52px;
+    right: 12px;
+    margin: 0;
+    display: none;
+    flex-direction: column;
+    min-width: 180px;
+    padding: 6px;
+    background: var(--surface-raised);
+    color: var(--on-surface);
+    border: 1px solid var(--outline-dim);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-2);
+
+    &:popover-open { display: flex; animation: menu-in 0.12s ease-out; }
+
+    & a, & form button {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+        font: 400 14px/1.5 var(--font-ui);
+        color: var(--on-surface);
+        background: none;
+        border: none;
+        border-radius: var(--radius-s);
+        text-align: left;
+        padding: 8px 12px;
+
+        & svg { color: var(--on-surface-dim); flex-shrink: 0; }
+
+        &:hover { background: var(--hover); text-decoration: none; }
+    }
+}
+
+@keyframes menu-in {
+    from { opacity: 0; transform: translateY(-4px); }
+}
+
 .body {
     display: flex;
     flex: 1;
@@ -92,15 +148,6 @@
 }
 
 .sidebar-foot ::deep a.active { color: var(--primary); }
-
-.logout { margin-left: auto; }
-
-.logout button {
-    font-size: 13px;
-    color: var(--on-surface-dim);
-
-    &:hover { background: var(--hover); color: var(--on-surface); }
-}
 
 .content {
     flex: 1;

@@ -26,21 +26,27 @@ export function initDropZone(element, dotnet) {
   });
 }
 
-// Theme choice can't be Blazor-native: it must read localStorage and set the
-// attribute before the first frame, long before any circuit or runtime exists.
-export function initTheme() {
+// The static header chrome can't be Blazor-native: the theme must come out of
+// localStorage before the first frame, long before any circuit or runtime
+// exists, and both handlers must survive enhanced navigation's DOM patching.
+export function initChrome() {
   const root = document.documentElement;
   const saved = localStorage.getItem('gatherum-theme');
   if (saved === 'light' || saved === 'dark') root.dataset.theme = saved;
   document.addEventListener('click', (e) => {
-    if (!e.target.closest('#theme-toggle')) return;
-    const next = { system: 'light', light: 'dark', dark: 'system' }[root.dataset.theme ?? 'system'];
-    if (next === 'system') {
-      delete root.dataset.theme;
-      localStorage.removeItem('gatherum-theme');
-    } else {
-      root.dataset.theme = next;
-      localStorage.setItem('gatherum-theme', next);
+    if (e.target.closest('#theme-toggle')) {
+      const next = { system: 'light', light: 'dark', dark: 'system' }[root.dataset.theme ?? 'system'];
+      if (next === 'system') {
+        delete root.dataset.theme;
+        localStorage.removeItem('gatherum-theme');
+      } else {
+        root.dataset.theme = next;
+        localStorage.setItem('gatherum-theme', next);
+      }
     }
+    // Enhanced navigation patches the DOM without resetting popover state,
+    // so close an open account menu when one of its items is followed.
+    if (e.target.closest('#account-menu a, #account-menu button'))
+      document.getElementById('account-menu')?.hidePopover();
   });
 }
