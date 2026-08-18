@@ -4,7 +4,6 @@
     <header class="topbar">
         <a class="brand" href="/">Gatherum</a>
         <div class="topbar-actions">
-            <HeaderActions @rendermode="InteractiveAuto" />
             <button type="button" id="theme-toggle" class="theme-toggle"
                     title="Theme: system → light → dark" aria-label="Toggle color theme">
                 <svg class="icon-system" width="18" height="18" viewBox="0 0 24 24" fill="none"
@@ -23,6 +22,7 @@
                     <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
                 </svg>
             </button>
+            <HeaderActions @rendermode="InteractiveAuto" />
         </div>
     </header>
     <div class="body">
