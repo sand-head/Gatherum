@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+
+  <PropertyGroup>
+    <NoDefaultLaunchSettingsFile>true</NoDefaultLaunchSettingsFile>
+    <StaticWebAssetProjectMode>Default</StaticWebAssetProjectMode>
+    <!-- SkiaSharp ships libSkiaSharp.a as a NativeFileReference; relinking the
+         wasm runtime (wasm-tools workload) is what carries it into the app. -->
+    <WasmBuildNative>true</WasmBuildNative>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <WasmNativeStrip>false</WasmNativeStrip>
+    <EmccCompileOptimizationFlag>-O1</EmccCompileOptimizationFlag>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.11" />
+    <PackageReference Include="SlopEdit.Blazor" Version="2.0.1" />
+    <PackageReference Include="SlopEdit.Docx" Version="2.0.1" />
+  </ItemGroup>
+
+</Project>

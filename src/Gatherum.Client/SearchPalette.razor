@@ -1,0 +1,128 @@
+@inject IAppData Data
+@inject NavigationManager Navigation
+@inject IJSRuntime Js
+
+<button class="search-trigger" @onclick="Open" title="Search (Ctrl+K)">
+    <span>Search</span><kbd>⌘K</kbd>
+</button>
+
+@if (isOpen)
+{
+    <div class="palette-backdrop" @onclick="Close">
+        <div class="palette" @onclick:stopPropagation>
+            <input @ref="input" placeholder="Search pages, files, tags…"
+                   value="@query" @oninput="OnInput" @onkeydown="OnKeyDown" />
+            <div class="palette-results">
+                @foreach (var (result, index) in results.Select((r, i) => (r, i)))
+                {
+                    <button class="palette-result @(index == selected ? "selected" : "")"
+                            @onclick="() => Go(result.Id)">
+                        <span class="kind-badge @(result.Kind == "Page" ? "page" : "file")">
+                            @result.Kind
+                        </span>
+                        <span class="result-title">@result.Title</span>
+                        <span class="result-snippet">@result.Snippet</span>
+                    </button>
+                }
+                @if (query.Length > 0 && results.Count == 0 && !searching)
+                {
+                    <div class="palette-empty">No matches.</div>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool isOpen;
+    private string query = "";
+    private IReadOnlyList<SearchHit> results = [];
+    private int selected;
+    private bool searching;
+    private ElementReference input;
+    private System.Threading.Timer? debounce;
+    private bool focusPending;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            var module = await Js.InvokeAsync<IJSObjectReference>("import", "./js/gatherum.js");
+            await module.InvokeVoidAsync("registerSearchShortcut", DotNetObjectReference.Create(this));
+        }
+        if (isOpen && focusPending)
+        {
+            focusPending = false;
+            await input.FocusAsync();
+        }
+    }
+
+    [JSInvokable]
+    public void Open()
+    {
+        isOpen = true;
+        query = "";
+        results = [];
+        selected = 0;
+        focusPending = true;
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void Close()
+    {
+        isOpen = false;
+        StateHasChanged();
+    }
+
+    private void OnInput(ChangeEventArgs e)
+    {
+        query = e.Value?.ToString() ?? "";
+        debounce?.Dispose();
+        debounce = new System.Threading.Timer(_ => _ = InvokeAsync(RunSearch), null, 200, Timeout.Infinite);
+    }
+
+    private async Task RunSearch()
+    {
+        var current = query;
+        if (current.Length == 0)
+        {
+            results = [];
+            StateHasChanged();
+            return;
+        }
+        searching = true;
+        var found = await Data.SearchAsync(current, limit: 15);
+        if (current == query)
+        {
+            results = found;
+            selected = 0;
+            searching = false;
+            StateHasChanged();
+        }
+    }
+
+    private void OnKeyDown(KeyboardEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case "Escape":
+                Close();
+                break;
+            case "ArrowDown":
+                selected = Math.Min(selected + 1, results.Count - 1);
+                break;
+            case "ArrowUp":
+                selected = Math.Max(selected - 1, 0);
+                break;
+            case "Enter" when results.Count > 0:
+                Go(results[Math.Clamp(selected, 0, results.Count - 1)].Id);
+                break;
+        }
+    }
+
+    private void Go(Guid id)
+    {
+        Close();
+        Navigation.NavigateTo($"/nodes/{id}");
+    }
+}

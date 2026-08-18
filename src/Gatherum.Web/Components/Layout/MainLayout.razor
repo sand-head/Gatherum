@@ -1,0 +1,22 @@
+@inherits LayoutComponentBase
+
+<div class="shell">
+    <aside class="sidebar">
+        <div class="sidebar-head">
+            <a class="brand" href="/">Gatherum</a>
+            <SearchPalette @rendermode="InteractiveAuto" />
+        </div>
+        <NodeTree @rendermode="InteractiveAuto" />
+        <nav class="sidebar-foot">
+            <NavLink href="/tags">Tags</NavLink>
+            <NavLink href="/settings">Settings</NavLink>
+            <form method="post" action="/auth/logout" class="logout">
+                <AntiforgeryToken />
+                <button type="submit">Sign out</button>
+            </form>
+        </nav>
+    </aside>
+    <main class="content">
+        @Body
+    </main>
+</div>

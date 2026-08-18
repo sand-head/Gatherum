@@ -1,0 +1,100 @@
+@using SlopEdit.Blazor
+@using SlopEdit.Core.Rich
+@inject IAppData Data
+@inject NavigationManager Navigation
+
+<section class="version-panel">
+    <button class="ghost" @onclick="ToggleAsync">
+        @(open ? "Hide history" : $"History")
+    </button>
+    @if (open)
+    {
+        <table>
+            <tbody>
+                @foreach (var version in versions)
+                {
+                    <tr class="@(previewing == version.Number ? "selected" : "")">
+                        <td>#@version.Number</td>
+                        <td>@version.FileName</td>
+                        <td>@FormatSize(version.SizeBytes)</td>
+                        <td><time>@version.UploadedAt.LocalDateTime.ToString("g")</time></td>
+                        <td>
+                            @if (version.IsText)
+                            {
+                                <button class="ghost" @onclick="() => PreviewAsync(version)">view</button>
+                            }
+                            <a href="/api/files/@NodeId/download?version=@version.Number">download</a>
+                            @if (version.Number != versions.Max(v => v.Number))
+                            {
+                                <button class="ghost restore"
+                                        @onclick="() => RestoreAsync(version.Number)">restore</button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+        @if (previewDoc is not null)
+        {
+            <div class="history-preview document-surface">
+                <DocumentView Grid="previewDoc" ReadOnly="true" ImageSource="Data.GetImageAsync"
+                              AriaLabel="Version preview" />
+            </div>
+        }
+        else if (previewText is not null)
+        {
+            <pre class="history-preview"><code>@previewText</code></pre>
+        }
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public Guid NodeId { get; set; }
+
+    private bool open;
+    private IReadOnlyList<VersionInfo> versions = [];
+    private int? previewing;
+    private RichDocument? previewDoc;
+    private string? previewText;
+
+    private async Task ToggleAsync()
+    {
+        open = !open;
+        previewing = null;
+        previewDoc = null;
+        previewText = null;
+        if (open)
+            versions = await Data.GetVersionsAsync(NodeId);
+    }
+
+    private async Task PreviewAsync(VersionInfo version)
+    {
+        previewing = version.Number;
+        var text = await Data.GetVersionTextAsync(NodeId, version.Number);
+        if (version.MediaType == "text/markdown")
+        {
+            previewDoc = MarkdownSerializer.FromMarkdown(text);
+            previewText = null;
+        }
+        else
+        {
+            previewText = text;
+            previewDoc = null;
+        }
+    }
+
+    private async Task RestoreAsync(int number)
+    {
+        await Data.RestoreVersionAsync(NodeId, number);
+        // The editor lives in another island; a full reload re-seeds it.
+        Navigation.Refresh(forceReload: true);
+    }
+
+    private static string FormatSize(long bytes) => bytes switch
+    {
+        < 1024 => $"{bytes} B",
+        < 1024 * 1024 => $"{bytes / 1024.0:0.#} KB",
+        < 1024 * 1024 * 1024 => $"{bytes / (1024.0 * 1024):0.#} MB",
+        _ => $"{bytes / (1024.0 * 1024 * 1024):0.##} GB",
+    };
+}

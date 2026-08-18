@@ -1,0 +1,42 @@
+@inject IAppData Data
+@inject TreeState Tree
+
+<header class="node-header">
+    <input class="node-title-input" value="@title"
+           @onchange="e => RenameAsync(e.Value?.ToString() ?? title)" />
+    <div class="node-meta">
+        <TagEditor NodeId="@NodeId" Tags="@tags" OnChanged="ReloadTagsAsync" />
+        @if (IsPrivate)
+        {
+            <span class="badge">🔒 private</span>
+        }
+    </div>
+</header>
+
+@code {
+    [Parameter, EditorRequired] public Guid NodeId { get; set; }
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter] public bool IsPrivate { get; set; }
+    [Parameter] public string[] Tags { get; set; } = [];
+
+    private string title = "";
+    private IReadOnlyList<string> tags = [];
+
+    protected override void OnParametersSet()
+    {
+        title = Title;
+        tags = Tags;
+    }
+
+    private async Task RenameAsync(string newTitle)
+    {
+        if (newTitle.Length == 0 || newTitle == title)
+            return;
+        await Data.RenameAsync(NodeId, newTitle);
+        title = newTitle;
+        await Tree.RefreshAsync();
+    }
+
+    private async Task ReloadTagsAsync() =>
+        tags = (await Data.GetNodeAsync(NodeId)).Tags;
+}

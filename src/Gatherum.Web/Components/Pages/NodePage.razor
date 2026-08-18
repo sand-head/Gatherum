@@ -1,0 +1,74 @@
+@page "/nodes/{Id:guid}"
+@inherits GatherumComponent
+@inject AppOperations Ops
+@using Gatherum.Core.Domain
+@using Gatherum.Client
+
+@if (notFound)
+{
+    <PageTitle>Not found — Gatherum</PageTitle>
+    <div class="node-missing">This node doesn't exist (or is private to someone else).</div>
+}
+else if (node is not null)
+{
+    <PageTitle>@node.Title — Gatherum</PageTitle>
+    <article class="node">
+        <NodeHeader @rendermode="InteractiveAuto" NodeId="@node.Id" Title="@node.Title"
+                    IsPrivate="@node.IsPrivate" Tags="@tags.ToArray()" />
+
+        @if (editable)
+        {
+            <NodeEditor @rendermode="InteractiveAuto" NodeId="@node.Id" FileName="@fileName"
+                        MediaType="@node.MediaType" />
+        }
+        else
+        {
+            <FileView @rendermode="InteractiveAuto" NodeId="@node.Id" />
+        }
+
+        <VersionPanel @rendermode="InteractiveAuto" NodeId="@node.Id" />
+
+        @if (backlinks.Count > 0)
+        {
+            <section class="backlinks">
+                <h3>Referenced by</h3>
+                <ul>
+                    @foreach (var source in backlinks)
+                    {
+                        <li><a href="/nodes/@source.Id">@source.Title</a></li>
+                    }
+                </ul>
+            </section>
+        }
+    </article>
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private Node? node;
+    private List<string> tags = [];
+    private List<Node> backlinks = [];
+    private string fileName = "";
+    private bool editable;
+    private bool notFound;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        try
+        {
+            node = await Ops.Nodes(s => s.GetWithBodyAsync(UserId, Id));
+            tags = node.Tags.Select(t => t.Tag!.Name).Order().ToList();
+            backlinks = await Ops.Nodes(s => s.GetBacklinksAsync(UserId, Id));
+            fileName = node.File is { Versions.Count: > 0 } file ? file.Current.FileName : "";
+            editable = fileName.Length > 0 && node.File!.Current.SizeBytes <= 4 * 1024 * 1024 &&
+                (MediaTypes.IsText(node.MediaType, fileName) || node.MediaType == MediaTypes.Docx);
+            notFound = false;
+        }
+        catch (Gatherum.Core.NotFoundException)
+        {
+            node = null;
+            notFound = true;
+        }
+    }
+}

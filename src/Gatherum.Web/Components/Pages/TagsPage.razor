@@ -1,0 +1,53 @@
+@page "/tags"
+@page "/tags/{TagName}"
+@inherits GatherumComponent
+@inject AppOperations Ops
+
+<PageTitle>Tags — Gatherum</PageTitle>
+
+@if (TagName is null)
+{
+    <h1>Tags</h1>
+    <div class="tag-cloud">
+        @foreach (var tag in tags)
+        {
+            <a class="tag" href="/tags/@Uri.EscapeDataString(tag.Name)">
+                #@tag.Name <span class="count">@tag.NodeCount</span>
+            </a>
+        }
+        @if (tags.Count == 0)
+        {
+            <p>No tags yet. Add one from any node's header.</p>
+        }
+    </div>
+}
+else
+{
+    <h1>#@TagName</h1>
+    <ul class="node-list">
+        @foreach (var node in tagged)
+        {
+            <li>
+                <a href="/nodes/@node.Id">
+                    <span class="node-icon">@(node.Kind == NodeKind.Page ? "▤" : "◈")</span>
+                    @node.Title
+                </a>
+            </li>
+        }
+    </ul>
+}
+
+@code {
+    [Parameter] public string? TagName { get; set; }
+
+    private List<TagSummary> tags = [];
+    private List<Node> tagged = [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (TagName is null)
+            tags = await Ops.Nodes(s => s.ListTagsAsync(UserId));
+        else
+            tagged = await Ops.Nodes(s => s.GetNodesWithTagAsync(UserId, TagName));
+    }
+}

@@ -427,3 +427,9 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# Bundled client assets (built by esbuild at build time)
+src/Gatherum.Web/wwwroot/js/dist/
+
+# Local dev run of the app stores uploads here (Gatherum__Storage__Root default)
+src/Gatherum.Web/data/
