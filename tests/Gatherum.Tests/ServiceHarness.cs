@@ -30,7 +30,8 @@ public sealed class ServiceHarness : IAsyncDisposable
             new GatherumOptions { Storage = new StorageOptions { Root = storageRoot } }));
         Nodes = new NodeService(Db, authorizer, Clock);
         Files = new FileService(Db, Nodes, storage,
-            [new PlainTextExtractor(), new PdfTextExtractor(), new ImageMetadataExtractor()],
+            [new PlainTextExtractor(), new PdfTextExtractor(), new DocxTextExtractor(),
+                new ImageMetadataExtractor()],
             Clock, NullLogger<FileService>.Instance);
         Search = new SearchService(Db, authorizer);
     }

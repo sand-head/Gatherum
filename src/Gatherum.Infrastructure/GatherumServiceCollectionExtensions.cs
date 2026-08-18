@@ -29,6 +29,7 @@ public static class GatherumServiceCollectionExtensions
         services.AddSingleton<IFileStorage, FileSystemStorage>();
         services.AddSingleton<ITextExtractor, PlainTextExtractor>();
         services.AddSingleton<ITextExtractor, PdfTextExtractor>();
+        services.AddSingleton<ITextExtractor, DocxTextExtractor>();
         services.AddSingleton<ITextExtractor, ImageMetadataExtractor>();
 
         services.AddScoped<NodeService>();

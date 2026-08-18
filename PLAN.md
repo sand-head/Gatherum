@@ -106,3 +106,12 @@ SSR. First visit renders on the server circuit while the runtime downloads; ever
 later visit runs fully local with zero websockets. `MarkdownRender` is gone (version
 previews use a read-only `DocumentView`), and the upload endpoints' body cap now
 matches the 512 MB the pickers promise.
+
+### Post-revision: docx joins the document editor
+
+SlopEdit.Docx published, so `.docx` uploads now open and edit in the same
+`DocumentView` as pages (`ToRichDocument`/`FromRichDocument`, Full profile), saving
+real docx bytes through a binary sibling of the text door with the same autosave
+collapse. A `DocxTextExtractor` feeds search with the converter's canonical Markdown
+rendering, which also makes docx mentions backlink like pages. All slopedit packages
+moved to 2.0.1.

@@ -13,12 +13,16 @@ browser sessions — including against the built container).
   text autosaves collapse within a 5-minute same-author window, different authors
   always get separate versions, and restore is a row insert (content addressing means
   no byte copies).
-- **Native editing** — pages open in slopedit 2.0's `DocumentView`: a
+- **Native editing** — pages open in slopedit's `DocumentView`: a
   Google-Docs-style rich document editor (proportional layout, styled runs, markdown
   auto-format as you type, tables, images via the in-app content URLs), converting
   losslessly through `MarkdownSerializer`. A Source toggle swaps to `EditorView` with
   the Markdown lexer; code/config/text files edit in `EditorView` with syntax
-  highlighting. Autosave with indicator, "Link node…" mention insertion as real link
+  highlighting. Uploaded `.docx` files open in the same `DocumentView` through
+  `DocxConverter` (Full profile — underline, color, alignment survive), saving real
+  docx bytes with the same autosave collapse; their search text is the canonical
+  Markdown rendering, so docx mentions backlink like pages (all verified end-to-end,
+  including from the WebAssembly home). Autosave with indicator, "Link node…" mention insertion as real link
   runs, version history with restore (old Markdown previews in a read-only
   `DocumentView`). Every interactive component — editor, tree, search palette, node
   header, tags, versions, file view, settings keys — is an Interactive Auto island in
@@ -53,7 +57,7 @@ browser sessions — including against the built container).
   exercised against a postgres container, editor verified in-browser against the
   containerized app), compose.yaml, Podman Quadlets, `/healthz`, JSON console logs
   outside Development, migrations on startup with opt-out.
-- **Tests** — 35 passing: markdown links, tree ops, privacy, versions
+- **Tests** — 42 passing: markdown links, docx extraction/editing/backlinks, tree ops, privacy, versions
   (collapse, restore, re-upload, cross-author), search, API keys, storage/extraction,
   and integration tests booting the app on Testcontainers Postgres (create page →
   search → MCP `get_node`).
@@ -73,8 +77,10 @@ browser sessions — including against the built container).
 - The first visit in a fresh browser renders on the server circuit while the WASM
   runtime downloads (~a minute on a slow link); local rendering starts from the next
   visit. That's Blazor Auto working as designed, not a gap to fix.
-- docx viewing/editing waits on the SlopEdit.Docx package publish (DECISIONS.md).
-- Editor is capped to text files ≤ 4 MB; larger text files fall back to FileView.
+- docx conversion is lossy by slopedit's design: exact fonts/spacing and embedded
+  media don't survive the trip (images become visible placeholders). Old docx
+  versions have no inline preview in the history panel — download and restore only.
+- Editor is capped to editable files ≤ 4 MB; larger ones fall back to FileView.
 - File bytes are never garbage-collected when nodes are deleted.
 - Saves serialize per node in-process; scaling beyond one app instance needs a
   database-level lock.

@@ -123,6 +123,60 @@ public class FileService(
         }
     }
 
+    /// <summary>The binary door beside <see cref="SaveTextAsync"/>: saves an edited
+    /// rich-document body (docx today) with the same autosave collapse. Search text
+    /// comes from the format's extractor, not the bytes.</summary>
+    public async Task<FileVersion> SaveBinaryAsync(Guid userId, Guid nodeId, byte[] content,
+        CancellationToken ct = default)
+    {
+        var gate = GateFor(nodeId);
+        await gate.WaitAsync(ct);
+        try
+        {
+            var node = await RequireFileNodeAsync(userId, nodeId, ct);
+            if (node.MediaType != MediaTypes.Docx)
+                throw new ForbiddenException($"Node {nodeId} is not an editable document.");
+
+            var blob = await storage.SaveAsync(new MemoryStream(content), ct);
+            var current = node.File!.Current;
+            var text = await ExtractTextAsync(blob.Hash, node.MediaType, current.FileName, ct);
+            var now = clock.GetUtcNow();
+
+            if (current.UploadedById == userId && now - current.UploadedAt < VersionCollapseWindow)
+            {
+                current.Hash = blob.Hash;
+                current.SizeBytes = blob.SizeBytes;
+                current.ExtractedText = text;
+            }
+            else
+            {
+                AddVersion(node, new FileVersion
+                {
+                    Id = Guid.NewGuid(),
+                    NodeId = node.Id,
+                    Number = current.Number + 1,
+                    Hash = blob.Hash,
+                    MediaType = node.MediaType,
+                    FileName = current.FileName,
+                    SizeBytes = blob.SizeBytes,
+                    ExtractedText = text,
+                    UploadedById = userId,
+                    UploadedAt = now,
+                });
+            }
+
+            node.UpdatedAt = now;
+            nodes.RefreshSearchText(node);
+            await RefreshLinksAsync(node, ct);
+            await db.SaveChangesAsync(ct);
+            return node.File.Current;
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
     /// <summary>Reading a version back into the present: the old blob becomes the newest
     /// version. Content-addressing makes this a row insert, not a byte copy.</summary>
     public async Task<Node> RestoreVersionAsync(Guid userId, Guid nodeId, int versionNumber,
@@ -262,7 +316,9 @@ public class FileService(
     private async Task RefreshLinksAsync(Node node, CancellationToken ct)
     {
         var targets = new HashSet<Guid>(MarkdownContent.MentionedNodeIds(node.File!.Description));
-        if (node.MediaType == MediaTypes.Markdown)
+        // A docx body's extracted text is its canonical Markdown rendering, so mentions
+        // inserted in the document editor link — and backlink — the same way pages do.
+        if (node.MediaType is MediaTypes.Markdown or MediaTypes.Docx)
             targets.UnionWith(MarkdownContent.LinkedNodeIds(node.File.Current.ExtractedText));
         await nodes.ReplaceLinksAsync(node, targets, ct);
     }

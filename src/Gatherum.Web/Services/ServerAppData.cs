@@ -29,6 +29,26 @@ public sealed class ServerAppData(
         return version.Number;
     }
 
+    public async Task<BytesPayload> LoadBytesAsync(Guid nodeId)
+    {
+        var userId = await UserIdAsync();
+        var head = await ops.Files(s => s.GetHeadVersionAsync(userId, nodeId));
+        var content = await ops.Files(s => s.OpenContentAsync(userId, nodeId));
+        await using (content.Stream)
+        {
+            using var buffer = new MemoryStream();
+            await content.Stream.CopyToAsync(buffer);
+            return new BytesPayload(buffer.ToArray(), head);
+        }
+    }
+
+    public async Task<int> SaveBytesAsync(Guid nodeId, byte[] content)
+    {
+        var userId = await UserIdAsync();
+        var version = await ops.Files(s => s.SaveBinaryAsync(userId, nodeId, content));
+        return version.Number;
+    }
+
     public async Task<PresenceInfo> HeartbeatAsync(Guid nodeId)
     {
         var state = await authentication.GetAuthenticationStateAsync();

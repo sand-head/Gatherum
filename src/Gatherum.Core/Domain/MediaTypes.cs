@@ -5,6 +5,7 @@ public static class MediaTypes
     public const string Markdown = "text/markdown";
     public const string PlainText = "text/plain";
     public const string Binary = "application/octet-stream";
+    public const string Docx = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
     private static readonly Dictionary<string, string> ByExtension = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -20,7 +21,7 @@ public static class MediaTypes
         [".csv"] = "text/csv",
         [".svg"] = "image/svg+xml",
         [".pdf"] = "application/pdf",
-        [".docx"] = "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        [".docx"] = Docx,
     };
 
     /// <summary>Extensions whose content is text even when the upload says otherwise —

@@ -7,16 +7,18 @@ simply a node whose file is Markdown; a fic chapter, a Podman quadlet, a PDF, an
 photo all live in one tree, one search, one login, one API. Built almost entirely in
 C#/Blazor — the only JavaScript is a ~30-line interop file.
 
-- **Editing**: pages open in [slopedit](https://git.sand.town/sand_head/slopedit)'s
-  rich document editor — a Google-Docs-style C# editor on a SkiaSharp canvas
-  (proportional text, markdown auto-format as you type, tables, images), with a
-  Source-mode toggle; code and text files edit in its code editor with syntax
-  highlighting. Autosave, mention insertion that links nodes together, and every
-  save is a version — old versions viewable, downloadable, restorable.
+- **Editing**: pages — and uploaded `.docx` documents — open in
+  [slopedit](https://git.sand.town/sand_head/slopedit)'s rich document editor — a
+  Google-Docs-style C# editor on a SkiaSharp canvas (proportional text, markdown
+  auto-format as you type, tables, images), with a Source-mode toggle for pages;
+  code and text files edit in its code editor with syntax highlighting. Autosave,
+  mention insertion that links nodes together, and every save is a version — old
+  versions viewable, downloadable, restorable.
 - **Files**: drag-drop or picker upload anywhere in the tree, content-addressed
   storage (SHA-256) on disk, inline previews (images, PDF, video, audio), descriptions,
   tags, and re-upload as a new version with old bytes retrievable. Text extraction
-  (plain text/markdown/code verbatim, PDF via PdfPig, image metadata) feeds search.
+  (plain text/markdown/code verbatim, PDF via PdfPig, docx as its Markdown rendering,
+  image metadata) feeds search.
 - **Search**: PostgreSQL full-text (`tsvector` + GIN, `websearch_to_tsquery`) over
   titles, tags, and text. `Ctrl`/`⌘`+`K` anywhere.
 - **Awareness**: presence shows who else is editing a document, and the editor warns

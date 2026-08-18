@@ -69,6 +69,16 @@ public static class ApiEndpoints
             return Results.Ok(new { version = version.Number });
         });
 
+        // The binary sibling of /text: the editor island saves an edited rich
+        // document (docx) through here, raw bytes in the body.
+        api.MapPut("/binary/{id:guid}", async (FileService files, HttpContext http, Guid id) =>
+        {
+            using var buffer = new MemoryStream();
+            await http.Request.Body.CopyToAsync(buffer);
+            var version = await files.SaveBinaryAsync(http.User.GetUserId(), id, buffer.ToArray());
+            return Results.Ok(new { version = version.Number });
+        });
+
         // The editor's WebAssembly home reaches presence through these; the server
         // home talks to the tracker directly.
         api.MapGet("/nodes/{id:guid}/presence", async (PresenceTracker presence, FileService files,

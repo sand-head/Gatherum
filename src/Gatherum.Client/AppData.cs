@@ -16,6 +16,8 @@ public interface IAppData
     // The editor.
     Task<EditorPayload> LoadAsync(Guid nodeId);
     Task<int> SaveTextAsync(Guid nodeId, string text);
+    Task<BytesPayload> LoadBytesAsync(Guid nodeId);
+    Task<int> SaveBytesAsync(Guid nodeId, byte[] content);
     Task<PresenceInfo> HeartbeatAsync(Guid nodeId);
     Task LeaveAsync(Guid nodeId);
     Task<IReadOnlyList<SearchHit>> SearchAsync(string query, int limit);
@@ -51,6 +53,7 @@ public interface IAppData
 }
 
 public record EditorPayload(string Text, int HeadVersion);
+public record BytesPayload(byte[] Content, int HeadVersion);
 public record PresenceInfo(IReadOnlyList<string> Editors, int HeadVersion);
 public record SearchHit(Guid Id, string Kind, string Title, string Snippet);
 public record TreeNodeInfo(Guid Id, Guid? ParentId, string Title, string MediaType,
@@ -78,6 +81,21 @@ public sealed class HttpAppData(HttpClient http) : IAppData
     public async Task<int> SaveTextAsync(Guid nodeId, string text)
     {
         var response = await http.PutAsJsonAsync($"/api/text/{nodeId}", new { text });
+        response.EnsureSuccessStatusCode();
+        var saved = await response.Content.ReadFromJsonAsync<SaveResult>();
+        return saved?.Version ?? 0;
+    }
+
+    public async Task<BytesPayload> LoadBytesAsync(Guid nodeId)
+    {
+        var bytes = await http.GetByteArrayAsync($"/api/files/{nodeId}/content");
+        var presence = await HeartbeatAsync(nodeId);
+        return new BytesPayload(bytes, presence.HeadVersion);
+    }
+
+    public async Task<int> SaveBytesAsync(Guid nodeId, byte[] content)
+    {
+        var response = await http.PutAsync($"/api/binary/{nodeId}", new ByteArrayContent(content));
         response.EnsureSuccessStatusCode();
         var saved = await response.Content.ReadFromJsonAsync<SaveResult>();
         return saved?.Version ?? 0;

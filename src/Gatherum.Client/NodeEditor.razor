@@ -2,6 +2,7 @@
 @inject IAppData Data
 @using SlopEdit.Blazor
 @using SlopEdit.Core.Document
+@using SlopEdit.Docx
 @using SlopEdit.Core.Highlighting
 @using SlopEdit.Core.Input
 @using SlopEdit.Core.Rich
@@ -79,6 +80,8 @@
     private System.Threading.Timer? presenceTimer;
 
     private bool IsMarkdown => MediaType == "text/markdown";
+    private bool IsDocx =>
+        MediaType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
     private bool mentionOpen;
     private string mentionQuery = "";
@@ -86,14 +89,24 @@
 
     protected override async Task OnInitializedAsync()
     {
-        var payload = await Data.LoadAsync(NodeId);
-        lastKnownHead = payload.HeadVersion;
-        if (IsMarkdown)
-            richDoc = MarkdownSerializer.FromMarkdown(payload.Text);
+        if (IsDocx)
+        {
+            var payload = await Data.LoadBytesAsync(NodeId);
+            lastKnownHead = payload.HeadVersion;
+            using var docx = new MemoryStream(payload.Content);
+            richDoc = DocxConverter.ToRichDocument(docx);
+        }
         else
         {
-            sourceDoc = new EditorDocument(payload.Text) { Lexer = LexerRegistry.ForPath(FileName) };
-            sourceMode = true;
+            var payload = await Data.LoadAsync(NodeId);
+            lastKnownHead = payload.HeadVersion;
+            if (IsMarkdown)
+                richDoc = MarkdownSerializer.FromMarkdown(payload.Text);
+            else
+            {
+                sourceDoc = new EditorDocument(payload.Text) { Lexer = LexerRegistry.ForPath(FileName) };
+                sourceMode = true;
+            }
         }
         presenceTimer = new System.Threading.Timer(
             _ => _ = InvokeAsync(HeartbeatAsync), null, 0, 5000);
@@ -102,6 +115,20 @@
     private string CurrentText => sourceMode || richDoc is null
         ? sourceDoc?.Text ?? ""
         : MarkdownSerializer.ToMarkdown(richDoc);
+
+    private async Task PersistAsync()
+    {
+        if (IsDocx)
+        {
+            using var docx = new MemoryStream();
+            DocxConverter.FromRichDocument(richDoc!, docx);
+            lastKnownHead = await Data.SaveBytesAsync(NodeId, docx.ToArray());
+        }
+        else
+        {
+            lastKnownHead = await Data.SaveTextAsync(NodeId, CurrentText);
+        }
+    }
 
     private void OnChanged(string changedText)
     {
@@ -118,7 +145,7 @@
             return;
         try
         {
-            lastKnownHead = await Data.SaveTextAsync(NodeId, CurrentText);
+            await PersistAsync();
             staleWarning = false;
             saveLabel = "Saved";
         }

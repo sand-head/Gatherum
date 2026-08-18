@@ -46,9 +46,9 @@ auto-login. Migrations: `dotnet ef migrations add <Name> -p src/Gatherum.Infrast
   (`Api/`), MCP tools (`Mcp/`), auth (`Auth/`), presence + `ServerAppData`, the
   server implementation of the interactive components' data seam (`Services/`).
 - `src/Gatherum.Client` — every interactive component, all Interactive Auto: the
-  editor (`NodeEditor` hosting slopedit's `DocumentView` for pages, `EditorView` for
-  code/source), tree, search palette, node header, tags, version panel, file view,
-  and settings keys. `IAppData` (`AppData.cs`) is their only view of the world —
+  editor (`NodeEditor` hosting slopedit's `DocumentView` for pages and docx,
+  `EditorView` for code/source), tree, search palette, node header, tags, version
+  panel, file view, and settings keys. `IAppData` (`AppData.cs`) is their only view of the world —
   implemented by `ServerAppData` over the services on the server circuit and by
   `HttpAppData` over `/api` in WebAssembly.
 - `tests/Gatherum.Tests` — unit tests plus `AppIntegrationTests` booting the real app.
@@ -91,6 +91,9 @@ touch the server only through `IAppData`.
 2. Editable text just works once `MediaTypes.IsText` says yes; for a richer preview,
    extend the media-type dispatch in `src/Gatherum.Client/FileView.razor`.
 3. For syntax highlighting, add the lexer upstream in slopedit's `LexerRegistry`.
+4. A binary rich-document format follows the docx pattern end to end: a converter
+   case beside `DocxConverter`'s in `NodeEditor`, the format in NodePage's editable
+   check and `FileService.SaveBinaryAsync`'s guard, and an extractor for search.
 
 **Add a text extractor**:
 1. Implement `ITextExtractor` in `src/Gatherum.Infrastructure/Extraction/` (cf.

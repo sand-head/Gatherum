@@ -123,7 +123,23 @@ The `.docx` media type is mapped and the dispatch seam is ready, but SlopEdit.Do
 2.0.0 is not on the package feed yet (only Blazor/Core/TreeSitter are). When it
 publishes: reference it, add a `DocxConverter.ToRichDocument/FromRichDocument` case
 beside the Markdown one in NodeEditor, and a docx text extractor via
-`DocxConverter.ToMarkdown` for search.
+`DocxConverter.ToMarkdown` for search. *(Unblocked — see the next entry.)*
+
+## docx is a document format, same editor as pages
+SlopEdit.Docx 2.0.1 landed on the feed, so an uploaded `.docx` now opens in the same
+`DocumentView` pages use — `DocxConverter.ToRichDocument` on the way in (Full
+capability profile: underline, color, alignment survive), `FromRichDocument` on the
+way out, running under WebAssembly like the rest of the editor. The body stays real
+docx bytes in content-addressed storage; there is no hidden markdown shadow copy.
+Three consequences follow from that: saves go through a new binary door
+(`FileService.SaveBinaryAsync` beside `SaveTextAsync`, same autosave collapse, wired
+as `PUT /api/binary/{id}`); search text comes from a `DocxTextExtractor` that emits
+the converter's canonical Markdown rendering — what the editor can show is what
+search can find; and because that extracted text *is* Markdown, mentions inserted in
+a docx round-trip as real docx hyperlinks and register backlinks exactly like pages.
+No Source toggle for docx — its source is a zip, not text. Conversion is lossy by
+slopedit's design (exact fonts/spacing and embedded media don't survive; images
+become visible placeholders), which fits a wiki: honest content, not print fidelity.
 
 ## The whole chrome went Interactive Auto — the app now renders in WebAssembly
 Blazor's Auto mode matches whatever render mode is already interactive on the page,

@@ -61,8 +61,8 @@ else if (node is not null)
             tags = node.Tags.Select(t => t.Tag!.Name).Order().ToList();
             backlinks = await Ops.Nodes(s => s.GetBacklinksAsync(UserId, Id));
             fileName = node.File is { Versions.Count: > 0 } file ? file.Current.FileName : "";
-            editable = fileName.Length > 0 && MediaTypes.IsText(node.MediaType, fileName) &&
-                node.File!.Current.SizeBytes <= 4 * 1024 * 1024;
+            editable = fileName.Length > 0 && node.File!.Current.SizeBytes <= 4 * 1024 * 1024 &&
+                (MediaTypes.IsText(node.MediaType, fileName) || node.MediaType == MediaTypes.Docx);
             notFound = false;
         }
         catch (Gatherum.Core.NotFoundException)
