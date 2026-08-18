@@ -1,6 +1,7 @@
 @implements IAsyncDisposable
 @inject IAppData Data
 @inject OutlineState Outline
+@inject ThemeState AppTheme
 @using SlopEdit.Blazor
 @using SlopEdit.Core.Document
 @using SlopEdit.Docx
@@ -38,6 +39,7 @@
     {
         <div class="document-surface">
             <DocumentView @ref="docView" Grid="richDoc" OnChange="OnChanged"
+                          Theme="EditorThemes.For(AppTheme.IsDark)"
                           ImageSource="Data.GetImageAsync" AriaLabel="Document editor" />
         </div>
     }
@@ -45,6 +47,7 @@
     {
         <div class="editor-surface">
             <EditorView @ref="sourceView" Grid="sourceDoc" OnChange="OnChanged"
+                        Theme="EditorThemes.For(AppTheme.IsDark)"
                         AriaLabel="Source editor" />
         </div>
     }
@@ -93,6 +96,13 @@
 
     protected override async Task OnInitializedAsync()
     {
+        // Prerender has no JS to watch the theme with; the canvas painted during
+        // prerender is a placeholder frame anyway.
+        if (RendererInfo.IsInteractive)
+        {
+            await AppTheme.EnsureWatchingAsync();
+            AppTheme.Changed += OnAppThemeChanged;
+        }
         if (IsDocx)
         {
             var payload = await Data.LoadBytesAsync(NodeId);
@@ -114,9 +124,25 @@
         }
         presenceTimer = new System.Threading.Timer(
             _ => _ = InvokeAsync(HeartbeatAsync), null, 0, 5000);
+        ApplyEditorTheme();
         Outline.JumpRequested += OnJumpRequested;
         PublishOutline();
     }
+
+    /// <summary>Colors that live on the documents rather than the views.</summary>
+    private void ApplyEditorTheme()
+    {
+        if (richDoc is not null)
+            EditorThemes.ApplyInk(richDoc, AppTheme.IsDark);
+        if (sourceDoc is not null)
+            sourceDoc.SyntaxTheme = EditorThemes.Syntax(AppTheme.IsDark);
+    }
+
+    private void OnAppThemeChanged() => _ = InvokeAsync(() =>
+    {
+        ApplyEditorTheme();
+        StateHasChanged();
+    });
 
     private string CurrentText => sourceMode || richDoc is null
         ? sourceDoc?.Text ?? ""
@@ -206,6 +232,7 @@
             };
             sourceMode = true;
         }
+        ApplyEditorTheme();
         PublishOutline();
     }
 
@@ -327,6 +354,7 @@
     public async ValueTask DisposeAsync()
     {
         disposed = true;
+        AppTheme.Changed -= OnAppThemeChanged;
         Outline.JumpRequested -= OnJumpRequested;
         Outline.Clear(this);
         saveTimer?.Dispose();

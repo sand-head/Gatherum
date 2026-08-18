@@ -26,6 +26,21 @@ export function initDropZone(element, dotnet) {
   });
 }
 
+// The slopedit editor paints to canvas, so CSS theming can't reach it; the
+// editor island needs to be told which mode is in effect and when it changes.
+// Neither MutationObserver (the toggle writes data-theme) nor the OS
+// preference's change event is reachable from Blazor. Returns the current
+// mode; pushes every later change into OnThemeChanged.
+export function watchTheme(dotnet) {
+  const root = document.documentElement;
+  const media = matchMedia('(prefers-color-scheme: dark)');
+  const dark = () => (root.dataset.theme ?? (media.matches ? 'dark' : 'light')) === 'dark';
+  const notify = () => dotnet.invokeMethodAsync('OnThemeChanged', dark());
+  new MutationObserver(notify).observe(root, { attributeFilter: ['data-theme'] });
+  media.addEventListener('change', notify);
+  return dark();
+}
+
 // The static header chrome can't be Blazor-native: the theme must come out of
 // localStorage before the first frame, long before any circuit or runtime
 // exists, and both handlers must survive enhanced navigation's DOM patching.

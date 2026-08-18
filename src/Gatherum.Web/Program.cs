@@ -29,6 +29,7 @@ builder.Services.AddSingleton<Gatherum.Web.Services.PresenceTracker>();
 builder.Services.AddScoped<Gatherum.Client.IAppData, Gatherum.Web.Services.ServerAppData>();
 builder.Services.AddScoped<Gatherum.Client.TreeState>();
 builder.Services.AddScoped<Gatherum.Client.OutlineState>();
+builder.Services.AddScoped<Gatherum.Client.ThemeState>();
 builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
     options.MultipartBodyLengthLimit = Gatherum.Client.IAppData.MaxUploadBytes);
 builder.Services.AddMcpServer(options => options.ServerInfo = new ModelContextProtocol.Protocol.Implementation

@@ -203,3 +203,20 @@ behind an "All pages" footer link. Decisions worth recording:
   `gatherum.js`, because none of it needs to run before Blazor exists. Titles are
   refreshed on every visit, so renames self-heal, and entries whose node has been
   deleted (or made private by the other user) drop out on their next failed load.
+
+## The editor canvas follows the theme
+slopedit paints with SkiaSharp, so the `light-dark()` tokens could never reach the
+document surface — it shipped hard-coded to a VS-dark palette and sat as a black slab
+inside the light theme's white sheet. Now `EditorThemes` (Gatherum.Client) restates
+the app.css tokens as `SKColor` palettes — surface, ink, selection, caret, dim
+markers, link blue — applied three ways: `EditorTheme` on the views, ink colors on
+each `RichDocument`, and a VS-light `SyntaxTheme` for source mode (dark keeps
+slopedit's default; each kind's default flags are copied over so behaviors like the
+link underline survive). Which mode is in effect comes from a new `watchTheme` export
+in gatherum.js — a MutationObserver on `data-theme` plus the OS preference's change
+event, neither reachable from Blazor — feeding a scoped `ThemeState` that the editor
+and version-preview islands watch; a toggle repaints the open canvas live, no reload.
+The palette is deliberately duplicated (CSS tokens and SKColors) rather than read
+from CSS at runtime: reading computed styles would need more interop for a set of
+values that changes about never — change a token in app.css, change it in
+EditorThemes.

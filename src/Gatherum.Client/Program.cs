@@ -10,5 +10,6 @@ builder.Services.AddScoped(_ => new HttpClient
 builder.Services.AddScoped<IAppData, HttpAppData>();
 builder.Services.AddScoped<TreeState>();
 builder.Services.AddScoped<OutlineState>();
+builder.Services.AddScoped<ThemeState>();
 
 await builder.Build().RunAsync();
