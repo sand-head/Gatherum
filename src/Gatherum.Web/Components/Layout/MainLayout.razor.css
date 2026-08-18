@@ -1,34 +1,71 @@
-/* App shell: tonal ground, transparent sidebar, and the content pane as a
-   floating rounded sheet (the sheet itself is the scroll container —
-   slopedit pins its sticky strip to .content, keep it scrolling). */
+/* App shell: a top header and the sidebar share the tonal ground with no seam
+   between them; the content pane floats below-right as a rounded sheet (the
+   sheet itself is the scroll container — slopedit pins its sticky strip to
+   .content, keep it scrolling). */
 
-.shell { display: flex; height: 100dvh; }
-
-.sidebar {
-    width: 290px;
-    flex-shrink: 0;
+.shell {
     display: flex;
     flex-direction: column;
-    padding: 10px 12px 8px;
+    height: 100dvh;
 }
 
-.sidebar-head {
+.topbar {
     display: flex;
-    flex-direction: column;
-    gap: 14px;
-    padding: 4px 4px 12px;
+    align-items: center;
+    gap: 16px;
+    padding: 10px 16px 8px 20px;
 }
 
 .brand {
-    display: flex;
-    align-items: center;
-    gap: 10px;
     font-size: 20px;
     letter-spacing: 0.1px;
     color: var(--on-surface);
 
     &:hover { text-decoration: none; }
 }
+
+.topbar-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.theme-toggle {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border: none;
+    border-radius: var(--radius-full);
+    color: var(--on-surface-dim);
+
+    &:hover { background: var(--hover); color: var(--on-surface); }
+
+    & svg { display: none; grid-area: 1 / 1; }
+}
+
+/* The toggle shows the mode that is active right now. */
+:root:not([data-theme]) .icon-system { display: block; }
+:root[data-theme="light"] .icon-light { display: block; }
+:root[data-theme="dark"] .icon-dark { display: block; }
+
+.body {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+}
+
+.sidebar {
+    width: 290px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 2px 12px 8px;
+}
+
+.sidebar-head { padding: 2px 4px 12px; }
 
 .sidebar-foot {
     margin-top: auto;
@@ -53,26 +90,6 @@
 
 .sidebar-foot ::deep a.active { color: var(--primary); }
 
-.theme-toggle {
-    display: grid;
-    place-items: center;
-    width: 30px;
-    height: 30px;
-    padding: 0;
-    border: none;
-    border-radius: var(--radius-full);
-    color: var(--on-surface-dim);
-
-    &:hover { background: var(--hover); color: var(--on-surface); }
-
-    & svg { display: none; grid-area: 1 / 1; }
-}
-
-/* The toggle shows the mode that is active right now. */
-:root:not([data-theme]) .icon-system { display: block; }
-:root[data-theme="light"] .icon-light { display: block; }
-:root[data-theme="dark"] .icon-dark { display: block; }
-
 .logout { margin-left: auto; }
 
 .logout button {
@@ -85,7 +102,7 @@
 .content {
     flex: 1;
     min-width: 0;
-    margin: 10px 12px 10px 2px;
+    margin: 0 12px 10px 2px;
     padding: 32px clamp(24px, 5vw, 56px) 48px;
     background: var(--surface);
     border: 1px solid var(--outline-dim);
@@ -95,8 +112,9 @@
 }
 
 @media (max-width: 900px) {
+    .topbar { padding: 8px 10px 6px 14px; }
     .sidebar { width: 236px; }
-    .content { margin: 6px 6px 6px 0; padding: 20px; }
+    .content { margin: 0 6px 6px 0; padding: 20px; }
 }
 
 /* Blazor's built-in error bar — hidden in app.css; these rules style it if

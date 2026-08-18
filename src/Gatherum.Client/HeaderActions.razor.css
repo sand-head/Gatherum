@@ -1,0 +1,28 @@
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Upload sits beside the filled New page pill as its outlined sibling. */
+.upload-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font: 500 13.5px/1.45 var(--font-ui);
+    color: var(--primary);
+    background: var(--surface);
+    border: 1px solid var(--outline);
+    border-radius: var(--radius-full);
+    padding: 6px 15px;
+    transition: background-color 0.15s;
+
+    &:hover { background: color-mix(in srgb, var(--primary) 8%, var(--surface)); }
+}
+
+.header-actions button.primary {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 15px;
+}

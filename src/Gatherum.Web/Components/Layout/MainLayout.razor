@@ -1,18 +1,10 @@
 @inherits LayoutComponentBase
 
 <div class="shell">
-    <aside class="sidebar">
-        <div class="sidebar-head">
-            <a class="brand" href="/">
-                <GatherumMark Size="26" />
-                <span>Gatherum</span>
-            </a>
-            <SearchPalette @rendermode="InteractiveAuto" />
-        </div>
-        <NodeTree @rendermode="InteractiveAuto" />
-        <nav class="sidebar-foot">
-            <NavLink href="/tags">Tags</NavLink>
-            <NavLink href="/settings">Settings</NavLink>
+    <header class="topbar">
+        <a class="brand" href="/">Gatherum</a>
+        <div class="topbar-actions">
+            <HeaderActions @rendermode="InteractiveAuto" />
             <button type="button" id="theme-toggle" class="theme-toggle"
                     title="Theme: system → light → dark" aria-label="Toggle color theme">
                 <svg class="icon-system" width="18" height="18" viewBox="0 0 24 24" fill="none"
@@ -31,13 +23,25 @@
                     <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" />
                 </svg>
             </button>
-            <form method="post" action="/auth/logout" class="logout">
-                <AntiforgeryToken />
-                <button type="submit" class="ghost">Sign out</button>
-            </form>
-        </nav>
-    </aside>
-    <main class="content">
-        @Body
-    </main>
+        </div>
+    </header>
+    <div class="body">
+        <aside class="sidebar">
+            <div class="sidebar-head">
+                <SearchPalette @rendermode="InteractiveAuto" />
+            </div>
+            <NodeTree @rendermode="InteractiveAuto" />
+            <nav class="sidebar-foot">
+                <NavLink href="/tags">Tags</NavLink>
+                <NavLink href="/settings">Settings</NavLink>
+                <form method="post" action="/auth/logout" class="logout">
+                    <AntiforgeryToken />
+                    <button type="submit" class="ghost">Sign out</button>
+                </form>
+            </nav>
+        </aside>
+        <main class="content">
+            @Body
+        </main>
+    </div>
 </div>
