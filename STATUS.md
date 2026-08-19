@@ -1,7 +1,7 @@
 # Status
 
-As of the all-Auto revision (the whole interactive UI renders in WebAssembly after
-the first visit). Everything listed as working has
+As of slopedit 2.1 — the wiki's own words (`[[links]]`, infoboxes, figures, callouts)
+on the editor's new extension seam. Everything listed as working has
 been exercised end-to-end (unit/integration tests, API smoke tests, or scripted
 browser sessions — including against the built container).
 
@@ -16,7 +16,7 @@ browser sessions — including against the built container).
 - **Native editing** — pages open in slopedit's `DocumentView`: a
   Google-Docs-style rich document editor (proportional layout, styled runs, markdown
   auto-format as you type, tables, images via the in-app content URLs), converting
-  losslessly through `MarkdownSerializer`. A Source toggle swaps to `EditorView` with
+  losslessly through `GatherumMarkdown`. A Source toggle swaps to `EditorView` with
   the Markdown lexer; code/config/text files edit in `EditorView` with syntax
   highlighting. Uploaded `.docx` files open in the same `DocumentView` through
   `DocxConverter` (Full profile — underline, color, alignment survive), saving real
@@ -32,6 +32,21 @@ browser sessions — including against the built container).
   (verified in-browser: editing, autosave, rename, tags, history, restore, search,
   keys, stale-version warning all exercised in the WASM home). The only JavaScript in
   the app is a ~30-line interop file.
+- **The wiki's own syntaxes** — pages speak a dialect the editor is handed per call and
+  never learns (`GatherumMarkdown`, the one door every read and write goes through):
+  `[[Wiki links]]` and `[[Target|label]]`, resolved by title to a node the writer can
+  see — they make link rows, so they backlink exactly like `node://` mentions, and a
+  title nothing answers to inks red and offers to write the page on click; `:::infobox`
+  and `:::figure` fences, floated at a margin with the prose wrapping past them, dressed
+  with a card, a header band and (for a figure) a centered picture and caption;
+  `> [!NOTE]`-style callouts in GitHub's five kinds, tinted in each kind's accent. An
+  Insert menu writes the fences (the document editor can't type one into being), the
+  node picker doubles as a wiki-link and figure chooser, and links now go somewhere at
+  all: a mention or an embedded file opens its node, a wiki link resolves by title, an
+  external scheme leaves the app — with any pending autosave flushed first. All of it
+  is plain Markdown in the file: opening a page and saving it back changes nothing but
+  the edits (verified in-browser against the running app, light and dark, and by
+  round-trip tests).
 - **Awareness** — heartbeat presence ("Sam is editing", verified cross-user) and a
   newer-version warning in the editor (verified: fires when another user saves the
   open document). Concurrent saves are serialized per node; nobody's save is ever
@@ -43,9 +58,9 @@ browser sessions — including against the built container).
   description, tags, referenced-by, per-version download; extraction: text verbatim,
   PDF (PdfPig), image metadata (MetadataExtractor); media types resolved sensibly
   when browsers upload code as octet-stream.
-- **Links** — mentions (`[@Title](node://id)`) and embedded files parse straight from
-  Markdown into link rows; backlinks everywhere; mentions render as in-app links,
-  `> [!kind]` quotes render as callouts.
+- **Links** — mentions (`[@Title](node://id)`), `[[wiki links]]` and embedded files
+  parse straight from Markdown into link rows; backlinks everywhere; all three are
+  clickable in the editor (Ctrl/⌘+click while editing, a plain click while reading).
 - **Auth** — OIDC-only via discovery, defensive `offline_access`, first user becomes
   admin, cookie sessions; API keys hashed at rest, revocable, shown once; dev
   auto-login only when no authority is configured.
@@ -57,10 +72,13 @@ browser sessions — including against the built container).
   exercised against a postgres container, editor verified in-browser against the
   containerized app), compose.yaml, Podman Quadlets, `/healthz`, JSON console logs
   outside Development, migrations on startup with opt-out.
-- **Tests** — 42 passing: markdown links, docx extraction/editing/backlinks, tree ops, privacy, versions
-  (collapse, restore, re-upload, cross-author), search, API keys, storage/extraction,
-  and integration tests booting the app on Testcontainers Postgres (create page →
-  search → MCP `get_node`).
+- **Tests** — 84 passing: the Markdown dialect (infobox/figure/callout round trips,
+  wiki-link spellings, extension composition, derived chrome, red-link inking, in-app
+  URL shapes), markdown links, docx extraction/editing/backlinks, tree ops, privacy,
+  versions (collapse, restore, re-upload, cross-author), search, title resolution, API
+  keys, storage/extraction, and integration tests booting the app on Testcontainers
+  Postgres (create page → search → MCP `get_node`; wiki link → backlink →
+  `resolve-titles`).
 
 ## Stubbed / not shipped (tracked in PLAN.md)
 
@@ -72,6 +90,21 @@ browser sessions — including against the built container).
 
 ## Known gaps
 
+- Typing `[[A Title]]` or a `:::infobox` fence *into* the document editor leaves it as
+  the text you typed until the page is read again — the extensions read source, and an
+  open document is past that. The Insert menu and the node picker create both directly,
+  Source mode types them as source, and a reload turns hand-typed ones into the real
+  thing.
+- Inserting a construct clears the undo stack: the page is written back out around the
+  snippet and read again (`GatherumMarkdown.Reload`), the same price the Source toggle
+  has always paid.
+- Asides don't nest: a construct inside one degrades to the vocabulary it is made of.
+- Two asides with nothing but a blank line between them overlap: slopedit places a float
+  at its own flow position and floats don't clear one another the way a browser's do.
+  Prose between them (or one at each margin) is the fix — verified in-browser, and it is
+  upstream's call, not the host's.
+- Bold inside a callout's title is absorbed by the title's own bold; everything else in
+  a title (links, code, emphasis) round-trips.
 - No live co-editing: presence + versions instead of CRDT merging (DECISIONS.md; the
   trade was chosen deliberately with the no-JS direction).
 - The first visit in a fresh browser renders on the server circuit while the WASM

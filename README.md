@@ -14,6 +14,12 @@ C#/Blazor — the only JavaScript is a ~65-line interop file.
   code and text files edit in its code editor with syntax highlighting. Autosave,
   mention insertion that links nodes together, and every save is a version — old
   versions viewable, downloadable, restorable.
+- **Wiki words**: pages speak a small dialect the editor is taught per document —
+  `[[Wiki links]]` that resolve by title (red, with an offer to write the page, when
+  nothing answers to that name), `:::infobox` and `:::figure` asides the prose wraps
+  around, and `> [!NOTE]` callouts. All of it is plain Markdown in the file, round-tripped
+  losslessly, and an Insert menu writes the fences for you. Links go somewhere: a mention
+  or a wiki link opens the node it names, an external link leaves the app.
 - **Files**: drag-drop or picker upload anywhere in the tree, content-addressed
   storage (SHA-256) on disk, inline previews (images, PDF, video, audio), descriptions,
   tags, and re-upload as a new version with old bytes retrievable. Text extraction

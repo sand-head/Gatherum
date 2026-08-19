@@ -72,7 +72,7 @@
     private void OnAppThemeChanged() => _ = InvokeAsync(() =>
     {
         if (previewDoc is not null)
-            EditorThemes.ApplyInk(previewDoc, AppTheme.IsDark);
+            GatherumMarkdown.Dress(previewDoc, AppTheme.IsDark);
         StateHasChanged();
     });
 
@@ -94,8 +94,9 @@
         var text = await Data.GetVersionTextAsync(NodeId, version.Number);
         if (version.MediaType == "text/markdown")
         {
-            previewDoc = MarkdownSerializer.FromMarkdown(text);
-            EditorThemes.ApplyInk(previewDoc, AppTheme.IsDark);
+            // The same dialect the editor reads, so an old version previews with the
+            // infoboxes and callouts it was written with.
+            previewDoc = GatherumMarkdown.Parse(text, AppTheme.IsDark);
             previewText = null;
         }
         else

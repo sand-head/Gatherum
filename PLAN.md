@@ -115,3 +115,24 @@ real docx bytes through a binary sibling of the text door with the same autosave
 collapse. A `DocxTextExtractor` feeds search with the converter's canonical Markdown
 rendering, which also makes docx mentions backlink like pages. All slopedit packages
 moved to 2.0.1.
+
+### Post-revision: slopedit 2.1 — the wiki's own words
+
+slopedit 2.1 opened the Markdown container to the host: `MarkdownExtension` grafts
+custom syntax onto the serializer per call, `FloatedRun`/`ExclusionZone` lift a run of
+blocks out of the flow so prose wraps past it, `BlockDecoration` paints boxes behind
+block runs, and `DocumentView.OnLinkActivated` hands link navigation to the host. On
+that seam Gatherum grew the conventions an encyclopedia needs, none of which the editor
+had to learn:
+
+- `[[Wiki links]]` — slopedit's shipped `WikiLinkExtension` for the spelling, plus
+  server-side resolution by title, so a wiki link backlinks like a mention and a title
+  nobody has written yet renders as a red link that offers to create the page.
+- `:::infobox` and `:::figure` — a host block extension reading a directive fence into a
+  floated, decorated run of ordinary blocks; and `> [!NOTE]`-style callouts, which the
+  docs had been promising since the MVP, now actually painted.
+- Links go somewhere: mentions and embedded files route in-app, wiki links resolve by
+  title, external schemes leave the app — and a pending autosave is flushed first.
+
+The chrome is *derived* from block tags on every edit rather than pinned at parse, since
+block indices move as a page is written. All slopedit packages moved to 2.1.0.

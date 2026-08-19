@@ -148,6 +148,15 @@ public static class ApiEndpoints
             return Results.Ok(tagged.Select(NodeSummaryDto.From));
         });
 
+        // Titles, not ids: what a [[wiki link]] has to ask before it can go anywhere.
+        api.MapPost("/nodes/resolve-titles", async (NodeService nodes, HttpContext http,
+            ResolveTitlesRequest request) =>
+        {
+            var resolved = await nodes.ResolveTitlesAsync(http.User.GetUserId(),
+                request.Titles ?? []);
+            return Results.Ok(resolved.Select(m => new TitleMatchDto(m.Key, m.Value)));
+        });
+
         api.MapGet("/nodes/{id:guid}/backlinks", async (NodeService nodes, HttpContext http, Guid id) =>
         {
             var backlinks = await nodes.GetBacklinksAsync(http.User.GetUserId(), id);

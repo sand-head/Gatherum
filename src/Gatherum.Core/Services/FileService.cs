@@ -113,7 +113,7 @@ public class FileService(
 
             node.UpdatedAt = now;
             nodes.RefreshSearchText(node);
-            await RefreshLinksAsync(node, ct);
+            await RefreshLinksAsync(node, userId, ct);
             await db.SaveChangesAsync(ct);
             return node.File.Current;
         }
@@ -167,7 +167,7 @@ public class FileService(
 
             node.UpdatedAt = now;
             nodes.RefreshSearchText(node);
-            await RefreshLinksAsync(node, ct);
+            await RefreshLinksAsync(node, userId, ct);
             await db.SaveChangesAsync(ct);
             return node.File.Current;
         }
@@ -206,7 +206,7 @@ public class FileService(
             node.MediaType = version.MediaType;
             node.UpdatedAt = clock.GetUtcNow();
             nodes.RefreshSearchText(node);
-            await RefreshLinksAsync(node, ct);
+            await RefreshLinksAsync(node, userId, ct);
             await db.SaveChangesAsync(ct);
             return node;
         }
@@ -223,7 +223,7 @@ public class FileService(
         node.File!.Description = description;
         node.UpdatedAt = clock.GetUtcNow();
         nodes.RefreshSearchText(node);
-        await RefreshLinksAsync(node, ct);
+        await RefreshLinksAsync(node, userId, ct);
         await db.SaveChangesAsync(ct);
     }
 
@@ -287,7 +287,7 @@ public class FileService(
             UploadedAt = clock.GetUtcNow(),
         });
         nodes.RefreshSearchText(node);
-        await RefreshLinksAsync(node, ct);
+        await RefreshLinksAsync(node, userId, ct);
     }
 
     private async Task AddUploadedVersionAsync(Node node, Guid userId, string fileName,
@@ -310,16 +310,25 @@ public class FileService(
         });
         node.UpdatedAt = clock.GetUtcNow();
         nodes.RefreshSearchText(node);
-        await RefreshLinksAsync(node, ct);
+        await RefreshLinksAsync(node, userId, ct);
     }
 
-    private async Task RefreshLinksAsync(Node node, CancellationToken ct)
+    /// <summary>The link rows a body claims. <paramref name="userId"/> is whose eyes
+    /// resolve a <c>[[wiki link]]</c>: it names a page rather than pointing at one, so
+    /// it can only mean a node the person writing it can see.</summary>
+    private async Task RefreshLinksAsync(Node node, Guid userId, CancellationToken ct)
     {
         var targets = new HashSet<Guid>(MarkdownContent.MentionedNodeIds(node.File!.Description));
         // A docx body's extracted text is its canonical Markdown rendering, so mentions
         // inserted in the document editor link — and backlink — the same way pages do.
         if (node.MediaType is MediaTypes.Markdown or MediaTypes.Docx)
-            targets.UnionWith(MarkdownContent.LinkedNodeIds(node.File.Current.ExtractedText));
+        {
+            var body = node.File.Current.ExtractedText;
+            targets.UnionWith(MarkdownContent.LinkedNodeIds(body));
+            var wikiTargets = WikiLinkSyntax.Targets(body);
+            if (wikiTargets.Count > 0)
+                targets.UnionWith((await nodes.ResolveTitlesAsync(userId, wikiTargets, ct)).Values);
+        }
         await nodes.ReplaceLinksAsync(node, targets, ct);
     }
 

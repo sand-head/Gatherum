@@ -177,6 +177,41 @@ public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeP
             .ToListAsync(ct);
     }
 
+    /// <summary>Which of these titles name a node the user can see — what a
+    /// <c>[[wiki link]]</c> needs, since it addresses a page by name rather than by id.
+    /// Matching ignores case, because that is how people type a title they remember.
+    /// Titles are not unique, so a tie goes to the exact-case match and then to the
+    /// oldest node: the same name resolves to the same node for everyone, every time.</summary>
+    public async Task<IReadOnlyDictionary<string, Guid>> ResolveTitlesAsync(Guid userId,
+        IReadOnlyCollection<string> titles, CancellationToken ct = default)
+    {
+        var resolved = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+        var wanted = titles
+            .Select(t => t.Trim())
+            .Where(t => t.Length > 0)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (wanted.Count == 0)
+            return resolved;
+
+        var lowered = wanted.Select(t => t.ToLowerInvariant()).ToList();
+        var candidates = await authorizer.VisibleTo(db.Nodes, userId)
+            .Where(n => lowered.Contains(n.Title.ToLower()))
+            .OrderBy(n => n.CreatedAt).ThenBy(n => n.Id)
+            .Select(n => new { n.Id, n.Title })
+            .ToListAsync(ct);
+
+        foreach (var title in wanted)
+        {
+            var matches = candidates
+                .Where(c => string.Equals(c.Title, title, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            var match = matches.FirstOrDefault(c => c.Title == title) ?? matches.FirstOrDefault();
+            if (match is not null)
+                resolved[title] = match.Id;
+        }
+        return resolved;
+    }
+
     public Task<List<Node>> GetBacklinksAsync(Guid userId, Guid nodeId, CancellationToken ct = default) =>
         authorizer.VisibleTo(db.Nodes, userId)
             .Where(n => n.OutboundLinks.Any(l => l.TargetId == nodeId))

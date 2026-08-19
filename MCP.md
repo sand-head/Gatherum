@@ -45,20 +45,38 @@ claude mcp add --transport http gatherum http://localhost:5140/mcp \
 
 ## Markdown conventions
 
-Pages *are* Markdown files, so bodies round-trip verbatim. Two Gatherum-specific forms:
+Pages *are* Markdown files, so bodies round-trip verbatim. The Gatherum-specific forms:
 
 - **Mentions**: `[@Some Node](node://<node-id>)` — renders as an @-mention in the editor
-  and creates a link (and therefore a backlink on the target).
+  and creates a link (and therefore a backlink on the target). The strongest form: it
+  survives a rename.
+- **Wiki links**: `[[Some Node]]` or `[[Some Node|the label]]` — names a page by title
+  instead of by id. It resolves case-insensitively to a node the writing user can see,
+  and makes the same link row (and backlink) a mention does. A title nothing answers to
+  is not an error: it renders as a red link that offers to create the page.
 - **Embedded files**: `![alt](/api/files/<node-id>/content)` — embeds a file node's
   content and links to it.
+- **Asides**: a directive fence sets a run of blocks beside the prose, which flows past
+  it. `:::infobox` is an encyclopedia's card (a heading and borderless label/value rows);
+  `:::figure` is a captioned picture. Both take an optional side and width —
+  `:::figure left 360` — and close with `:::`. Inside the fence the body is ordinary
+  Markdown, so a reader that has never heard of any of this still renders everything
+  between the two `:::` lines.
+- **Callouts**: GitHub's alert spelling — a quote whose first line is `> [!NOTE]`,
+  optionally followed by a title (`> [!WARNING] Restores are not backups`). The five
+  kinds are note, tip, important, warning and caution; anything else stays a plain quote.
 
 Everything else is GitHub-flavored Markdown: headings, lists, `- [ ]` task lists, pipe
-tables, fenced code blocks with language, `> [!info]`-style callouts (info, note, tip,
-warning, danger), and inline bold/italic/strike/code/links.
+tables, fenced code blocks with language, and inline bold/italic/strike/code/links.
+
+A page written with any of this reads back byte-identical through `get_node`: the
+editor and the API speak the same dialect.
 
 ## Notes
 
 - Private subtrees belonging to other users are invisible to your key — searches,
   `get_node`, and `list_children` behave as if they don't exist.
 - The REST API under `/api` accepts the same bearer token and covers the same
-  operations plus file upload/download.
+  operations plus file upload/download, including
+  `POST /api/nodes/resolve-titles` (`{ "titles": ["Homelab"] }`) — which titles
+  currently name a node, the question a `[[wiki link]]` asks.

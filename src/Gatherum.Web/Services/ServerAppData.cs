@@ -70,6 +70,13 @@ public sealed class ServerAppData(
             .ToList();
     }
 
+    public async Task<IReadOnlyDictionary<string, Guid>> ResolveTitlesAsync(
+        IReadOnlyList<string> titles)
+    {
+        var userId = await UserIdAsync();
+        return await ops.Nodes(s => s.ResolveTitlesAsync(userId, titles));
+    }
+
     public async Task<byte[]?> GetImageAsync(string url)
     {
         if (MarkdownContent.NodeIdFromUrl(url) is not { } imageNodeId)

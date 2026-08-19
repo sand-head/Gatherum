@@ -146,6 +146,60 @@ public class NodeServiceTests(PostgresFixture postgres) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Wiki_links_name_a_page_and_become_backlinks()
+    {
+        var target = await NewPageAsync(jess, null, "Homelab");
+        var source = await NewPageAsync(jess, null, "source");
+
+        await files.SaveTextAsync(jess, source.Id, "Racked in [[homelab|the closet]].");
+
+        var backlinks = await nodes.GetBacklinksAsync(jess, target.Id);
+        Assert.Equal([source.Id], backlinks.Select(n => n.Id));
+
+        await files.SaveTextAsync(jess, source.Id, "Racked in `[[Homelab]]`, in code.");
+        Assert.Empty(await nodes.GetBacklinksAsync(jess, target.Id));
+    }
+
+    [Fact]
+    public async Task A_wiki_link_only_resolves_to_what_its_writer_can_see()
+    {
+        var hidden = await NewPageAsync(sam, null, "Sam's notes");
+        await nodes.SetPrivateAsync(sam, hidden.Id, true);
+        var page = await NewPageAsync(jess, null, "page");
+
+        await files.SaveTextAsync(jess, page.Id, "See [[Sam's notes]].");
+
+        Assert.Empty(await nodes.GetBacklinksAsync(sam, hidden.Id));
+    }
+
+    [Fact]
+    public async Task Titles_resolve_by_name_ignoring_case_and_hiding_the_private()
+    {
+        var homelab = await NewPageAsync(jess, null, "Homelab");
+        var mine = await NewPageAsync(sam, null, "Sam's notes");
+        await nodes.SetPrivateAsync(sam, mine.Id, true);
+
+        var resolved = await nodes.ResolveTitlesAsync(jess,
+            ["  homelab  ", "Sam's notes", "nothing by this name"]);
+
+        Assert.Equal(homelab.Id, resolved["HOMELAB"]);
+        Assert.DoesNotContain("Sam's notes", resolved.Keys);
+        Assert.Single(resolved);
+    }
+
+    [Fact]
+    public async Task The_same_title_twice_resolves_to_the_older_node()
+    {
+        var first = await NewPageAsync(jess, null, "Notes");
+        harness.Clock.Advance(TimeSpan.FromMinutes(5));
+        await NewPageAsync(jess, null, "notes");
+
+        var resolved = await nodes.ResolveTitlesAsync(jess, ["Notes"]);
+
+        Assert.Equal(first.Id, resolved["Notes"]);
+    }
+
+    [Fact]
     public async Task Tags_contribute_to_search_text_and_can_be_removed()
     {
         var page = await NewPageAsync(jess, null, "quadlets");

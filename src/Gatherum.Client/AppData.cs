@@ -22,6 +22,11 @@ public interface IAppData
     Task LeaveAsync(Guid nodeId);
     Task<IReadOnlyList<SearchHit>> SearchAsync(string query, int limit);
 
+    /// <summary>Which of these titles name a node the user can see. A [[wiki link]]
+    /// addresses a page by name, so this is what it has to ask before it can go
+    /// anywhere — and what tells the editor which links are still red.</summary>
+    Task<IReadOnlyDictionary<string, Guid>> ResolveTitlesAsync(IReadOnlyList<string> titles);
+
     /// <summary>Bytes for an image a document embeds. Only in-app content URLs
     /// (/api/files/…/content) resolve; anything else stays a placeholder.</summary>
     Task<byte[]?> GetImageAsync(string url);
@@ -57,6 +62,7 @@ public record EditorPayload(string Text, int HeadVersion);
 public record BytesPayload(byte[] Content, int HeadVersion);
 public record PresenceInfo(IReadOnlyList<string> Editors, int HeadVersion);
 public record SearchHit(Guid Id, string Kind, string Title, string Snippet);
+public record TitleMatch(string Title, Guid Id);
 public record TreeNodeInfo(Guid Id, Guid? ParentId, string Title, string MediaType,
     string Kind, int Position, bool IsPrivate);
 public record NodeInfo(Guid Id, string Title, bool IsPrivate, IReadOnlyList<string> Tags,
@@ -113,6 +119,17 @@ public sealed class HttpAppData(HttpClient http) : IAppData
     public async Task<IReadOnlyList<SearchHit>> SearchAsync(string query, int limit) =>
         await http.GetFromJsonAsync<List<SearchHit>>(
             $"/api/search?query={Uri.EscapeDataString(query)}&limit={limit}") ?? [];
+
+    public async Task<IReadOnlyDictionary<string, Guid>> ResolveTitlesAsync(
+        IReadOnlyList<string> titles)
+    {
+        if (titles.Count == 0)
+            return new Dictionary<string, Guid>();
+        var response = await http.PostAsJsonAsync("/api/nodes/resolve-titles", new { titles });
+        response.EnsureSuccessStatusCode();
+        var matches = await response.Content.ReadFromJsonAsync<List<TitleMatch>>() ?? [];
+        return matches.ToDictionary(m => m.Title, m => m.Id, StringComparer.OrdinalIgnoreCase);
+    }
 
     public async Task<byte[]?> GetImageAsync(string url)
     {
