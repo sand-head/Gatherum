@@ -2,6 +2,7 @@
 @inject IAppData Data
 @inject OutlineState Outline
 @inject ThemeState AppTheme
+@inject NavigationManager Navigation
 @using SlopEdit.Blazor
 @using SlopEdit.Core.Document
 @using SlopEdit.Docx
@@ -22,7 +23,27 @@
             <span class="stale-warning">Someone saved a newer version — your next save
                 makes a new one; theirs stays in history.</span>
         }
-        <button class="ghost" @onclick="OpenMentionDialog">Link node…</button>
+        @if (IsMarkdown)
+        {
+            <div class="insert">
+                <button class="ghost" @onclick="() => insertOpen = !insertOpen">Insert…</button>
+                @if (insertOpen)
+                {
+                    <div class="scrim" @onclick="() => insertOpen = false"></div>
+                    <div class="insert-menu">
+                        <button @onclick="() => OpenPicker(Picker.WikiLink)">Wiki link…</button>
+                        <button @onclick="InsertInfoboxAsync">Infobox</button>
+                        <button @onclick="() => OpenPicker(Picker.Figure)">Figure…</button>
+                        <div class="insert-group">Callout</div>
+                        @foreach (var (kind, name) in CalloutExtension.Kinds)
+                        {
+                            <button @onclick="() => InsertCalloutAsync(kind)">@name</button>
+                        }
+                    </div>
+                }
+            </div>
+        }
+        <button class="ghost" @onclick="() => OpenPicker(Picker.Mention)">Link node…</button>
         @if (IsMarkdown)
         {
             <button class="ghost" @onclick="ToggleSource">
@@ -40,7 +61,8 @@
         <div class="document-surface">
             <DocumentView @ref="docView" Grid="richDoc" OnChange="OnChanged"
                           Theme="EditorThemes.For(AppTheme.IsDark)"
-                          ImageSource="Data.GetImageAsync" AriaLabel="Document editor" />
+                          ImageSource="Data.GetImageAsync" OnLinkActivated="FollowLinkAsync"
+                          AriaLabel="Document editor" />
         </div>
     }
     else if (sourceDoc is not null)
@@ -52,18 +74,36 @@
         </div>
     }
 
-    @if (mentionOpen)
+    @if (picker != Picker.None)
     {
         <div class="mention-dialog">
-            <input placeholder="Search nodes…" value="@mentionQuery"
-                   @oninput="OnMentionQuery" @onkeydown="OnMentionKey" autofocus />
+            <input placeholder="@PickerPlaceholder" value="@pickerQuery"
+                   @oninput="OnPickerQuery" @onkeydown="OnPickerKey" autofocus />
+            @if (picker == Picker.WikiLink && pickerQuery.Trim().Length > 0)
+            {
+                <button class="ghost new-title"
+                        @onclick="() => InsertWikiLinkAsync(pickerQuery.Trim())">
+                    Link to “@pickerQuery.Trim()”
+                </button>
+            }
             <div class="mention-results">
-                @foreach (var result in mentionResults)
+                @foreach (var result in pickerResults)
                 {
-                    <button @onclick="() => InsertMention(result)">
+                    <button @onclick="() => ChooseAsync(result)">
                         <span class="kind">@result.Kind</span> @result.Title
                     </button>
                 }
+            </div>
+        </div>
+    }
+
+    @if (deadLink is not null)
+    {
+        <div class="mention-dialog dead-link">
+            <p>Nothing here is titled “@deadLink”.</p>
+            <div class="dead-link-actions">
+                <button class="primary" @onclick="CreateDeadLinkAsync">Write it</button>
+                <button class="ghost" @onclick="() => deadLink = null">Not now</button>
             </div>
         </div>
     }
@@ -81,6 +121,7 @@
     private bool sourceMode;
     private string saveLabel = "";
     private bool staleWarning;
+    private bool dirty;
     private int lastKnownHead;
     private IReadOnlyList<string> othersEditing = [];
     private System.Threading.Timer? saveTimer;
@@ -90,9 +131,26 @@
     private bool IsDocx =>
         MediaType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
-    private bool mentionOpen;
-    private string mentionQuery = "";
-    private IReadOnlyList<SearchHit> mentionResults = [];
+    /// <summary>What the node picker is being asked for. One dialog, because all three
+    /// answers are "a node", and two of them may also be a title nobody has written yet.</summary>
+    private enum Picker { None, Mention, WikiLink, Figure }
+
+    private Picker picker;
+    private string pickerQuery = "";
+    private IReadOnlyList<SearchHit> pickerResults = [];
+    private bool insertOpen;
+    private string? deadLink;
+
+    /// <summary>Titles this document wiki-links that currently resolve; everything else
+    /// it links is a red link. Kept so a theme change can re-ink without asking again.</summary>
+    private IReadOnlySet<string> liveTitles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+    private string PickerPlaceholder => picker switch
+    {
+        Picker.WikiLink => "Title to link…",
+        Picker.Figure => "Image to set beside the text…",
+        _ => "Search nodes…",
+    };
 
     protected override async Task OnInitializedAsync()
     {
@@ -115,7 +173,7 @@
             var payload = await Data.LoadAsync(NodeId);
             lastKnownHead = payload.HeadVersion;
             if (IsMarkdown)
-                richDoc = MarkdownSerializer.FromMarkdown(payload.Text);
+                richDoc = GatherumMarkdown.Parse(payload.Text, AppTheme.IsDark);
             else
             {
                 sourceDoc = new EditorDocument(payload.Text) { Lexer = LexerRegistry.ForPath(FileName) };
@@ -127,13 +185,15 @@
         ApplyEditorTheme();
         Outline.JumpRequested += OnJumpRequested;
         PublishOutline();
+        await ResolveWikiLinksAsync();
     }
 
-    /// <summary>Colors that live on the documents rather than the views.</summary>
+    /// <summary>Colors that live on the documents rather than the views — and, for a
+    /// page, the chrome its constructs wear, which is derived from the same palette.</summary>
     private void ApplyEditorTheme()
     {
         if (richDoc is not null)
-            EditorThemes.ApplyInk(richDoc, AppTheme.IsDark);
+            GatherumMarkdown.Dress(richDoc, AppTheme.IsDark);
         if (sourceDoc is not null)
             sourceDoc.SyntaxTheme = EditorThemes.Syntax(AppTheme.IsDark);
     }
@@ -141,12 +201,13 @@
     private void OnAppThemeChanged() => _ = InvokeAsync(() =>
     {
         ApplyEditorTheme();
+        InkWikiLinks();
         StateHasChanged();
     });
 
     private string CurrentText => sourceMode || richDoc is null
         ? sourceDoc?.Text ?? ""
-        : MarkdownSerializer.ToMarkdown(richDoc);
+        : GatherumMarkdown.ToMarkdown(richDoc);
 
     private async Task PersistAsync()
     {
@@ -164,7 +225,12 @@
 
     private void OnChanged(string changedText)
     {
+        // Decorations and floats are pinned to block indices, and typing moves them:
+        // the chrome is re-derived from the blocks' own tags after every edit.
+        if (richDoc is not null && !sourceMode)
+            DocumentChrome.Apply(richDoc, AppTheme.IsDark);
         PublishOutline();
+        dirty = true;
         saveLabel = "Saving…";
         saveTimer?.Dispose();
         saveTimer = new System.Threading.Timer(
@@ -179,6 +245,7 @@
         try
         {
             await PersistAsync();
+            dirty = false;
             staleWarning = false;
             saveLabel = "Saved";
         }
@@ -195,6 +262,16 @@
             return;
         }
         StateHasChanged();
+        await ResolveWikiLinksAsync();
+    }
+
+    /// <summary>Leaving the page is not a save point the debounce knows about, so
+    /// anything a link is about to navigate away from goes to the server first.</summary>
+    private async Task FlushAsync()
+    {
+        saveTimer?.Dispose();
+        if (dirty)
+            await SaveAsync();
     }
 
     private async Task HeartbeatAsync()
@@ -216,17 +293,18 @@
     }
 
     /// <summary>Both editors hold the same content in different models; switching
-    /// converts through Markdown, which the Markdown profile round-trips losslessly.</summary>
+    /// converts through Markdown, which the Markdown profile round-trips losslessly —
+    /// the wiki's own syntaxes included, since both sides read the same extension set.</summary>
     private void ToggleSource()
     {
         if (sourceMode)
         {
-            richDoc = MarkdownSerializer.FromMarkdown(sourceDoc?.Text ?? "");
+            richDoc = GatherumMarkdown.Parse(sourceDoc?.Text ?? "", AppTheme.IsDark);
             sourceMode = false;
         }
         else
         {
-            sourceDoc = new EditorDocument(MarkdownSerializer.ToMarkdown(richDoc!))
+            sourceDoc = new EditorDocument(GatherumMarkdown.ToMarkdown(richDoc!))
             {
                 Lexer = LexerRegistry.ForPath(FileName),
             };
@@ -234,6 +312,95 @@
         }
         ApplyEditorTheme();
         PublishOutline();
+        _ = ResolveWikiLinksAsync();
+    }
+
+    /// <summary>A link the reader clicked (Ctrl+click while editing — a plain click
+    /// still places the caret). Where it goes is the host's call: a wiki link resolves
+    /// by title, a mention or an embedded file by id, and anything with a scheme of its
+    /// own leaves the app. A title nobody has written yet is an offer, not an error.</summary>
+    private async Task FollowLinkAsync(string url)
+    {
+        if (WikiLinkExtension.TargetOf(url) is { Length: > 0 } title)
+        {
+            try
+            {
+                var resolved = await Data.ResolveTitlesAsync([title]);
+                if (resolved.TryGetValue(title, out var byTitle))
+                    await GoToAsync($"/nodes/{byTitle}");
+                else
+                    deadLink = title;
+            }
+            catch (Exception)
+            {
+                // A link that can't be resolved right now stays where it is; the click
+                // is not worth taking the editor down for.
+                saveLabel = "Couldn't reach the server";
+            }
+            return;
+        }
+        if (NodeUrl.TryParse(url, out var nodeId))
+        {
+            await GoToAsync($"/nodes/{nodeId}");
+            return;
+        }
+        if (NodeUrl.IsExternal(url))
+            await GoToAsync(url, external: true);
+    }
+
+    private async Task GoToAsync(string url, bool external = false)
+    {
+        await FlushAsync();
+        Navigation.NavigateTo(url, forceLoad: external);
+    }
+
+    private async Task CreateDeadLinkAsync()
+    {
+        var title = deadLink!;
+        deadLink = null;
+        await FlushAsync();
+        try
+        {
+            var created = await Data.CreatePageAsync(null, title);
+            Navigation.NavigateTo($"/nodes/{created}");
+        }
+        catch (Exception)
+        {
+            saveLabel = "Couldn't write that page";
+        }
+    }
+
+    /// <summary>Ask which of this document's wiki links point at something, and ink
+    /// them accordingly. Runs after loading and after every save: the answer changes
+    /// when the other user writes the page this one has been asking for.</summary>
+    private async Task ResolveWikiLinksAsync()
+    {
+        if (richDoc is null || sourceMode)
+            return;
+        var targets = WikiLinks.TargetsIn(richDoc);
+        if (targets.Count == 0)
+        {
+            liveTitles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            return;
+        }
+        try
+        {
+            var resolved = await Data.ResolveTitlesAsync(targets);
+            liveTitles = resolved.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            InkWikiLinks();
+        }
+        catch (Exception)
+        {
+            // A resolution blip leaves the links inked however they were; the next
+            // save asks again.
+        }
+    }
+
+    private void InkWikiLinks()
+    {
+        if (richDoc is not null && !sourceMode &&
+            WikiLinks.Mark(richDoc, liveTitles, ChromeInk.For(AppTheme.IsDark)))
+            richDoc.InvalidateLayout();
     }
 
     /// <summary>Hands the sidebar the current headings. Block index in document mode,
@@ -245,7 +412,8 @@
             var entries = new List<OutlineEntry>();
             for (var i = 0; i < richDoc.Blocks.Count; i++)
             {
-                if (richDoc.Blocks[i] is { Kind: BlockKind.Heading } block)
+                // An aside's own headings title the card, not the page.
+                if (richDoc.Blocks[i] is { Kind: BlockKind.Heading, Tag: null } block)
                     entries.Add(new OutlineEntry(i, block.HeadingLevel, block.Text));
             }
             Outline.Publish(this, entries);
@@ -288,17 +456,7 @@
     {
         if (!sourceMode && richDoc is not null && docView is not null)
         {
-            for (var row = 0; row < richDoc.LineCount; row++)
-            {
-                var info = richDoc.RowInfoAt(row);
-                if (info.Block == entry.Block && info.FirstRowOfBlock)
-                {
-                    richDoc.MoveTo(row, 0, extend: false);
-                    await docView.FocusAsync();
-                    docView.RevealCaret();
-                    break;
-                }
-            }
+            await JumpToBlockAsync(entry.Block);
         }
         else if (sourceMode && sourceDoc is not null && sourceView is not null)
         {
@@ -308,45 +466,202 @@
         }
     }
 
-    private void OpenMentionDialog()
+    /// <summary>Put the caret at the start of a block, by way of the row it starts on —
+    /// a block spans as many rows as its text wraps into.</summary>
+    private async Task JumpToBlockAsync(int block)
     {
-        mentionOpen = true;
-        mentionQuery = "";
-        mentionResults = [];
+        if (richDoc is null || docView is null)
+            return;
+        for (var row = 0; row < richDoc.LineCount; row++)
+        {
+            var info = richDoc.RowInfoAt(row);
+            if (info.Block != block || !info.FirstRowOfBlock)
+                continue;
+            richDoc.MoveTo(row, 0, extend: false);
+            await docView.FocusAsync();
+            docView.RevealCaret();
+            return;
+        }
     }
 
-    private async Task OnMentionQuery(ChangeEventArgs e)
+    private void OpenPicker(Picker mode)
     {
-        mentionQuery = e.Value?.ToString() ?? "";
-        mentionResults = mentionQuery.Length == 0 ? [] : await Data.SearchAsync(mentionQuery, limit: 8);
+        insertOpen = false;
+        picker = mode;
+        pickerQuery = "";
+        pickerResults = [];
     }
 
-    private void OnMentionKey(KeyboardEventArgs e)
+    private async Task OnPickerQuery(ChangeEventArgs e)
+    {
+        pickerQuery = e.Value?.ToString() ?? "";
+        if (pickerQuery.Length == 0)
+        {
+            pickerResults = [];
+            return;
+        }
+        var hits = await Data.SearchAsync(pickerQuery, limit: 8);
+        // A figure is a picture: pages have no bytes to show.
+        pickerResults = picker == Picker.Figure
+            ? hits.Where(h => h.Kind == "File").ToList()
+            : hits;
+    }
+
+    private void OnPickerKey(KeyboardEventArgs e)
     {
         if (e.Key == "Escape")
-            mentionOpen = false;
+            picker = Picker.None;
+    }
+
+    private async Task ChooseAsync(SearchHit hit)
+    {
+        var mode = picker;
+        picker = Picker.None;
+        switch (mode)
+        {
+            case Picker.Mention:
+                InsertMention(hit);
+                break;
+            case Picker.WikiLink:
+                await InsertWikiLinkAsync(hit.Title);
+                break;
+            case Picker.Figure:
+                await InsertConstructAsync($"""
+                    :::figure right 320
+                    ![{hit.Title}](/api/files/{hit.Id}/content)
+                    {hit.Title}
+                    :::
+                    """);
+                break;
+        }
     }
 
     private void InsertMention(SearchHit hit)
     {
-        var label = $"@{hit.Title}";
-        var url = $"node://{hit.Id}";
-        if (!sourceMode && richDoc is not null)
-        {
-            // The rich model has no markup: insert the label, select it backwards,
-            // link the selection, then collapse the caret past it.
-            richDoc.Insert(label);
-            for (var i = 0; i < label.Length; i++)
-                richDoc.Execute(EditorCommand.MoveLeft, extend: true);
-            richDoc.SetLink(url);
-            richDoc.Execute(EditorCommand.MoveRight, extend: false);
-        }
+        picker = Picker.None;
+        InsertLink($"@{hit.Title}", $"node://{hit.Id}");
+        OnChanged("");
+    }
+
+    private async Task InsertWikiLinkAsync(string title)
+    {
+        picker = Picker.None;
+        if (sourceMode)
+            sourceDoc?.Insert($"[[{title}]]");
         else
+            InsertLink(title, WikiLinkExtension.UrlOf(title));
+        OnChanged("");
+        await ResolveWikiLinksAsync();
+    }
+
+    /// <summary>The rich model has no markup: insert the label, select it backwards,
+    /// link the selection, then collapse the caret past it.</summary>
+    private void InsertLink(string label, string url)
+    {
+        if (sourceMode || richDoc is null)
         {
             sourceDoc?.Insert($"[{label}]({url})");
+            return;
         }
-        mentionOpen = false;
+        richDoc.Insert(label);
+        for (var i = 0; i < label.Length; i++)
+            richDoc.Execute(EditorCommand.MoveLeft, extend: true);
+        richDoc.SetLink(url);
+        richDoc.Execute(EditorCommand.MoveRight, extend: false);
+    }
+
+    private Task InsertInfoboxAsync() => InsertConstructAsync($"""
+        :::infobox
+        # {PageName}
+        | **Label** | Value |
+        :::
+        """);
+
+    private Task InsertCalloutAsync(string kind) => InsertConstructAsync($"""
+        > [!{kind.ToUpperInvariant()}]
+        > Something worth setting apart.
+        """);
+
+    private string PageName
+    {
+        get
+        {
+            var name = Path.GetFileNameWithoutExtension(FileName);
+            return name.Length > 0 ? name : "Overview";
+        }
+    }
+
+    /// <summary>Insert a construct at the caret's block. The document editor has no way
+    /// to type a fence into being — the extensions read source, and this document is
+    /// past that — so the page is written back out around the snippet and read again.
+    /// The cost is the undo stack, which is why this is a menu item and not a keystroke.</summary>
+    private async Task InsertConstructAsync(string snippet)
+    {
+        insertOpen = false;
+        if (sourceMode)
+        {
+            sourceDoc?.Insert(snippet + "\n");
+            OnChanged("");
+            return;
+        }
+        if (richDoc is null)
+            return;
+        var at = PastConstructAt(CaretBlockIndex());
+        var before = GatherumMarkdown.ToMarkdown(richDoc, 0, at);
+        var after = GatherumMarkdown.ToMarkdown(richDoc, at, richDoc.Blocks.Count - at);
+
+        var parts = new List<string>();
+        if (before.Length > 0)
+            parts.AddRange([before, ""]);
+        parts.Add(snippet);
+        if (after.Length > 0)
+            parts.AddRange(["", after]);
+
+        GatherumMarkdown.Reload(richDoc, string.Join('\n', parts), AppTheme.IsDark);
         OnChanged("");
+        // The prefix round-trips block for block, and the blank line between it and the
+        // snippet is a block of its own — so that is where the construct starts.
+        await JumpToBlockAsync(FirstWritableBlock(before.Length > 0 ? at + 1 : 0));
+    }
+
+    /// <summary>Where the caret goes after a construct is inserted: its first block that
+    /// holds text, so a figure lands on its caption rather than inside its picture —
+    /// an image block has nothing to type into.</summary>
+    private int FirstWritableBlock(int from)
+    {
+        for (var i = from; richDoc is not null && i < richDoc.Blocks.Count; i++)
+        {
+            if (richDoc.Blocks[i].Kind != BlockKind.Image)
+                return i;
+        }
+        return from;
+    }
+
+    /// <summary>Past whatever the caret is inside: a construct is one run of blocks that
+    /// its own source fence surrounds, so inserting into the middle of one would split it
+    /// in two around the newcomer. An aside gets the new thing after it, not inside it.</summary>
+    private int PastConstructAt(int block)
+    {
+        if (richDoc is null || block >= richDoc.Blocks.Count)
+            return block;
+        if (richDoc.Blocks[block].Tag is not { } tag)
+            return block;
+        while (block < richDoc.Blocks.Count && richDoc.Blocks[block].Tag == tag)
+            block++;
+        return block;
+    }
+
+    private int CaretBlockIndex()
+    {
+        if (richDoc is null)
+            return 0;
+        var caret = richDoc.CaretBlock;
+        for (var i = 0; i < richDoc.Blocks.Count; i++)
+        {
+            if (ReferenceEquals(richDoc.Blocks[i], caret))
+                return i;
+        }
+        return richDoc.Blocks.Count;
     }
 
     private bool disposed;

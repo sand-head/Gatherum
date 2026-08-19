@@ -220,3 +220,54 @@ The palette is deliberately duplicated (CSS tokens and SKColors) rather than rea
 from CSS at runtime: reading computed styles would need more interop for a set of
 values that changes about never — change a token in app.css, change it in
 EditorThemes.
+
+## The wiki's syntaxes live in Gatherum, not in slopedit
+slopedit 2.1 added a per-call extension seam to its Markdown container rather than
+learning `[[links]]` and infoboxes itself — it edits code as often as prose. Gatherum
+takes it up in `GatherumMarkdown`, which is the *only* place in the app that turns a
+page into a document or back: one extension list (`WikiLinkExtension`, `AsideExtension`,
+`CalloutExtension`) passed to both `FromMarkdown` and `ToMarkdown`, so the round trip is
+lossless by construction. Every surface that reads a page — the editor, the Source
+toggle, the version preview — goes through it, because a document parsed without the
+extensions would write the syntax back out as prose and quietly destroy it.
+
+## Chrome is derived from block tags, not pinned at parse
+slopedit's `BlockDecoration` and `FloatedRun` are declared against block indices, and the
+sample host declares them while parsing. That is fine for a document nobody edits; it is
+wrong for an editor, because typing a paragraph above an infobox moves every block under
+it and the card stays where it was. So the extensions only *tag* the blocks they own
+(the tag is the fence's own argument line, which is also how the writer finds the run
+again), and `DocumentChrome.Apply` recomputes floats and decorations from those tags
+after every change and every theme switch. It re-declares only when the derived set
+actually differs, so a keystroke that moves nothing costs a comparison. The same pass
+inks a callout's title, which is why the extensions can stay colorblind: what a
+construct *is* belongs to the source, what it looks like belongs to the mode. The tag
+carries a `#n` instance marker for the same reason a run needs a boundary: two warnings
+in a row, or two infoboxes, are the same words twice, and "the same construct" is
+"blocks whose tag is equal" — without the marker the second one's opening line would be
+eaten on the way out.
+
+## A wiki link resolves by title, through its writer's eyes
+`[[Homelab]]` names a page instead of pointing at one, so `NodeService.ResolveTitlesAsync`
+matches case-insensitively and — titles not being unique — breaks a tie on the exact-case
+match and then the oldest node, so the same name always lands on the same page. It
+resolves against what the *writer* can see, which is what keeps a private subtree from
+being discoverable by typing its title: an unresolvable link is simply red. Mentions
+(`node://id`) stay the stronger form — they survive a rename — and both make link rows,
+so backlinks don't care which spelling was used.
+
+## Inserting a construct re-reads the page
+There is no way to type a `:::infobox` fence into being in the document editor: the
+extensions read *source*, and an open document is past that. The Insert menu therefore
+writes the page back out around the snippet and reads it again through
+`GatherumMarkdown.Reload` — into the same `RichDocument` instance, because the view, the
+caret and the event subscriptions are bound to it. The cost is the undo stack, which is
+why these are menu items rather than keystrokes, and why the caret is put back at the
+construct afterwards. The Source toggle has always paid the same price.
+
+## Callouts are GitHub's five, not the five the docs invented
+MCP.md had been promising `> [!info]`-style callouts (info, note, tip, warning, danger)
+since the MVP; nothing rendered them. The implementation went with GitHub's actual
+alert vocabulary — note, tip, important, warning, caution — because that is what people
+paste in from elsewhere and what other renderers understand, and the docs were corrected
+to match. A quote whose first line names anything else stays an ordinary quote.

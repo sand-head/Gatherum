@@ -102,3 +102,67 @@
         letter-spacing: 0.04em;
     }
 }
+
+/* The Insert menu: the constructs a page can be given that the caret can't type. */
+.insert { position: relative; }
+
+.scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 90;
+}
+
+.insert-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 100;
+    min-width: 190px;
+    display: flex;
+    flex-direction: column;
+    padding: 6px;
+    background: var(--surface-raised);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-2);
+
+    & button {
+        font: 400 14px/1.5 var(--font-ui);
+        color: var(--on-surface);
+        background: none;
+        border: none;
+        border-radius: var(--radius-s);
+        text-align: left;
+        padding: 7px 10px;
+
+        &:hover { background: var(--hover); }
+    }
+}
+
+.insert-group {
+    font: 500 11px/1.6 var(--font-ui);
+    color: var(--on-surface-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 8px 10px 2px;
+    border-top: 1px solid var(--outline-dim);
+    margin-top: 4px;
+}
+
+/* Offering to write the page a red link asks for. */
+.new-title {
+    display: block;
+    width: 100%;
+    text-align: left;
+    color: var(--link);
+    padding: 6px 10px;
+}
+
+.dead-link {
+    & p { margin: 4px 6px 12px; }
+}
+
+.dead-link-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}

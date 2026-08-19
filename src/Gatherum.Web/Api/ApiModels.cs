@@ -96,6 +96,10 @@ public record SearchResultDto(Guid Id, string Kind, string Title, string Snippet
         new(result.Id, result.Kind.ToString(), result.Title, result.Snippet);
 }
 
+/// <summary>A title that named a node, for [[wiki link]] resolution.</summary>
+public record TitleMatchDto(string Title, Guid Id);
+
+public record ResolveTitlesRequest(IReadOnlyList<string>? Titles);
 public record CreatePageRequest(Guid? ParentId, string Title, string? Markdown);
 public record UpdatePageRequest(string Markdown, string? Title);
 public record SaveTextRequest(string Text);

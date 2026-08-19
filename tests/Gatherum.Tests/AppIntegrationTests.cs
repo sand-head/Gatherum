@@ -66,6 +66,46 @@ public class AppIntegrationTests(PostgresFixture postgres) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_wiki_link_resolves_by_title_and_backlinks_the_page_it_names()
+    {
+        var target = await client.PostAsJsonAsync("/api/pages",
+            new { title = "Homelab", markdown = "The rack, the pi, the noise." });
+        var targetId = (await target.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("id").GetGuid();
+
+        var source = await client.PostAsJsonAsync("/api/pages",
+            new
+            {
+                title = "Quadlet notes",
+                markdown = """
+                    :::infobox
+                    # Quadlet notes
+                    | Runs on | [[Homelab]] |
+                    :::
+
+                    Rootless units restart after reboot.
+                    """,
+            });
+        var sourceId = (await source.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("id").GetGuid();
+
+        var backlinks = await client.GetFromJsonAsync<JsonElement>(
+            $"/api/nodes/{targetId}/backlinks");
+        Assert.Contains(backlinks.EnumerateArray(),
+            b => b.GetProperty("id").GetGuid() == sourceId);
+
+        var resolve = await client.PostAsJsonAsync("/api/nodes/resolve-titles",
+            new { titles = new[] { "homelab", "no such page" } });
+        var matches = await resolve.Content.ReadFromJsonAsync<JsonElement>();
+        var match = Assert.Single(matches.EnumerateArray());
+        Assert.Equal(targetId, match.GetProperty("id").GetGuid());
+
+        // The fence is the page's own text on the way back out, byte for byte.
+        var node = await CallMcpToolAsync("get_node", new { id = sourceId });
+        Assert.Contains(":::infobox", node.GetProperty("markdown").GetString());
+    }
+
+    [Fact]
     public async Task The_health_endpoint_answers_without_auth()
     {
         using var anonymous = factory.CreateClient();

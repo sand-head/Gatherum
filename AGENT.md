@@ -37,9 +37,10 @@ auto-login. Migrations: `dotnet ef migrations add <Name> -p src/Gatherum.Infrast
 ## Repo map
 
 - `src/Gatherum.Core` — domain entities, `GatherumDbContext`, **application services**
-  (`Services/`) where every business rule lives (`NodeService` = tree/tags/links,
-  `FileService` = bodies/versions/text editing), `Markdown/MarkdownContent` (link
-  conventions), and the three seam interfaces in `Abstractions/`.
+  (`Services/`) where every business rule lives (`NodeService` = tree/tags/links/title
+  resolution, `FileService` = bodies/versions/text editing), `Markdown/MarkdownContent`
+  and `Markdown/WikiLinkSyntax` (the link conventions, read server-side), and the three
+  seam interfaces in `Abstractions/`.
 - `src/Gatherum.Infrastructure` — implementations with real dependencies: filesystem
   storage, text extractors, EF migrations.
 - `src/Gatherum.Web` — the static pages and layout (`Components/`), REST API
@@ -49,7 +50,11 @@ auto-login. Migrations: `dotnet ef migrations add <Name> -p src/Gatherum.Infrast
   editor (`NodeEditor` hosting slopedit's `DocumentView` for pages and docx,
   `EditorView` for code/source), tree, sidebar panels (contents/similar/recent),
   search palette, node header, tags, version
-  panel, file view, and settings keys. `IAppData` (`AppData.cs`) is their only view of the world —
+  panel, file view, and settings keys — plus Gatherum's Markdown dialect, which lives
+  here because it is the editor's word: `GatherumMarkdown` (the extension set and the
+  only read/write door), `AsideExtension`/`CalloutExtension`/`BlockTags`,
+  `DocumentChrome` (floats and decorations derived from tags), `ChromeInk`, `WikiLinks`
+  and `NodeUrl`. `IAppData` (`AppData.cs`) is their only view of the world —
   implemented by `ServerAppData` over the services on the server circuit and by
   `HttpAppData` over `/api` in WebAssembly.
 - `tests/Gatherum.Tests` — unit tests plus `AppIntegrationTests` booting the real app.
@@ -76,6 +81,9 @@ fresh DI scope via `Services/AppOperations`.
 - Auth is OIDC-only (plus API keys). No local accounts, ever.
 - No JavaScript beyond `wwwroot/js/gatherum.js`, and nothing goes in there that
   Blazor can do natively.
+- Every Markdown ⇄ document conversion goes through `GatherumMarkdown` — never
+  `MarkdownSerializer` directly. A page read without the extension set writes the wiki's
+  own syntax back out as prose.
 - No comment where a better name would do. Comments explain invariants and whys, not whats.
 - Warnings are errors. Never leave the tree red; build and test before every commit.
 
@@ -95,6 +103,20 @@ touch the server only through `IAppData`.
 4. A binary rich-document format follows the docx pattern end to end: a converter
    case beside `DocxConverter`'s in `NodeEditor`, the format in NodePage's editable
    check and `FileService.SaveBinaryAsync`'s guard, and an extractor for search.
+
+**Add a Markdown construct** (something the editor has no word for):
+1. Write a `MarkdownInlineExtension` or `MarkdownBlockExtension` in `Gatherum.Client`
+   and register it in `GatherumMarkdown.Extensions` — both sides, or the round trip
+   silently destroys the syntax.
+2. A block extension only *tags* the blocks it owns (`BlockTags`; the tag is the
+   source's own argument line, which is how the writer finds the run again). Geometry
+   and paint belong to `DocumentChrome.Apply`, which re-derives them after every edit —
+   never declare a `FloatedRun` or `BlockDecoration` at parse time, because block
+   indices move.
+3. Colors come from `ChromeInk`, never hard-coded: a document outlives a theme switch.
+4. If the construct links nodes, teach the server to see it too — `Markdown/` in Core,
+   then `FileService.RefreshLinksAsync` — or it won't backlink.
+5. Round-trip test in `GatherumMarkdownTests`: parse, write, parse, write, compare.
 
 **Add a text extractor**:
 1. Implement `ITextExtractor` in `src/Gatherum.Infrastructure/Extraction/` (cf.
