@@ -1,0 +1,65 @@
+@inject IAppData Data
+@inject TreeState Tree
+@inject NavigationManager Navigation
+
+<div class="header-actions">
+    <button class="primary new-button" @onclick="() => menuOpen = !menuOpen">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <path d="M12 5v14M5 12h14" />
+        </svg>
+        New
+        <svg class="caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="m6 9 6 6 6-6" />
+        </svg>
+    </button>
+    @if (menuOpen)
+    {
+        <div class="scrim" @onclick="() => menuOpen = false"></div>
+        <div class="menu">
+            <button @onclick="CreatePageAsync">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <path d="M14 2v6h6M9 13h6M9 17h6" />
+                </svg>
+                New page
+            </button>
+            <label class="upload-label menu-upload">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" />
+                </svg>
+                Upload files
+                <InputFile OnChange="UploadAsync" multiple />
+            </label>
+        </div>
+    }
+</div>
+
+@code {
+    private bool menuOpen;
+
+    private async Task CreatePageAsync()
+    {
+        menuOpen = false;
+        var nodeId = await Data.CreatePageAsync(null, "Untitled");
+        await Tree.RefreshAsync();
+        Navigation.NavigateTo($"/nodes/{nodeId}");
+    }
+
+    private async Task UploadAsync(InputFileChangeEventArgs e)
+    {
+        menuOpen = false;
+        Guid lastId = default;
+        foreach (var file in e.GetMultipleFiles())
+        {
+            await using var stream = file.OpenReadStream(maxAllowedSize: IAppData.MaxUploadBytes);
+            lastId = await Data.UploadFileAsync(null, file.Name, file.ContentType, stream);
+        }
+        await Tree.RefreshAsync();
+        if (lastId != default)
+            Navigation.NavigateTo($"/nodes/{lastId}");
+    }
+}

@@ -1,0 +1,135 @@
+/* Drive-style tree rows: full-pill hover and selection states. */
+
+.tree-item { position: relative; }
+
+.tree-row {
+    display: flex;
+    align-items: center;
+    padding-left: calc(var(--depth) * 14px);
+    border-radius: var(--radius-full);
+    transition: background-color 0.1s;
+
+    &:hover { background: var(--hover); }
+    &:hover .row-menu { visibility: visible; }
+}
+
+.chevron {
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+    display: grid;
+    place-items: center;
+    background: none;
+    border: none;
+    border-radius: var(--radius-full);
+    padding: 0;
+    margin-left: 2px;
+    color: var(--on-surface-dim);
+
+    & svg { transition: transform 0.15s; }
+    &.open svg { transform: rotate(90deg); }
+    &:hover { background: var(--hover-strong); color: var(--on-surface); }
+}
+
+/* NavLink renders the <a> itself, so these stay top-level ::deep selectors —
+   the isolation rewriter must not append the scope attribute to the link. */
+::deep .tree-link {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    padding: 5px 4px;
+    color: var(--on-surface);
+
+    &:hover { text-decoration: none; }
+}
+
+/* NavLink marks the current node; paint it as a selected pill. */
+::deep .tree-link.active {
+    background: var(--selected);
+    border-radius: var(--radius-full);
+    padding-inline: 10px;
+    color: var(--on-selected);
+    font-weight: 500;
+}
+
+::deep .tree-link.active .node-icon,
+::deep .tree-link.active .node-private { color: var(--on-selected); }
+
+.node-icon {
+    display: grid;
+    place-items: center;
+    color: var(--on-surface-dim);
+    flex-shrink: 0;
+}
+
+.node-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.node-private {
+    display: grid;
+    place-items: center;
+    color: var(--on-surface-dim);
+    flex-shrink: 0;
+}
+
+.row-menu {
+    visibility: hidden;
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+    margin-right: 3px;
+    background: none;
+    border: none;
+    border-radius: var(--radius-full);
+    padding: 0;
+    color: var(--on-surface-dim);
+
+    &:hover { background: var(--hover-strong); color: var(--on-surface); }
+}
+
+/* Material menu card */
+.menu {
+    position: absolute;
+    right: 6px;
+    top: 30px;
+    z-index: 30;
+    display: flex;
+    flex-direction: column;
+    min-width: 190px;
+    padding: 6px;
+    background: var(--surface-raised);
+    border: 1px solid var(--outline-dim);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-2);
+    animation: menu-in 0.12s ease-out;
+}
+
+@keyframes menu-in {
+    from { opacity: 0; transform: translateY(-4px); }
+}
+
+.menu button, .menu .menu-upload {
+    font: 400 14px/1.5 var(--font-ui);
+    color: var(--on-surface);
+    background: none;
+    border: none;
+    border-radius: var(--radius-s);
+    text-align: left;
+    width: 100%;
+    padding: 7px 12px;
+
+    &:hover { background: var(--hover); }
+}
+
+.menu button.danger {
+    color: var(--danger);
+
+    &:hover { background: color-mix(in srgb, var(--danger) 8%, transparent); }
+}

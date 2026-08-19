@@ -1,5 +1,7 @@
 @implements IAsyncDisposable
 @inject IAppData Data
+@inject OutlineState Outline
+@inject ThemeState AppTheme
 @using SlopEdit.Blazor
 @using SlopEdit.Core.Document
 @using SlopEdit.Docx
@@ -36,14 +38,17 @@
     @if (richDoc is not null && !sourceMode)
     {
         <div class="document-surface">
-            <DocumentView Grid="richDoc" OnChange="OnChanged" ImageSource="Data.GetImageAsync"
-                          AriaLabel="Document editor" />
+            <DocumentView @ref="docView" Grid="richDoc" OnChange="OnChanged"
+                          Theme="EditorThemes.For(AppTheme.IsDark)"
+                          ImageSource="Data.GetImageAsync" AriaLabel="Document editor" />
         </div>
     }
     else if (sourceDoc is not null)
     {
         <div class="editor-surface">
-            <EditorView Grid="sourceDoc" OnChange="OnChanged" AriaLabel="Source editor" />
+            <EditorView @ref="sourceView" Grid="sourceDoc" OnChange="OnChanged"
+                        Theme="EditorThemes.For(AppTheme.IsDark)"
+                        AriaLabel="Source editor" />
         </div>
     }
 
@@ -71,6 +76,8 @@
 
     private RichDocument? richDoc;
     private EditorDocument? sourceDoc;
+    private DocumentView? docView;
+    private EditorView? sourceView;
     private bool sourceMode;
     private string saveLabel = "";
     private bool staleWarning;
@@ -89,6 +96,13 @@
 
     protected override async Task OnInitializedAsync()
     {
+        // Prerender has no JS to watch the theme with; the canvas painted during
+        // prerender is a placeholder frame anyway.
+        if (RendererInfo.IsInteractive)
+        {
+            await AppTheme.EnsureWatchingAsync();
+            AppTheme.Changed += OnAppThemeChanged;
+        }
         if (IsDocx)
         {
             var payload = await Data.LoadBytesAsync(NodeId);
@@ -110,7 +124,25 @@
         }
         presenceTimer = new System.Threading.Timer(
             _ => _ = InvokeAsync(HeartbeatAsync), null, 0, 5000);
+        ApplyEditorTheme();
+        Outline.JumpRequested += OnJumpRequested;
+        PublishOutline();
     }
+
+    /// <summary>Colors that live on the documents rather than the views.</summary>
+    private void ApplyEditorTheme()
+    {
+        if (richDoc is not null)
+            EditorThemes.ApplyInk(richDoc, AppTheme.IsDark);
+        if (sourceDoc is not null)
+            sourceDoc.SyntaxTheme = EditorThemes.Syntax(AppTheme.IsDark);
+    }
+
+    private void OnAppThemeChanged() => _ = InvokeAsync(() =>
+    {
+        ApplyEditorTheme();
+        StateHasChanged();
+    });
 
     private string CurrentText => sourceMode || richDoc is null
         ? sourceDoc?.Text ?? ""
@@ -132,6 +164,7 @@
 
     private void OnChanged(string changedText)
     {
+        PublishOutline();
         saveLabel = "Saving…";
         saveTimer?.Dispose();
         saveTimer = new System.Threading.Timer(
@@ -199,6 +232,80 @@
             };
             sourceMode = true;
         }
+        ApplyEditorTheme();
+        PublishOutline();
+    }
+
+    /// <summary>Hands the sidebar the current headings. Block index in document mode,
+    /// line index in source mode — OnJumpRequested interprets them the same way.</summary>
+    private void PublishOutline()
+    {
+        if (!sourceMode && richDoc is not null)
+        {
+            var entries = new List<OutlineEntry>();
+            for (var i = 0; i < richDoc.Blocks.Count; i++)
+            {
+                if (richDoc.Blocks[i] is { Kind: BlockKind.Heading } block)
+                    entries.Add(new OutlineEntry(i, block.HeadingLevel, block.Text));
+            }
+            Outline.Publish(this, entries);
+        }
+        else if (sourceMode && sourceDoc is not null && IsMarkdown)
+        {
+            Outline.Publish(this, MarkdownHeadings(sourceDoc.Text));
+        }
+        else
+        {
+            Outline.Clear(this);
+        }
+    }
+
+    private static List<OutlineEntry> MarkdownHeadings(string markdown)
+    {
+        var entries = new List<OutlineEntry>();
+        var inFence = false;
+        var lines = markdown.Split('\n');
+        for (var i = 0; i < lines.Length; i++)
+        {
+            var line = lines[i].TrimEnd();
+            if (line.StartsWith("```") || line.StartsWith("~~~"))
+            {
+                inFence = !inFence;
+                continue;
+            }
+            if (inFence)
+                continue;
+            var level = 0;
+            while (level < line.Length && level < 6 && line[level] == '#')
+                level++;
+            if (level > 0 && level < line.Length && line[level] == ' ')
+                entries.Add(new OutlineEntry(i, level, line[(level + 1)..].Trim()));
+        }
+        return entries;
+    }
+
+    private async Task OnJumpRequested(OutlineEntry entry)
+    {
+        if (!sourceMode && richDoc is not null && docView is not null)
+        {
+            for (var row = 0; row < richDoc.LineCount; row++)
+            {
+                var info = richDoc.RowInfoAt(row);
+                if (info.Block == entry.Block && info.FirstRowOfBlock)
+                {
+                    richDoc.MoveTo(row, 0, extend: false);
+                    await docView.FocusAsync();
+                    docView.RevealCaret();
+                    break;
+                }
+            }
+        }
+        else if (sourceMode && sourceDoc is not null && sourceView is not null)
+        {
+            sourceDoc.MoveTo(Math.Min(entry.Block, sourceDoc.LineCount - 1), 0, extend: false);
+            await sourceView.FocusAsync();
+            sourceView.RevealCaret();
+        }
     }
 
     private void OpenMentionDialog()
@@ -247,6 +354,9 @@
     public async ValueTask DisposeAsync()
     {
         disposed = true;
+        AppTheme.Changed -= OnAppThemeChanged;
+        Outline.JumpRequested -= OnJumpRequested;
+        Outline.Clear(this);
         saveTimer?.Dispose();
         presenceTimer?.Dispose();
         try

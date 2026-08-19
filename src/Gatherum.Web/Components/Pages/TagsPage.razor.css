@@ -1,0 +1,36 @@
+.tag-cloud {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+
+    & p { color: var(--on-surface-dim); }
+}
+
+.tag-cloud .tag { padding: 6px 14px; font-size: 14px; }
+
+.node-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    max-width: 640px;
+
+    & li { border-bottom: 1px solid var(--outline-dim); }
+
+    & a {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 9px 8px;
+        border-radius: var(--radius-s);
+        color: var(--on-surface);
+
+        &:hover { background: var(--hover); text-decoration: none; }
+    }
+}
+
+.node-icon {
+    display: grid;
+    place-items: center;
+    color: var(--on-surface-dim);
+    flex-shrink: 0;
+}

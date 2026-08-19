@@ -158,3 +158,65 @@ previews old Markdown in a read-only `DocumentView`, so previews look exactly li
 the editor; and the file-upload endpoints raise the request body cap to the same
 512 MB the pickers promise, because WASM-home uploads arrive as multipart HTTP
 instead of streaming over a circuit.
+
+## The redesign: scoped CSS per component, tokens via light-dark(), a JS-free-ish theme toggle
+The UI went from one global `app.css` to Blazor CSS isolation: every component owns a
+`*.razor.css` next to it, written in native modern CSS (nesting, `color-mix()`, pill
+`100vmax` radii), and `app.css` shrank to the design system — color tokens, type, and
+base element styles. The look is "what if Google made Wikipedia": Material-style chrome
+(tonal ground, the content pane as a floating rounded sheet, pill search box and
+buttons, chips, state-layer hovers, the four-hue node-graph mark) around
+Wikipedia-style articles (serif titles over a thin rule, calm reading measure, blue
+links). Theming is one mechanism, not two stylesheets: every color token is a
+`light-dark()` pair resolved through `color-scheme`, so OS preference works with zero
+extra rules and the sidebar toggle just sets `data-theme` on `<html>`. The toggle's
+logic lives in `gatherum.js` (localStorage + a delegated click handler — genuinely not
+Blazor-doable, since it must run before any circuit exists and paint-stable across
+enhanced navigation), loaded from a two-line inline module in `App.razor`'s head.
+Two isolation sharp edges worth remembering: elements rendered by child components
+(NavLink's `<a>`, InputFile's `<input>`) never carry the parent's scope attribute, so
+their state classes need top-level `::deep` selectors — nested `&.active` gets the
+scope attribute appended and silently never matches; and shared primitives used across
+components (buttons, inputs, `.tag` chips, `.upload-label`, `.document-surface`) stay
+global in `app.css` rather than being duplicated per scope.
+
+## The sidebar became reading context; the tree moved to /pages
+The sidebar no longer mirrors the whole tree — a hierarchy crammed into 290 pixels
+got thinner and less useful with every node added. It now shows three
+Wikipedia-flavored sections: **Contents** (the open article's headings),
+**Similar** (related articles), and **Recent** (last visits) — with the full tree,
+drop-zone, row menus and move modal unchanged, promoted to its own `/pages` page
+behind an "All pages" footer link. Decisions worth recording:
+- **Contents comes from the editor island, not from parsed HTML** — slopedit renders
+  to canvas, so there are no heading anchors to scroll to. The editor publishes its
+  heading blocks into a scoped `OutlineState` (the same cross-island pattern as
+  `TreeState`), and a click travels back as a jump request the editor answers with a
+  caret move plus `RevealCaret()`. No JavaScript involved. `OutlineState` tracks its
+  publisher because, when navigating between two articles, the outgoing editor
+  disposes *after* the incoming one has published and must not wipe the new outline.
+- **Similar is scored in `NodeService`**: one point per shared tag, two for a body
+  link in either direction — a deliberate mention beats a shared label — ties to the
+  most recently updated. Visibility is resolved before scoring so a private node's
+  tags never leak into the other user's ranking.
+- **Recent lives in localStorage** (`gatherum-recents`), written by the sidebar
+  island through plain `localStorage.getItem`/`setItem` interop — no addition to
+  `gatherum.js`, because none of it needs to run before Blazor exists. Titles are
+  refreshed on every visit, so renames self-heal, and entries whose node has been
+  deleted (or made private by the other user) drop out on their next failed load.
+
+## The editor canvas follows the theme
+slopedit paints with SkiaSharp, so the `light-dark()` tokens could never reach the
+document surface — it shipped hard-coded to a VS-dark palette and sat as a black slab
+inside the light theme's white sheet. Now `EditorThemes` (Gatherum.Client) restates
+the app.css tokens as `SKColor` palettes — surface, ink, selection, caret, dim
+markers, link blue — applied three ways: `EditorTheme` on the views, ink colors on
+each `RichDocument`, and a VS-light `SyntaxTheme` for source mode (dark keeps
+slopedit's default; each kind's default flags are copied over so behaviors like the
+link underline survive). Which mode is in effect comes from a new `watchTheme` export
+in gatherum.js — a MutationObserver on `data-theme` plus the OS preference's change
+event, neither reachable from Blazor — feeding a scoped `ThemeState` that the editor
+and version-preview islands watch; a toggle repaints the open canvas live, no reload.
+The palette is deliberately duplicated (CSS tokens and SKColors) rather than read
+from CSS at runtime: reading computed styles would need more interop for a set of
+values that changes about never — change a token in app.css, change it in
+EditorThemes.

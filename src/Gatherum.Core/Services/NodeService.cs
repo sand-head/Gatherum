@@ -183,6 +183,44 @@ public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeP
             .OrderBy(n => n.Title)
             .ToListAsync(ct);
 
+    /// <summary>Nodes related to this one: each shared tag scores one, a body link in
+    /// either direction scores two (a deliberate mention is a stronger signal than a
+    /// shared label). Ties go to the most recently updated.</summary>
+    public async Task<List<SimilarNode>> GetSimilarAsync(Guid userId, Guid nodeId, int limit = 5,
+        CancellationToken ct = default)
+    {
+        // Resolve visibility first so a private node's tags and links never leak
+        // into scores computed for the other user.
+        await GetVisibleAsync(userId, nodeId, ct);
+        limit = Math.Clamp(limit, 1, 20);
+
+        var tagIds = await db.NodeTags
+            .Where(t => t.NodeId == nodeId).Select(t => t.TagId).ToListAsync(ct);
+        var linkedIds = await db.NodeLinks
+            .Where(l => l.SourceId == nodeId || l.TargetId == nodeId)
+            .Select(l => l.SourceId == nodeId ? l.TargetId : l.SourceId)
+            .ToListAsync(ct);
+
+        var candidates = await authorizer.VisibleTo(db.Nodes, userId)
+            .Where(n => n.Id != nodeId)
+            .Where(n => linkedIds.Contains(n.Id) || n.Tags.Any(t => tagIds.Contains(t.TagId)))
+            .Select(n => new
+            {
+                n.Id, n.Title, n.MediaType, n.UpdatedAt,
+                SharedTags = n.Tags.Count(t => tagIds.Contains(t.TagId)),
+                IsLinked = linkedIds.Contains(n.Id),
+            })
+            .ToListAsync(ct);
+
+        return candidates
+            .OrderByDescending(c => c.SharedTags + (c.IsLinked ? 2 : 0))
+            .ThenByDescending(c => c.UpdatedAt)
+            .Take(limit)
+            .Select(c => new SimilarNode(c.Id, c.Title,
+                c.MediaType == MediaTypes.Markdown ? NodeKind.Page : NodeKind.File))
+            .ToList();
+    }
+
     /// <summary>Search text is tags + filename + description + extracted text; the
     /// title contributes through its own tsvector weight.</summary>
     public void RefreshSearchText(Node node)
@@ -254,3 +292,5 @@ public record TreeNode(Guid Id, Guid? ParentId, string Title, string MediaType, 
 }
 
 public record TagSummary(string Name, int NodeCount);
+
+public record SimilarNode(Guid Id, string Title, NodeKind Kind);

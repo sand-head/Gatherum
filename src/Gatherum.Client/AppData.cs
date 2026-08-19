@@ -37,6 +37,7 @@ public interface IAppData
 
     // A node's chrome: tags, file facts, history.
     Task<NodeInfo> GetNodeAsync(Guid nodeId);
+    Task<IReadOnlyList<RelatedInfo>> GetSimilarAsync(Guid nodeId, int limit);
     Task<IReadOnlyList<TagInfo>> ListTagsAsync(string? prefix = null);
     Task AddTagAsync(Guid nodeId, string tag);
     Task RemoveTagAsync(Guid nodeId, string tag);
@@ -65,6 +66,7 @@ public record FileFacts(string FileName, string MediaType, long SizeBytes, int V
 public record VersionInfo(int Number, string FileName, string MediaType, long SizeBytes,
     DateTimeOffset UploadedAt, bool IsText);
 public record TagInfo(string Name, int NodeCount);
+public record RelatedInfo(Guid Id, string Kind, string Title);
 public record KeyInfo(Guid Id, string Name, string Prefix, DateTimeOffset CreatedAt,
     DateTimeOffset? LastUsedAt, bool IsActive);
 public record CreatedKey(Guid Id, string Name, string Token);
@@ -153,6 +155,10 @@ public sealed class HttpAppData(HttpClient http) : IAppData
 
     public async Task<NodeInfo> GetNodeAsync(Guid nodeId) =>
         (await http.GetFromJsonAsync<NodeInfo>($"/api/nodes/{nodeId}"))!;
+
+    public async Task<IReadOnlyList<RelatedInfo>> GetSimilarAsync(Guid nodeId, int limit) =>
+        await http.GetFromJsonAsync<List<RelatedInfo>>(
+            $"/api/nodes/{nodeId}/similar?limit={limit}") ?? [];
 
     public async Task<IReadOnlyList<TagInfo>> ListTagsAsync(string? prefix = null)
     {

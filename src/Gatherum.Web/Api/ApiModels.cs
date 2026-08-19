@@ -60,6 +60,12 @@ public record NodeSummaryDto(Guid Id, string Kind, string Title, Guid? ParentId,
         new(node.Id, node.Kind.ToString(), node.Title, node.ParentId, node.Position);
 }
 
+public record SimilarDto(Guid Id, string Kind, string Title)
+{
+    public static SimilarDto From(SimilarNode node) =>
+        new(node.Id, node.Kind.ToString(), node.Title);
+}
+
 public record TreeNodeDto(Guid Id, Guid? ParentId, string Title, string MediaType, string Kind,
     int Position, bool IsPrivate)
 {

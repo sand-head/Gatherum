@@ -1,3 +1,178 @@
+/* App shell: a top header and the sidebar share the tonal ground with no seam
+   between them; the content pane floats below-right as a rounded sheet (the
+   sheet itself is the scroll container — slopedit pins its sticky strip to
+   .content, keep it scrolling). */
+
+.shell {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+}
+
+/* Brand left, a wide search pill dead-center, actions right — the 1fr side
+   columns keep the search centered regardless of how the sides differ. */
+.topbar {
+    display: grid;
+    grid-template-columns: 1fr minmax(240px, 680px) 1fr;
+    align-items: center;
+    gap: 16px;
+    padding: 10px 16px 8px 20px;
+}
+
+.topbar-search { width: 100%; }
+
+.brand {
+    font-size: 20px;
+    letter-spacing: 0.1px;
+    color: var(--on-surface);
+
+    &:hover { text-decoration: none; }
+}
+
+.topbar-actions {
+    justify-self: end;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.theme-toggle {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border: none;
+    border-radius: var(--radius-full);
+    color: var(--on-surface-dim);
+
+    &:hover { background: var(--hover); color: var(--on-surface); }
+
+    & svg { display: none; grid-area: 1 / 1; }
+}
+
+/* The toggle shows the mode that is active right now. */
+:root:not([data-theme]) .icon-system { display: block; }
+:root[data-theme="light"] .icon-light { display: block; }
+:root[data-theme="dark"] .icon-dark { display: block; }
+
+.account-button {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border: none;
+    border-radius: var(--radius-full);
+    color: var(--on-surface-dim);
+
+    &:hover { background: var(--hover); color: var(--on-surface); }
+}
+
+/* A native popover renders in the top layer with light-dismiss; pin it under
+   the button's corner and dress it like the other Material menus. */
+.account-menu {
+    position: fixed;
+    inset: auto;
+    top: 52px;
+    right: 12px;
+    margin: 0;
+    display: none;
+    flex-direction: column;
+    min-width: 180px;
+    padding: 6px;
+    background: var(--surface-raised);
+    color: var(--on-surface);
+    border: 1px solid var(--outline-dim);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-2);
+
+    &:popover-open { display: flex; animation: menu-in 0.12s ease-out; }
+
+    & a, & form button {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+        font: 400 14px/1.5 var(--font-ui);
+        color: var(--on-surface);
+        background: none;
+        border: none;
+        border-radius: var(--radius-s);
+        text-align: left;
+        padding: 8px 12px;
+
+        & svg { color: var(--on-surface-dim); flex-shrink: 0; }
+
+        &:hover { background: var(--hover); text-decoration: none; }
+    }
+}
+
+@keyframes menu-in {
+    from { opacity: 0; transform: translateY(-4px); }
+}
+
+.body {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+}
+
+.sidebar {
+    width: 290px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 6px 12px 8px;
+}
+
+.sidebar-foot {
+    margin-top: auto;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 8px 2px 4px;
+    border-top: 1px solid var(--outline-dim);
+}
+
+/* NavLink renders the <a> itself: keep these ::deep so the scope attribute
+   is not required on the link element. */
+.sidebar-foot ::deep a {
+    font-weight: 500;
+    font-size: 13px;
+    color: var(--on-surface-dim);
+    padding: 5px 11px;
+    border-radius: var(--radius-full);
+
+    &:hover { background: var(--hover); color: var(--on-surface); text-decoration: none; }
+}
+
+.sidebar-foot ::deep a.active { color: var(--primary); }
+
+.content {
+    flex: 1;
+    min-width: 0;
+    margin: 0 12px 10px 2px;
+    padding: 32px clamp(24px, 5vw, 56px) 48px;
+    background: var(--surface);
+    border: 1px solid var(--outline-dim);
+    border-radius: var(--radius-l);
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+}
+
+@media (max-width: 900px) {
+    .topbar {
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        gap: 10px;
+        padding: 8px 10px 6px 14px;
+    }
+    .sidebar { width: 236px; }
+    .content { margin: 0 6px 6px 0; padding: 20px; }
+}
+
+/* Blazor's built-in error bar — hidden in app.css; these rules style it if
+   a dev re-enables it. Light-only by design. */
 #blazor-error-ui {
     color-scheme: light only;
     background: lightyellow;
@@ -10,11 +185,11 @@
     position: fixed;
     width: 100%;
     z-index: 1000;
-}
 
-    #blazor-error-ui .dismiss {
+    & .dismiss {
         cursor: pointer;
         position: absolute;
         right: 0.75rem;
         top: 0.5rem;
     }
+}

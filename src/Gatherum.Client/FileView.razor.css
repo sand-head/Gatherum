@@ -1,0 +1,67 @@
+.file-view {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.file-preview {
+    & img, & video {
+        max-width: 100%;
+        max-height: 65vh;
+        border-radius: var(--radius);
+    }
+
+    & iframe {
+        width: 100%;
+        height: 70vh;
+        border: 1px solid var(--outline-dim);
+        border-radius: var(--radius);
+    }
+
+    & audio { width: 100%; }
+}
+
+.file-text { max-height: 60vh; overflow: auto; }
+
+.file-fallback {
+    color: var(--on-surface-dim);
+    padding: 40px 30px;
+    text-align: center;
+    border: 1px dashed var(--outline);
+    border-radius: var(--radius);
+}
+
+/* Facts as a knowledge-panel card. */
+.file-facts {
+    display: grid;
+    grid-template-columns: 90px 1fr;
+    gap: 6px 14px;
+    margin: 0;
+    background: color-mix(in srgb, var(--surface-dim) 55%, transparent);
+    border: 1px solid var(--outline-dim);
+    border-radius: var(--radius);
+    padding: 16px 20px;
+
+    & dt { color: var(--on-surface-dim); }
+    & dd { margin: 0; min-width: 0; }
+    & .hash { font-family: var(--font-mono); font-size: 12px; word-break: break-all; }
+}
+
+.file-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 4px;
+}
+
+.file-description {
+    & h3 {
+        font: 500 12px/1.6 var(--font-ui);
+        color: var(--on-surface-dim);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        margin: 0 0 8px;
+    }
+
+    & textarea { width: 100%; min-height: 70px; margin-bottom: 8px; resize: vertical; }
+}

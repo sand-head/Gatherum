@@ -1,0 +1,11 @@
+/* The whole tree gets the article measure — wide rows scale where the old
+   sidebar tree could not. */
+.pages {
+    max-width: 760px;
+}
+
+.hint {
+    margin: -6px 0 18px;
+    font-size: 13.5px;
+    color: var(--on-surface-dim);
+}

@@ -1,0 +1,57 @@
+/* One Drive-style "New" pill; page creation and upload live in its menu. */
+
+.header-actions { position: relative; }
+
+.new-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 12px 6px 15px;
+
+    & .caret { margin-left: -2px; }
+}
+
+/* Invisible click-away layer under the menu. */
+.scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+}
+
+.menu {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 6px);
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    min-width: 180px;
+    padding: 6px;
+    background: var(--surface-raised);
+    border: 1px solid var(--outline-dim);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-2);
+    animation: menu-in 0.12s ease-out;
+}
+
+@keyframes menu-in {
+    from { opacity: 0; transform: translateY(-4px); }
+}
+
+.menu button, .menu .menu-upload {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font: 400 14px/1.5 var(--font-ui);
+    color: var(--on-surface);
+    background: none;
+    border: none;
+    border-radius: var(--radius-s);
+    text-align: left;
+    width: 100%;
+    padding: 8px 12px;
+
+    & svg { color: var(--on-surface-dim); flex-shrink: 0; }
+
+    &:hover { background: var(--hover); }
+}

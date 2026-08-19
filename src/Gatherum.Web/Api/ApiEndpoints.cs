@@ -154,6 +154,13 @@ public static class ApiEndpoints
             return Results.Ok(backlinks.Select(NodeSummaryDto.From));
         });
 
+        api.MapGet("/nodes/{id:guid}/similar", async (NodeService nodes, HttpContext http,
+            Guid id, int? limit) =>
+        {
+            var similar = await nodes.GetSimilarAsync(http.User.GetUserId(), id, limit ?? 5);
+            return Results.Ok(similar.Select(SimilarDto.From));
+        });
+
         api.MapGet("/nodes/{id:guid}/versions", async (NodeService nodes, HttpContext http, Guid id) =>
         {
             var node = await nodes.GetWithBodyAsync(http.User.GetUserId(), id);

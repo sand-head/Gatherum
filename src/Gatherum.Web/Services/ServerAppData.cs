@@ -154,6 +154,13 @@ public sealed class ServerAppData(
             node.Tags.Select(t => t.Tag!.Name).Order().ToList(), file);
     }
 
+    public async Task<IReadOnlyList<RelatedInfo>> GetSimilarAsync(Guid nodeId, int limit)
+    {
+        var userId = await UserIdAsync();
+        var similar = await ops.Nodes(s => s.GetSimilarAsync(userId, nodeId, limit));
+        return similar.Select(s => new RelatedInfo(s.Id, s.Kind.ToString(), s.Title)).ToList();
+    }
+
     public async Task<IReadOnlyList<TagInfo>> ListTagsAsync(string? prefix = null)
     {
         var userId = await UserIdAsync();

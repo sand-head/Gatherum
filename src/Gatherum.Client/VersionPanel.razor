@@ -1,7 +1,9 @@
 @using SlopEdit.Blazor
 @using SlopEdit.Core.Rich
+@implements IDisposable
 @inject IAppData Data
 @inject NavigationManager Navigation
+@inject ThemeState AppTheme
 
 <section class="version-panel">
     <button class="ghost" @onclick="ToggleAsync">
@@ -38,6 +40,7 @@
         {
             <div class="history-preview document-surface">
                 <DocumentView Grid="previewDoc" ReadOnly="true" ImageSource="Data.GetImageAsync"
+                              Theme="EditorThemes.For(AppTheme.IsDark)"
                               AriaLabel="Version preview" />
             </div>
         }
@@ -57,6 +60,24 @@
     private RichDocument? previewDoc;
     private string? previewText;
 
+    protected override async Task OnInitializedAsync()
+    {
+        if (RendererInfo.IsInteractive)
+        {
+            await AppTheme.EnsureWatchingAsync();
+            AppTheme.Changed += OnAppThemeChanged;
+        }
+    }
+
+    private void OnAppThemeChanged() => _ = InvokeAsync(() =>
+    {
+        if (previewDoc is not null)
+            EditorThemes.ApplyInk(previewDoc, AppTheme.IsDark);
+        StateHasChanged();
+    });
+
+    public void Dispose() => AppTheme.Changed -= OnAppThemeChanged;
+
     private async Task ToggleAsync()
     {
         open = !open;
@@ -74,6 +95,7 @@
         if (version.MediaType == "text/markdown")
         {
             previewDoc = MarkdownSerializer.FromMarkdown(text);
+            EditorThemes.ApplyInk(previewDoc, AppTheme.IsDark);
             previewText = null;
         }
         else

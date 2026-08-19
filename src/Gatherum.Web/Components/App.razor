@@ -6,6 +6,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <base href="/" />
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    @* Header chrome bootstrap: apply the saved theme as early as possible and
+       wire the static toggle and account menu. The logic lives in gatherum.js
+       (the one JS file); this only loads and calls it. *@
+    <script type="module">import { initChrome } from './js/gatherum.js'; initChrome();</script>
     <ResourcePreloader />
     <link rel="stylesheet" href="@Assets["app.css"]" />
     <link rel="stylesheet" href="@Assets["Gatherum.Web.styles.css"]" />
