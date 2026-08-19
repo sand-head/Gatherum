@@ -271,3 +271,62 @@ since the MVP; nothing rendered them. The implementation went with GitHub's actu
 alert vocabulary — note, tip, important, warning, caution — because that is what people
 paste in from elsewhere and what other renderers understand, and the docs were corrected
 to match. A quote whose first line names anything else stays an ordinary quote.
+
+## Analysis is a second seam, not a fourth text extractor
+`ITextExtractor` looked like the obvious home for OCR and transcription — it already
+turns bytes into search text, and first-claimer-wins already routes by media type. It
+was the wrong home for one reason: extraction runs *inside* the upload request, awaited
+before `SaveChangesAsync`. PdfPig answers in milliseconds; transcribing an hour of video
+does not, and no upload should hold a connection open while a model thinks. So
+`IMediaAnalyzer` is its own seam with its own contract — it returns a transcript *and* a
+summary rather than one string, it is expected to fail, and it runs on
+`MediaAnalysisWorker` after the bytes are already committed. The rule that seams need a
+stated second implementation is met by the shape of the thing: a local whisper.cpp
+sidecar and a hosted API are both drop-ins behind it, and swapping engines must not mean
+touching `FileService`.
+
+## The engine is one OpenAI-compatible endpoint you run yourself (owner direction)
+Gatherum's premise is that the knowledge base is *yours*, and a per-node privacy flag
+means little if uploads are shipped to a vendor to be described. The owner runs
+llama.cpp with an any-to-any model, so `OpenAiMediaAnalyzer` speaks exactly one wire
+format — `/chat/completions` with multimodal content parts — and covers reading an
+image, hearing a recording, and writing both summaries through it. Media is inlined as
+base64 rather than referenced by URL: a local runner has no route back to us, and
+inlining is what keeps the bytes on the machine they were uploaded to. With no endpoint
+configured no analyzer is registered at all, so an unconfigured Gatherum behaves exactly
+as it did before any of this existed.
+
+## Transcript and summary are indexed side by side
+They answer different questions and neither substitutes for the other. The transcript is
+verbatim, so it answers the exact phrase someone remembers seeing on a whiteboard or
+hearing forty minutes into a call. The summary is a description, so it answers the
+subject nobody ever said out loud — the photo of a server rack that contains no word
+resembling "server rack". Both land in `Node.SearchText` and both are asked for
+separately, in two calls with two prompts: a model asked for the words *and* the gist at
+once returns the words paraphrased into the gist, and the whole point of a transcript is
+that it is exact.
+
+## Derived text keys off the hash, so it is paid for once
+A model's answer belongs to the bytes, not to the version row, so re-uploading a file
+that is already in storage, or restoring an old version, copies the transcript instead of
+re-earning it — `PlanAnalysisAsync` looks for a completed version with the same SHA-256
+before ever queueing. That falls straight out of content-addressing, and it is what makes
+a restore a row insert here too.
+
+## Switching analysis on reaches backwards
+An endpoint configured today would otherwise only ever describe tomorrow's uploads, which
+makes the feature feel broken for the photos already in the tree. The worker's startup
+sweep therefore marks the *current* version of every claimed node Pending
+(`BackfillExisting`, on by default) and works through the backlog one file at a time.
+Only current versions: history is for reading back, not for spending an afternoon of a
+model on. It is a config flag because the first run against a large library is measured
+in hours.
+
+## Failed analysis is recorded on the version, not retried
+A model that is down, a video with no ffmpeg to split it, a file past the size ceiling —
+all of them land as `Failed` plus the message, which the file view shows and MCP returns.
+No retry loop and no backoff schedule: the failures that matter here are configuration
+mistakes that a retry would repeat forever, and the fix is to correct the config and let
+the restart sweep pick the work back up. The upload itself is never at risk either way —
+the bytes are stored, versioned, and searchable by title and tags before any model is
+asked anything.

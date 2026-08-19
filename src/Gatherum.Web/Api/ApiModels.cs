@@ -35,6 +35,10 @@ public record NodeDto(
         node.File is { Versions.Count: > 0 } file ? FileInfoDto.From(file) : null);
 }
 
+/// <summary>What a file is, over the wire. <c>ExtractedText</c> is what the bytes
+/// literally contain; <c>Transcript</c> and <c>Summary</c> are what a model read, heard,
+/// or made of a medium that contains no text at all — an agent reading a photo or a
+/// recording over MCP gets the same words search does.</summary>
 public record FileInfoDto(
     string FileName,
     string MediaType,
@@ -42,7 +46,11 @@ public record FileInfoDto(
     int Version,
     string Sha256,
     string Description,
-    string ExtractedText)
+    string ExtractedText,
+    string Transcript,
+    string Summary,
+    string Analysis,
+    string? AnalysisError)
 {
     public static FileInfoDto From(FileBody file) => new(
         file.Current.FileName,
@@ -51,7 +59,11 @@ public record FileInfoDto(
         file.Current.Number,
         file.Current.Hash,
         file.Description,
-        file.Current.ExtractedText);
+        file.Current.ExtractedText,
+        file.Current.Transcript,
+        file.Current.Summary,
+        file.Current.Analysis.ToString(),
+        file.Current.AnalysisError.Length > 0 ? file.Current.AnalysisError : null);
 }
 
 public record NodeSummaryDto(Guid Id, string Kind, string Title, Guid? ParentId, int Position)

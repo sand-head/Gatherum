@@ -256,14 +256,22 @@ public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeP
             .ToList();
     }
 
-    /// <summary>Search text is tags + filename + description + extracted text; the
-    /// title contributes through its own tsvector weight.</summary>
+    /// <summary>Search text is tags + filename + description + extracted text, plus
+    /// whatever a model read or heard in the file; the title contributes through its
+    /// own tsvector weight. A transcript and a summary are indexed side by side on
+    /// purpose: the transcript answers an exact phrase someone remembers seeing or
+    /// hearing, the summary answers the subject nobody said out loud.</summary>
     public void RefreshSearchText(Node node)
     {
         var tags = string.Join(' ', node.Tags.Select(t => t.Tag!.Name));
-        node.SearchText = node.File is { Versions.Count: > 0 } file
-            ? $"{tags}\n{file.Current.FileName}\n{file.Description}\n{file.Current.ExtractedText}"
-            : tags;
+        if (node.File is not { Versions.Count: > 0 } file)
+        {
+            node.SearchText = tags;
+            return;
+        }
+        var current = file.Current;
+        node.SearchText = string.Join('\n', tags, current.FileName, file.Description,
+            current.ExtractedText, current.Transcript, current.Summary);
     }
 
     public async Task ReplaceLinksAsync(Node node, IReadOnlySet<Guid> targetIds, CancellationToken ct)
