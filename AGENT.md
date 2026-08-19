@@ -6,7 +6,7 @@ milestone changes something it describes.
 ## What Gatherum is
 
 A self-hosted knowledge base for two people where **pages and files are the same kind
-of thing**: every item is a `Node` in one tree with tags, links, versions, and
+of thing**: every item is a `Node` in one tree with categories, links, versions, and
 searchable text — and a page is simply a node whose file is Markdown. One tree, one
 search, one login, one API, plus an MCP server so agents are first-class users.
 C#/Blazor end to end — static shell with Interactive Auto islands for everything
@@ -37,8 +37,9 @@ auto-login. Migrations: `dotnet ef migrations add <Name> -p src/Gatherum.Infrast
 ## Repo map
 
 - `src/Gatherum.Core` — domain entities, `GatherumDbContext`, **application services**
-  (`Services/`) where every business rule lives (`NodeService` = tree/tags/links/title
-  resolution, `FileService` = bodies/versions/text editing), `Markdown/MarkdownContent`
+  (`Services/`) where every business rule lives (`NodeService` = tree/links/title
+  resolution, `CategoryService` = the taxonomy and what is filed in it,
+  `FileService` = bodies/versions/text editing), `Markdown/MarkdownContent`
   and `Markdown/WikiLinkSyntax` (the link conventions, read server-side), and the three
   seam interfaces in `Abstractions/`.
 - `src/Gatherum.Infrastructure` — implementations with real dependencies: filesystem
@@ -49,7 +50,7 @@ auto-login. Migrations: `dotnet ef migrations add <Name> -p src/Gatherum.Infrast
 - `src/Gatherum.Client` — every interactive component, all Interactive Auto: the
   editor (`NodeEditor` hosting slopedit's `DocumentView` for pages and docx,
   `EditorView` for code/source), tree, sidebar panels (contents/similar/recent),
-  search palette, node header, tags, version
+  search palette, node header, categories, version
   panel, file view, and settings keys — plus Gatherum's Markdown dialect, which lives
   here because it is the editor's word: `GatherumMarkdown` (the extension set and the
   only read/write door), `AsideExtension`/`CalloutExtension`/`BlockTags`,
@@ -73,6 +74,9 @@ fresh DI scope via `Services/AppOperations`.
 
 - One `Node` entity, one body model: every node's content is a file version in
   content-addressed storage; `Kind` is derived from the media type, never stored.
+- Two trees, and only two: nodes have one place in the node tree, and categories nest
+  in their own. A category is identified by its path — `CategoryPath` is the only place
+  that decides how one is spelled — and nothing else names a subject. No tags.
 - MCP and REST stay thin adapters over the same application services. No logic in
   endpoints, tools, or components.
 - Storage (`IFileStorage`), extraction (`ITextExtractor`), and authorization
@@ -139,7 +143,7 @@ touch the server only through `IAppData`.
 
 - Pure logic (markdown links/rendering, hashing, snippets, media types) gets plain
   unit tests.
-- Service behavior (tree ops, privacy, tags, versions, search) gets tests against real
+- Service behavior (tree ops, privacy, categories, versions, search) gets tests against real
   Postgres via `PostgresFixture` + `ServiceHarness` — never mock the DbContext.
 - Cross-surface flows belong in `AppIntegrationTests` (WebApplicationFactory + API key).
 - Single test: `dotnet test --filter "DisplayName~<fragment>"`.

@@ -1,13 +1,13 @@
-.tag-editor {
+.category-editor {
     display: flex;
     align-items: center;
     gap: 6px;
     flex-wrap: wrap;
 }
 
-/* The "add tag" affordance is a ghost chip that becomes real on entry. */
-.tag-input {
-    width: 90px;
+/* The "add category" affordance is a ghost chip that becomes real on entry. */
+.category-input {
+    width: 110px;
     font: 500 13px/1.5 var(--font-ui);
     color: var(--on-surface-dim);
     background: none;

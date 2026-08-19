@@ -136,3 +136,23 @@ had to learn:
 
 The chrome is *derived* from block tags on every edit rather than pinned at parse, since
 block indices move as a page is written. All slopedit packages moved to 2.1.0.
+
+### Post-revision: nested categories, and tags are gone
+
+Tags left the app at the owner's request — Wikipedia has none, Google Docs has none, and
+finding an article is search's job. What replaced them is a taxonomy: `Category` rows
+that nest, addressed by path (`homelab/podman`), with `CategoryService` owning the
+spelling rules, the creation-by-use, the member counts, and the maintenance (rename,
+re-nest, delete, each carrying its subcategories and its members' search text along). A
+node's search text now carries a category's whole ancestry, so the parent finds the
+child's pages; "Similar" scores a shared category above a shared corner of the taxonomy
+and a body link above both. `/categories` browses the tree and every category page is
+editable in place; the node header's chips file and unfile; REST gained
+`/api/categories…` and MCP gained `add_category`, `remove_category`, `list_categories`
+and `browse_category` in place of `add_tag`/`list_tags`. The migration turns every
+existing tag into a root category of the same name.
+
+### Shoulds — status (updated again)
+
+- Tag pages with autocomplete: **superseded** — categories, with path autocomplete.
+- Drag-and-drop reorder/reparent, public share links, export: still TODO.

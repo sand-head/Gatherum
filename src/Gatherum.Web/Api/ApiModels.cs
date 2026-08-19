@@ -10,7 +10,7 @@ public record NodeDto(
     Guid? ParentId,
     int Position,
     bool IsPrivate,
-    IReadOnlyList<string> Tags,
+    IReadOnlyList<CategoryRefDto> Categories,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
     string? Markdown,
@@ -26,7 +26,7 @@ public record NodeDto(
         node.ParentId,
         node.Position,
         node.IsPrivate,
-        node.Tags.Select(t => t.Tag!.Name).Order().ToList(),
+        node.Categories.Select(c => CategoryRefDto.From(c.Category!)).OrderBy(c => c.Path).ToList(),
         node.CreatedAt,
         node.UpdatedAt,
         node is { MediaType: MediaTypes.Markdown, File.Versions.Count: > 0 }
@@ -58,6 +58,30 @@ public record NodeSummaryDto(Guid Id, string Kind, string Title, Guid? ParentId,
 {
     public static NodeSummaryDto From(Node node) =>
         new(node.Id, node.Kind.ToString(), node.Title, node.ParentId, node.Position);
+}
+
+/// <summary>A category as a node wears it: the path is its identity, the name is what
+/// the chip says.</summary>
+public record CategoryRefDto(string Path, string Name)
+{
+    public static CategoryRefDto From(Category category) => new(category.Path, category.Name);
+}
+
+public record CategoryDto(string Path, string Name, string? ParentPath, int Members,
+    int SubtreeMembers)
+{
+    public static CategoryDto From(CategorySummary category) => new(category.Path, category.Name,
+        category.ParentPath, category.Members, category.SubtreeMembers);
+}
+
+public record CategoryViewDto(CategoryDto Category, IReadOnlyList<CategoryDto> Ancestors,
+    IReadOnlyList<CategoryDto> Subcategories, IReadOnlyList<NodeSummaryDto> Nodes)
+{
+    public static CategoryViewDto From(CategoryView view) => new(
+        CategoryDto.From(view.Category),
+        view.Ancestors.Select(CategoryDto.From).ToList(),
+        view.Subcategories.Select(CategoryDto.From).ToList(),
+        view.Nodes.Select(NodeSummaryDto.From).ToList());
 }
 
 public record SimilarDto(Guid Id, string Kind, string Title)
@@ -105,7 +129,9 @@ public record UpdatePageRequest(string Markdown, string? Title);
 public record SaveTextRequest(string Text);
 public record MoveNodeRequest(Guid? NewParentId, int? Position);
 public record RenameRequest(string Title);
-public record TagRequest(string Tag);
+public record CategoryRequest(string Path);
+public record RenameCategoryRequest(string Path, string Name);
+public record MoveCategoryRequest(string Path, string? NewParentPath);
 public record CreateKeyRequest(string Name);
 public record SetPrivateRequest(bool IsPrivate);
 public record DescriptionRequest(string Description);

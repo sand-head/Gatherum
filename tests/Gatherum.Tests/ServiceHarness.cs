@@ -15,6 +15,7 @@ public sealed class ServiceHarness : IAsyncDisposable
 {
     public GatherumDbContext Db { get; }
     public NodeService Nodes { get; }
+    public CategoryService Categories { get; }
     public FileService Files { get; }
     public SearchService Search { get; }
     public ManualClock Clock { get; } = new();
@@ -29,6 +30,7 @@ public sealed class ServiceHarness : IAsyncDisposable
         var storage = new FileSystemStorage(Options.Create(
             new GatherumOptions { Storage = new StorageOptions { Root = storageRoot } }));
         Nodes = new NodeService(Db, authorizer, Clock);
+        Categories = new CategoryService(Db, Nodes, authorizer);
         Files = new FileService(Db, Nodes, storage,
             [new PlainTextExtractor(), new PdfTextExtractor(), new DocxTextExtractor(),
                 new ImageMetadataExtractor()],

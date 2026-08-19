@@ -1,0 +1,134 @@
+@page "/categories"
+@page "/categories/{*Path}"
+@inherits GatherumComponent
+@inject AppOperations Ops
+@using Gatherum.Core.Domain
+@using Gatherum.Client
+
+<PageTitle>@(view?.Category.Name ?? "Categories") — Gatherum</PageTitle>
+
+@if (Path is null)
+{
+    <h1>Categories</h1>
+    <p class="hint">
+        What the wiki is about, arranged. A category nests inside another, and a page
+        filed under "Homelab / Podman" is a page about the homelab too.
+    </p>
+    <ul class="category-tree">
+        @foreach (var category in categories)
+        {
+            <li style="--depth: @Depth(category.Path)">
+                <a href="@CategoryUrl.Page(category.Path)">@category.Name</a>
+                <span class="count">@category.SubtreeMembers</span>
+            </li>
+        }
+    </ul>
+    @if (categories.Count == 0)
+    {
+        <p class="hint">No categories yet. File a page from its header to start one.</p>
+    }
+}
+else if (view is null)
+{
+    <div class="node-missing">No category by that name.</div>
+}
+else
+{
+    <nav class="breadcrumb">
+        <a href="/categories">Categories</a>
+        @foreach (var ancestor in view.Ancestors)
+        {
+            <span aria-hidden="true">›</span>
+            <a href="@CategoryUrl.Page(ancestor.Path)">@ancestor.Name</a>
+        }
+    </nav>
+    <h1>@view.Category.Name</h1>
+
+    @if (view.Subcategories.Count > 0)
+    {
+        <h2>Subcategories</h2>
+        <div class="category-cloud">
+            @foreach (var child in view.Subcategories)
+            {
+                <a class="category" href="@CategoryUrl.Page(child.Path)">
+                    @child.Name <span class="count">@child.SubtreeMembers</span>
+                </a>
+            }
+        </div>
+    }
+
+    <h2>
+        Pages in @view.Category.Name
+        @if (view.Subcategories.Count > 0)
+        {
+            <a class="depth-toggle" href="@($"{CategoryUrl.Page(view.Category.Path)}?deep={(Deep ? "false" : "true")}")">
+                @(Deep ? "this category only" : "include subcategories")
+            </a>
+        }
+    </h2>
+    <ul class="node-list">
+        @foreach (var node in view.Nodes)
+        {
+            <li>
+                <a href="/nodes/@node.Id">
+                    <span class="node-icon">
+                        @if (node.Kind == NodeKind.Page)
+                        {
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                 stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                <path d="M14 2v6h6M9 13h6M9 17h6" />
+                            </svg>
+                        }
+                        else
+                        {
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                 stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                <path d="M14 2v6h6" />
+                            </svg>
+                        }
+                    </span>
+                    @node.Title
+                </a>
+            </li>
+        }
+        @if (view.Nodes.Count == 0)
+        {
+            <li class="hint">Nothing filed here yet.</li>
+        }
+    </ul>
+
+    <CategoryTools @rendermode="InteractiveAuto" Path="@view.Category.Path"
+                   Name="@view.Category.Name" />
+}
+
+@code {
+    [Parameter] public string? Path { get; set; }
+    [SupplyParameterFromQuery] public bool Deep { get; set; }
+
+    private List<CategorySummary> categories = [];
+    private CategoryView? view;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Path is null)
+        {
+            categories = await Ops.Categories(s => s.ListAsync(UserId));
+            view = null;
+            return;
+        }
+        try
+        {
+            view = await Ops.Categories(s => s.GetAsync(UserId, Path, Deep));
+        }
+        catch (Gatherum.Core.NotFoundException)
+        {
+            view = null;
+        }
+    }
+
+    /// <summary>How deep a path sits, which is all the tree rendering needs: the list
+    /// arrives in path order, so indentation alone reproduces the nesting.</summary>
+    private static int Depth(string path) => path.Count(c => c == CategoryPath.Separator);
+}

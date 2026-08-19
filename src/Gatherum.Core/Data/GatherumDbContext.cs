@@ -8,8 +8,8 @@ public class GatherumDbContext(DbContextOptions<GatherumDbContext> options) : Db
     public DbSet<Node> Nodes => Set<Node>();
     public DbSet<FileBody> FileBodies => Set<FileBody>();
     public DbSet<FileVersion> FileVersions => Set<FileVersion>();
-    public DbSet<Tag> Tags => Set<Tag>();
-    public DbSet<NodeTag> NodeTags => Set<NodeTag>();
+    public DbSet<Category> Categories => Set<Category>();
+    public DbSet<NodeCategory> NodeCategories => Set<NodeCategory>();
     public DbSet<NodeLink> NodeLinks => Set<NodeLink>();
     public DbSet<User> Users => Set<User>();
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
@@ -51,19 +51,22 @@ public class GatherumDbContext(DbContextOptions<GatherumDbContext> options) : Db
             version.HasIndex(v => new { v.NodeId, v.Number }).IsUnique();
         });
 
-        model.Entity<Tag>(tag =>
+        model.Entity<Category>(category =>
         {
-            tag.Property(t => t.Name).HasMaxLength(100);
-            tag.HasIndex(t => t.Name).IsUnique();
+            category.Property(c => c.Name).HasMaxLength(CategoryPath.MaxSegmentLength);
+            category.Property(c => c.Path).HasMaxLength(1000);
+            category.HasIndex(c => c.Path).IsUnique();
+            category.HasOne(c => c.Parent).WithMany(c => c.Children)
+                .HasForeignKey(c => c.ParentId).OnDelete(DeleteBehavior.Cascade);
         });
 
-        model.Entity<NodeTag>(nodeTag =>
+        model.Entity<NodeCategory>(membership =>
         {
-            nodeTag.HasKey(nt => new { nt.NodeId, nt.TagId });
-            nodeTag.HasOne(nt => nt.Node).WithMany(n => n.Tags)
-                .HasForeignKey(nt => nt.NodeId).OnDelete(DeleteBehavior.Cascade);
-            nodeTag.HasOne(nt => nt.Tag).WithMany(t => t.Nodes)
-                .HasForeignKey(nt => nt.TagId).OnDelete(DeleteBehavior.Cascade);
+            membership.HasKey(m => new { m.NodeId, m.CategoryId });
+            membership.HasOne(m => m.Node).WithMany(n => n.Categories)
+                .HasForeignKey(m => m.NodeId).OnDelete(DeleteBehavior.Cascade);
+            membership.HasOne(m => m.Category).WithMany(c => c.Nodes)
+                .HasForeignKey(m => m.CategoryId).OnDelete(DeleteBehavior.Cascade);
         });
 
         model.Entity<NodeLink>(link =>

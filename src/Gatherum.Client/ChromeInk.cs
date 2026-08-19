@@ -10,7 +10,7 @@ namespace Gatherum.Client;
 /// changes — see <see cref="DocumentChrome"/>.</summary>
 /// <param name="CardFill">An aside's paper — <c>--surface-dim</c>.</param>
 /// <param name="CardBorder">Its outline — <c>--outline</c>.</param>
-/// <param name="Band">The tint behind an infobox's headings — <c>--tag-bg</c>.</param>
+/// <param name="Band">The tint behind an infobox's headings — <c>--chip-bg</c>.</param>
 /// <param name="DeadLink">A <c>[[wiki link]]</c> whose title names nothing — <c>--danger</c>.</param>
 public sealed record ChromeInk(CellColor CardFill, CellColor CardBorder, CellColor Band,
     CellColor DeadLink, CellColor Surface, bool IsDark)

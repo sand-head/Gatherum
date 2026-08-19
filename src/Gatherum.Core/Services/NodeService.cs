@@ -5,8 +5,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Gatherum.Core.Services;
 
-/// <summary>The tree rules: positions, moves, privacy, tags, and links. Bodies —
-/// bytes, versions, text — belong to FileService.</summary>
+/// <summary>The tree rules: positions, moves, privacy, and links. Bodies — bytes,
+/// versions, text — belong to FileService; the taxonomy to CategoryService.</summary>
 public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeProvider clock)
 {
     /// <summary>Creates the tree half of a node; FileService attaches the body before
@@ -48,7 +48,7 @@ public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeP
     {
         var node = await db.Nodes
             .Include(n => n.File!).ThenInclude(f => f.Versions)
-            .Include(n => n.Tags).ThenInclude(t => t.Tag)
+            .Include(n => n.Categories).ThenInclude(c => c.Category)
             .FirstOrDefaultAsync(n => n.Id == nodeId, ct);
         if (node is null || !authorizer.CanSee(node, userId))
             throw new NotFoundException($"Node {nodeId} not found.");
@@ -126,57 +126,6 @@ public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeP
         await db.SaveChangesAsync(ct);
     }
 
-    public async Task AddTagAsync(Guid userId, Guid nodeId, string tagName, CancellationToken ct = default)
-    {
-        var name = NormalizeTag(tagName);
-        if (name.Length == 0)
-            return;
-        var node = await GetWithBodyAsync(userId, nodeId, ct);
-        if (node.Tags.Any(t => t.Tag!.Name == name))
-            return;
-        var tag = await db.Tags.FirstOrDefaultAsync(t => t.Name == name, ct)
-            ?? db.Tags.Add(new Tag { Id = Guid.NewGuid(), Name = name }).Entity;
-        node.Tags.Add(new NodeTag { NodeId = node.Id, TagId = tag.Id, Tag = tag });
-        RefreshSearchText(node);
-        await db.SaveChangesAsync(ct);
-    }
-
-    public async Task RemoveTagAsync(Guid userId, Guid nodeId, string tagName, CancellationToken ct = default)
-    {
-        var name = NormalizeTag(tagName);
-        var node = await GetWithBodyAsync(userId, nodeId, ct);
-        var nodeTag = node.Tags.FirstOrDefault(t => t.Tag!.Name == name);
-        if (nodeTag is null)
-            return;
-        node.Tags.Remove(nodeTag);
-        db.NodeTags.Remove(nodeTag);
-        RefreshSearchText(node);
-        await db.SaveChangesAsync(ct);
-    }
-
-    public Task<List<TagSummary>> ListTagsAsync(Guid userId, string? prefix = null,
-        CancellationToken ct = default)
-    {
-        var normalized = prefix is null ? null : NormalizeTag(prefix);
-        return db.Tags
-            .Where(t => normalized == null || t.Name.StartsWith(normalized))
-            .Where(t => t.Nodes.Any(nt =>
-                nt.Node!.PrivateToUserId == null || nt.Node.PrivateToUserId == userId))
-            .OrderBy(t => t.Name)
-            .Select(t => new TagSummary(t.Name,
-                t.Nodes.Count(nt => nt.Node!.PrivateToUserId == null || nt.Node.PrivateToUserId == userId)))
-            .ToListAsync(ct);
-    }
-
-    public Task<List<Node>> GetNodesWithTagAsync(Guid userId, string tagName, CancellationToken ct = default)
-    {
-        var name = NormalizeTag(tagName);
-        return authorizer.VisibleTo(db.Nodes, userId)
-            .Where(n => n.Tags.Any(t => t.Tag!.Name == name))
-            .OrderBy(n => n.Title)
-            .ToListAsync(ct);
-    }
-
     /// <summary>Which of these titles name a node the user can see — what a
     /// <c>[[wiki link]]</c> needs, since it addresses a page by name rather than by id.
     /// Matching ignores case, because that is how people type a title they remember.
@@ -218,52 +167,79 @@ public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeP
             .OrderBy(n => n.Title)
             .ToListAsync(ct);
 
-    /// <summary>Nodes related to this one: each shared tag scores one, a body link in
-    /// either direction scores two (a deliberate mention is a stronger signal than a
-    /// shared label). Ties go to the most recently updated.</summary>
+    /// <summary>Nodes related to this one. A body link in either direction scores four
+    /// — a deliberate mention is the strongest signal there is; a category both nodes
+    /// sit in scores two; a category one shares with the other's ancestry scores one,
+    /// because "somewhere under Homelab" is a weaker kinship than "in Homelab/Podman".
+    /// Ties go to the most recently updated.</summary>
     public async Task<List<SimilarNode>> GetSimilarAsync(Guid userId, Guid nodeId, int limit = 5,
         CancellationToken ct = default)
     {
-        // Resolve visibility first so a private node's tags and links never leak
+        // Resolve visibility first so a private node's categories and links never leak
         // into scores computed for the other user.
         await GetVisibleAsync(userId, nodeId, ct);
         limit = Math.Clamp(limit, 1, 20);
 
-        var tagIds = await db.NodeTags
-            .Where(t => t.NodeId == nodeId).Select(t => t.TagId).ToListAsync(ct);
+        var subjectPaths = await db.NodeCategories
+            .Where(c => c.NodeId == nodeId).Select(c => c.Category!.Path).ToListAsync(ct);
         var linkedIds = await db.NodeLinks
             .Where(l => l.SourceId == nodeId || l.TargetId == nodeId)
             .Select(l => l.SourceId == nodeId ? l.TargetId : l.SourceId)
             .ToListAsync(ct);
 
+        var direct = subjectPaths.ToHashSet();
+        var ancestry = subjectPaths.SelectMany(CategoryPath.Ancestry).ToHashSet();
+
+        // Which categories touch this node's ancestry is decided over the whole (small)
+        // taxonomy in memory, so the node query stays one Contains rather than a prefix
+        // match per ancestor.
+        var kin = (await db.Categories.Select(c => c.Path).ToListAsync(ct))
+            .Where(path => CategoryPath.Ancestry(path).Any(ancestry.Contains))
+            .ToHashSet();
+
         var candidates = await authorizer.VisibleTo(db.Nodes, userId)
             .Where(n => n.Id != nodeId)
-            .Where(n => linkedIds.Contains(n.Id) || n.Tags.Any(t => tagIds.Contains(t.TagId)))
+            .Where(n => linkedIds.Contains(n.Id)
+                || n.Categories.Any(c => kin.Contains(c.Category!.Path)))
             .Select(n => new
             {
                 n.Id, n.Title, n.MediaType, n.UpdatedAt,
-                SharedTags = n.Tags.Count(t => tagIds.Contains(t.TagId)),
+                Paths = n.Categories.Select(c => c.Category!.Path).ToList(),
                 IsLinked = linkedIds.Contains(n.Id),
             })
             .ToListAsync(ct);
 
         return candidates
-            .OrderByDescending(c => c.SharedTags + (c.IsLinked ? 2 : 0))
+            .OrderByDescending(c => Kinship(c.Paths) + (c.IsLinked ? 4 : 0))
             .ThenByDescending(c => c.UpdatedAt)
             .Take(limit)
             .Select(c => new SimilarNode(c.Id, c.Title,
                 c.MediaType == MediaTypes.Markdown ? NodeKind.Page : NodeKind.File))
             .ToList();
+
+        // A category the two nodes are both in is counted twice — once as itself and
+        // once as the deepest thing their ancestries have in common — which is exactly
+        // the two-to-one this method promises.
+        int Kinship(List<string> paths)
+        {
+            var shared = paths.Count(direct.Contains);
+            var common = paths.SelectMany(CategoryPath.Ancestry).Distinct()
+                .Count(ancestry.Contains);
+            return shared + common;
+        }
     }
 
-    /// <summary>Search text is tags + filename + description + extracted text; the
-    /// title contributes through its own tsvector weight.</summary>
+    /// <summary>Search text is category paths + filename + description + extracted
+    /// text; the title contributes through its own tsvector weight. A path contributes
+    /// every name it is nested under, so searching "homelab" finds what sits in
+    /// "homelab/podman".</summary>
     public void RefreshSearchText(Node node)
     {
-        var tags = string.Join(' ', node.Tags.Select(t => t.Tag!.Name));
+        var categories = string.Join(' ',
+            node.Categories.Select(c => CategoryPath.Words(c.Category!.Path)));
         node.SearchText = node.File is { Versions.Count: > 0 } file
-            ? $"{tags}\n{file.Current.FileName}\n{file.Description}\n{file.Current.ExtractedText}"
-            : tags;
+            ? $"{categories}\n{file.Current.FileName}\n{file.Description}\n{file.Current.ExtractedText}"
+            : categories;
     }
 
     public async Task ReplaceLinksAsync(Node node, IReadOnlySet<Guid> targetIds, CancellationToken ct)
@@ -317,7 +293,6 @@ public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeP
         }
     }
 
-    private static string NormalizeTag(string tag) => tag.Trim().ToLowerInvariant();
 }
 
 public record TreeNode(Guid Id, Guid? ParentId, string Title, string MediaType, int Position,
@@ -325,7 +300,5 @@ public record TreeNode(Guid Id, Guid? ParentId, string Title, string MediaType, 
 {
     public NodeKind Kind => MediaType == MediaTypes.Markdown ? NodeKind.Page : NodeKind.File;
 }
-
-public record TagSummary(string Name, int NodeCount);
 
 public record SimilarNode(Guid Id, string Title, NodeKind Kind);

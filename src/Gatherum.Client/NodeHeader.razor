@@ -5,7 +5,8 @@
     <input class="node-title-input" value="@title"
            @onchange="e => RenameAsync(e.Value?.ToString() ?? title)" />
     <div class="node-meta">
-        <TagEditor NodeId="@NodeId" Tags="@tags" OnChanged="ReloadTagsAsync" />
+        <CategoryEditor NodeId="@NodeId" Categories="@categories"
+                        OnChanged="ReloadCategoriesAsync" />
         @if (IsPrivate)
         {
             <span class="badge">
@@ -24,15 +25,15 @@
     [Parameter, EditorRequired] public Guid NodeId { get; set; }
     [Parameter, EditorRequired] public string Title { get; set; } = "";
     [Parameter] public bool IsPrivate { get; set; }
-    [Parameter] public string[] Tags { get; set; } = [];
+    [Parameter] public CategoryRef[] Categories { get; set; } = [];
 
     private string title = "";
-    private IReadOnlyList<string> tags = [];
+    private IReadOnlyList<CategoryRef> categories = [];
 
     protected override void OnParametersSet()
     {
         title = Title;
-        tags = Tags;
+        categories = Categories;
     }
 
     private async Task RenameAsync(string newTitle)
@@ -44,6 +45,6 @@
         await Tree.RefreshAsync();
     }
 
-    private async Task ReloadTagsAsync() =>
-        tags = (await Data.GetNodeAsync(NodeId)).Tags;
+    private async Task ReloadCategoriesAsync() =>
+        categories = (await Data.GetNodeAsync(NodeId)).Categories;
 }

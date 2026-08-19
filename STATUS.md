@@ -1,7 +1,7 @@
 # Status
 
-As of slopedit 2.1 — the wiki's own words (`[[links]]`, infoboxes, figures, callouts)
-on the editor's new extension seam. Everything listed as working has
+As of nested categories — the taxonomy replaced tags, and a page is filed under a
+subject rather than labelled with one. Everything listed as working has
 been exercised end-to-end (unit/integration tests, API smoke tests, or scripted
 browser sessions — including against the built container).
 
@@ -25,11 +25,11 @@ browser sessions — including against the built container).
   including from the WebAssembly home). Autosave with indicator, "Link node…" mention insertion as real link
   runs, version history with restore (old Markdown previews in a read-only
   `DocumentView`). Every interactive component — editor, tree, search palette, node
-  header, tags, versions, file view, settings keys — is an Interactive Auto island in
+  header, categories, versions, file view, settings keys — is an Interactive Auto island in
   `Gatherum.Client` over one `IAppData` seam (services on the server circuit, HTTP
   under WebAssembly): the first visit renders on the server while the runtime
   downloads, and every visit after runs fully in WebAssembly with zero websockets
-  (verified in-browser: editing, autosave, rename, tags, history, restore, search,
+  (verified in-browser: editing, autosave, rename, categories, history, restore, search,
   keys, stale-version warning all exercised in the WASM home). The only JavaScript in
   the app is a ~30-line interop file.
 - **The wiki's own syntaxes** — pages speak a dialect the editor is handed per call and
@@ -51,11 +51,21 @@ browser sessions — including against the built container).
   newer-version warning in the editor (verified: fires when another user saves the
   open document). Concurrent saves are serialized per node; nobody's save is ever
   lost — it's a version.
+- **Categories, not tags** — a second tree, of subjects rather than of nodes: a page
+  filed under `Homelab/Podman` is a member of `Homelab` too, so the parent category
+  lists it (`?deep=true`), a search for either name finds it (the whole ancestry goes
+  into the node's search text), and "Similar" scores a shared category above a shared
+  corner of the taxonomy. Categories are created by being used, spelled case- and
+  whitespace-insensitively, and maintained — rename, re-nest, delete — with their
+  subcategories and their members' search text following along. A category whose only
+  members are private to the other user isn't listed at all. `/categories` browses the
+  tree; the chips in a node's header file and unfile it. Tags are gone: the migration
+  carries every tag over as a root category.
 - **Tree + search** — sidebar tree mixing all nodes (create, rename, delete, menu
   move up/down/move-to, drag-drop upload), Ctrl/⌘-K palette with kind badges and
   snippets, Postgres FTS with `websearch_to_tsquery`, title ranked above body.
 - **Files** — upload via picker or drop, previews (image/PDF/video/audio/text),
-  description, tags, referenced-by, per-version download; extraction: text verbatim,
+  description, categories, referenced-by, per-version download; extraction: text verbatim,
   PDF (PdfPig), image metadata (MetadataExtractor); media types resolved sensibly
   when browsers upload code as octet-stream.
 - **Links** — mentions (`[@Title](node://id)`), `[[wiki links]]` and embedded files
@@ -64,7 +74,7 @@ browser sessions — including against the built container).
 - **Auth** — OIDC-only via discovery, defensive `offline_access`, first user becomes
   admin, cookie sessions; API keys hashed at rest, revocable, shown once; dev
   auto-login only when no authority is configured.
-- **REST API** (`/api`) and **MCP** (`/mcp`, all nine tools) — thin adapters over the
+- **REST API** (`/api`) and **MCP** (`/mcp`, all eleven tools) — thin adapters over the
   same services; page bodies are Markdown verbatim in both directions.
 - **Privacy** — per-subtree private flag enforced by one `INodeAuthorizer` in every
   read path.
@@ -72,13 +82,15 @@ browser sessions — including against the built container).
   exercised against a postgres container, editor verified in-browser against the
   containerized app), compose.yaml, Podman Quadlets, `/healthz`, JSON console logs
   outside Development, migrations on startup with opt-out.
-- **Tests** — 84 passing: the Markdown dialect (infobox/figure/callout round trips,
+- **Tests** — 96 passing: the Markdown dialect (infobox/figure/callout round trips,
   wiki-link spellings, extension composition, derived chrome, red-link inking, in-app
   URL shapes), markdown links, docx extraction/editing/backlinks, tree ops, privacy,
   versions (collapse, restore, re-upload, cross-author), search, title resolution, API
-  keys, storage/extraction, and integration tests booting the app on Testcontainers
-  Postgres (create page → search → MCP `get_node`; wiki link → backlink →
-  `resolve-titles`).
+  keys, storage/extraction, the taxonomy (nesting, counts, privacy, rename/move/delete,
+  path spelling), and integration tests booting the app on Testcontainers Postgres
+  (create page → search → MCP `get_node`; wiki link → backlink → `resolve-titles`;
+  file a page in a nested category → find it from the category above, over REST and
+  MCP).
 
 ## Stubbed / not shipped (tracked in PLAN.md)
 

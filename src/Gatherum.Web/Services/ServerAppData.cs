@@ -158,7 +158,11 @@ public sealed class ServerAppData(
                 body.Description, body.Current.ExtractedText)
             : null;
         return new NodeInfo(node.Id, node.Title, node.IsPrivate,
-            node.Tags.Select(t => t.Tag!.Name).Order().ToList(), file);
+            node.Categories
+                .Select(c => new CategoryRef(c.Category!.Path, c.Category.Name))
+                .OrderBy(c => c.Path)
+                .ToList(),
+            file);
     }
 
     public async Task<IReadOnlyList<RelatedInfo>> GetSimilarAsync(Guid nodeId, int limit)
@@ -168,24 +172,36 @@ public sealed class ServerAppData(
         return similar.Select(s => new RelatedInfo(s.Id, s.Kind.ToString(), s.Title)).ToList();
     }
 
-    public async Task<IReadOnlyList<TagInfo>> ListTagsAsync(string? prefix = null)
+    public async Task<IReadOnlyList<CategoryInfo>> ListCategoriesAsync(string? matching = null)
     {
         var userId = await UserIdAsync();
-        var tags = await ops.Nodes(s => s.ListTagsAsync(userId, prefix));
-        return tags.Select(t => new TagInfo(t.Name, t.NodeCount)).ToList();
+        var categories = await ops.Categories(s => s.ListAsync(userId, matching));
+        return categories
+            .Select(c => new CategoryInfo(c.Path, c.Name, c.ParentPath, c.Members,
+                c.SubtreeMembers))
+            .ToList();
     }
 
-    public async Task AddTagAsync(Guid nodeId, string tag)
+    public async Task<string> AddCategoryAsync(Guid nodeId, string path)
     {
         var userId = await UserIdAsync();
-        await ops.Nodes(s => s.AddTagAsync(userId, nodeId, tag));
+        return await ops.Categories(s => s.AddAsync(userId, nodeId, path));
     }
 
-    public async Task RemoveTagAsync(Guid nodeId, string tag)
+    public async Task RemoveCategoryAsync(Guid nodeId, string path)
     {
         var userId = await UserIdAsync();
-        await ops.Nodes(s => s.RemoveTagAsync(userId, nodeId, tag));
+        await ops.Categories(s => s.RemoveAsync(userId, nodeId, path));
     }
+
+    public Task RenameCategoryAsync(string path, string name) =>
+        ops.Categories(s => s.RenameAsync(path, name));
+
+    public Task MoveCategoryAsync(string path, string? newParentPath) =>
+        ops.Categories(s => s.MoveAsync(path, newParentPath));
+
+    public Task DeleteCategoryAsync(string path) =>
+        ops.Categories(s => s.DeleteAsync(path));
 
     public async Task<IReadOnlyList<VersionInfo>> GetVersionsAsync(Guid nodeId)
     {

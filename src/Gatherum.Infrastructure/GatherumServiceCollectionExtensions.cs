@@ -33,6 +33,7 @@ public static class GatherumServiceCollectionExtensions
         services.AddSingleton<ITextExtractor, ImageMetadataExtractor>();
 
         services.AddScoped<NodeService>();
+        services.AddScoped<CategoryService>();
         services.AddScoped<FileService>();
         services.AddScoped<SearchService>();
         services.AddScoped<UserService>();

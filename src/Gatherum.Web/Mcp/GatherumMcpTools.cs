@@ -14,6 +14,7 @@ namespace Gatherum.Web.Mcp;
 [McpServerToolType]
 public class GatherumMcpTools(
     NodeService nodes,
+    CategoryService categories,
     FileService files,
     SearchService search,
     IHttpContextAccessor httpContext)
@@ -22,7 +23,7 @@ public class GatherumMcpTools(
         ?? throw new McpException("No authenticated user.");
 
     [McpServerTool(Name = "search")]
-    [Description("Full-text search over titles, tags, and file text (pages are Markdown " +
+    [Description("Full-text search over titles, categories, and file text (pages are Markdown " +
         "files). Supports websearch syntax: quoted phrases, OR, -exclusions.")]
     public async Task<IEnumerable<SearchResultDto>> Search(
         [Description("The search query.")] string query,
@@ -93,24 +94,50 @@ public class GatherumMcpTools(
         return "moved";
     }
 
-    [McpServerTool(Name = "add_tag")]
-    [Description("Add a tag to a node. Tags are normalized to lowercase.")]
-    public async Task<string> AddTag(
+    [McpServerTool(Name = "add_category")]
+    [Description("File a node under a category. Categories nest: 'Homelab/Podman' is a " +
+        "subcategory of 'Homelab', and both are created if they don't exist yet. A node " +
+        "in a subcategory counts as a member of everything above it.")]
+    public async Task<string> AddCategory(
         [Description("The node id.")] Guid id,
-        [Description("The tag to add.")] string tag)
+        [Description("The category path, e.g. 'Homelab/Podman'.")] string path) =>
+        await Run(() => categories.AddAsync(UserId, id, path));
+
+    [McpServerTool(Name = "remove_category")]
+    [Description("Take a node out of one category. Its other categories, and the " +
+        "categories this one is nested under, are untouched.")]
+    public async Task<string> RemoveCategory(
+        [Description("The node id.")] Guid id,
+        [Description("The category path to remove.")] string path)
     {
         await Run(async () =>
         {
-            await nodes.AddTagAsync(UserId, id, tag);
+            await categories.RemoveAsync(UserId, id, path);
             return true;
         });
-        return "tagged";
+        return "removed";
     }
 
-    [McpServerTool(Name = "list_tags")]
-    [Description("List all tags with the number of nodes carrying each.")]
-    public async Task<IEnumerable<TagSummary>> ListTags() =>
-        await nodes.ListTagsAsync(UserId);
+    [McpServerTool(Name = "list_categories")]
+    [Description("The whole category tree, in path order, with how many nodes sit in " +
+        "each directly and how many its subcategories hold in total.")]
+    public async Task<IEnumerable<CategoryDto>> ListCategories(
+        [Description("Optional filter: only categories whose path contains this text.")]
+        string? matching = null)
+    {
+        var all = await categories.ListAsync(UserId, matching);
+        return all.Select(CategoryDto.From);
+    }
+
+    [McpServerTool(Name = "browse_category")]
+    [Description("One category: where it sits, what is nested under it, and the nodes " +
+        "in it — the subcategories' nodes too when deep is true.")]
+    public async Task<CategoryViewDto> BrowseCategory(
+        [Description("The category path, e.g. 'Homelab/Podman'.")] string path,
+        [Description("Include the nodes of every subcategory, default false.")]
+        bool? deep = null) =>
+        await Run(async () => CategoryViewDto.From(
+            await categories.GetAsync(UserId, path, deep ?? false)));
 
     [McpServerTool(Name = "get_backlinks")]
     [Description("List the nodes whose bodies link to the given node.")]
@@ -137,6 +164,10 @@ public class GatherumMcpTools(
             throw new McpException(ex.Message);
         }
         catch (ForbiddenException ex)
+        {
+            throw new McpException(ex.Message);
+        }
+        catch (ValidationException ex)
         {
             throw new McpException(ex.Message);
         }

@@ -40,12 +40,20 @@ public interface IAppData
     Task DeleteAsync(Guid nodeId);
     Task SetPrivateAsync(Guid nodeId, bool isPrivate);
 
-    // A node's chrome: tags, file facts, history.
+    // A node's chrome: categories, file facts, history.
     Task<NodeInfo> GetNodeAsync(Guid nodeId);
     Task<IReadOnlyList<RelatedInfo>> GetSimilarAsync(Guid nodeId, int limit);
-    Task<IReadOnlyList<TagInfo>> ListTagsAsync(string? prefix = null);
-    Task AddTagAsync(Guid nodeId, string tag);
-    Task RemoveTagAsync(Guid nodeId, string tag);
+    Task<IReadOnlyList<CategoryInfo>> ListCategoriesAsync(string? matching = null);
+
+    /// <summary>Files the node under a category path, creating it and its ancestors if
+    /// they are new; answers with the path it landed on.</summary>
+    Task<string> AddCategoryAsync(Guid nodeId, string path);
+    Task RemoveCategoryAsync(Guid nodeId, string path);
+
+    // Maintaining the taxonomy itself: a category follows its subcategories around.
+    Task RenameCategoryAsync(string path, string name);
+    Task MoveCategoryAsync(string path, string? newParentPath);
+    Task DeleteCategoryAsync(string path);
     Task<IReadOnlyList<VersionInfo>> GetVersionsAsync(Guid nodeId);
     Task<string> GetVersionTextAsync(Guid nodeId, int number);
     Task RestoreVersionAsync(Guid nodeId, int number);
@@ -65,13 +73,17 @@ public record SearchHit(Guid Id, string Kind, string Title, string Snippet);
 public record TitleMatch(string Title, Guid Id);
 public record TreeNodeInfo(Guid Id, Guid? ParentId, string Title, string MediaType,
     string Kind, int Position, bool IsPrivate);
-public record NodeInfo(Guid Id, string Title, bool IsPrivate, IReadOnlyList<string> Tags,
-    FileFacts? File);
+public record NodeInfo(Guid Id, string Title, bool IsPrivate,
+    IReadOnlyList<CategoryRef> Categories, FileFacts? File);
 public record FileFacts(string FileName, string MediaType, long SizeBytes, int Version,
     string Sha256, string Description, string ExtractedText);
 public record VersionInfo(int Number, string FileName, string MediaType, long SizeBytes,
     DateTimeOffset UploadedAt, bool IsText);
-public record TagInfo(string Name, int NodeCount);
+/// <summary>A category as a node wears it: the path is what it is, the name is what
+/// the chip says.</summary>
+public record CategoryRef(string Path, string Name);
+public record CategoryInfo(string Path, string Name, string? ParentPath, int Members,
+    int SubtreeMembers);
 public record RelatedInfo(Guid Id, string Kind, string Title);
 public record KeyInfo(Guid Id, string Name, string Prefix, DateTimeOffset CreatedAt,
     DateTimeOffset? LastUsedAt, bool IsActive);
@@ -177,19 +189,35 @@ public sealed class HttpAppData(HttpClient http) : IAppData
         await http.GetFromJsonAsync<List<RelatedInfo>>(
             $"/api/nodes/{nodeId}/similar?limit={limit}") ?? [];
 
-    public async Task<IReadOnlyList<TagInfo>> ListTagsAsync(string? prefix = null)
+    public async Task<IReadOnlyList<CategoryInfo>> ListCategoriesAsync(string? matching = null)
     {
-        var url = prefix is { Length: > 0 }
-            ? $"/api/tags?prefix={Uri.EscapeDataString(prefix)}"
-            : "/api/tags";
-        return await http.GetFromJsonAsync<List<TagInfo>>(url) ?? [];
+        var url = matching is { Length: > 0 }
+            ? $"/api/categories?matching={Uri.EscapeDataString(matching)}"
+            : "/api/categories";
+        return await http.GetFromJsonAsync<List<CategoryInfo>>(url) ?? [];
     }
 
-    public async Task AddTagAsync(Guid nodeId, string tag) =>
-        Ensure(await http.PostAsJsonAsync($"/api/nodes/{nodeId}/tags", new { tag }));
+    public async Task<string> AddCategoryAsync(Guid nodeId, string path)
+    {
+        var response = await http.PostAsJsonAsync($"/api/nodes/{nodeId}/categories", new { path });
+        await EnsureAsync(response);
+        return (await response.Content.ReadFromJsonAsync<CategoryPlacement>())?.Path ?? path;
+    }
 
-    public async Task RemoveTagAsync(Guid nodeId, string tag) =>
-        Ensure(await http.DeleteAsync($"/api/nodes/{nodeId}/tags/{Uri.EscapeDataString(tag)}"));
+    public async Task RemoveCategoryAsync(Guid nodeId, string path) =>
+        await EnsureAsync(await http.DeleteAsync(
+            $"/api/nodes/{nodeId}/categories/{CategoryUrl.For(path)}"));
+
+    public async Task RenameCategoryAsync(string path, string name) =>
+        await EnsureAsync(await http.PostAsJsonAsync("/api/categories/rename",
+            new { path, name }));
+
+    public async Task MoveCategoryAsync(string path, string? newParentPath) =>
+        await EnsureAsync(await http.PostAsJsonAsync("/api/categories/move",
+            new { path, newParentPath }));
+
+    public async Task DeleteCategoryAsync(string path) =>
+        await EnsureAsync(await http.DeleteAsync($"/api/categories/{CategoryUrl.For(path)}"));
 
     public async Task<IReadOnlyList<VersionInfo>> GetVersionsAsync(Guid nodeId) =>
         await http.GetFromJsonAsync<List<VersionInfo>>($"/api/nodes/{nodeId}/versions") ?? [];
@@ -232,5 +260,21 @@ public sealed class HttpAppData(HttpClient http) : IAppData
 
     private static void Ensure(HttpResponseMessage response) => response.EnsureSuccessStatusCode();
 
+    /// <summary>Like <see cref="Ensure"/>, but keeps what the server said: the API
+    /// answers a refused category with a sentence a person can read, and the components
+    /// show it rather than a status code.</summary>
+    private static async Task EnsureAsync(HttpResponseMessage response)
+    {
+        if (response.IsSuccessStatusCode)
+            return;
+        var problem = await response.Content.ReadFromJsonAsync<ApiProblem>();
+        var message = problem?.Error ?? problem?.Detail;
+        if (message is { Length: > 0 })
+            throw new InvalidOperationException(message);
+        response.EnsureSuccessStatusCode();
+    }
+
     private record SaveResult(int Version);
+    private record CategoryPlacement(string Path);
+    private record ApiProblem(string? Error, string? Detail);
 }

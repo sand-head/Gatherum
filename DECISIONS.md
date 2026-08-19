@@ -177,7 +177,7 @@ Two isolation sharp edges worth remembering: elements rendered by child componen
 (NavLink's `<a>`, InputFile's `<input>`) never carry the parent's scope attribute, so
 their state classes need top-level `::deep` selectors — nested `&.active` gets the
 scope attribute appended and silently never matches; and shared primitives used across
-components (buttons, inputs, `.tag` chips, `.upload-label`, `.document-surface`) stay
+components (buttons, inputs, `.category` chips, `.upload-label`, `.document-surface`) stay
 global in `app.css` rather than being duplicated per scope.
 
 ## The sidebar became reading context; the tree moved to /pages
@@ -271,3 +271,49 @@ since the MVP; nothing rendered them. The implementation went with GitHub's actu
 alert vocabulary — note, tip, important, warning, caution — because that is what people
 paste in from elsewhere and what other renderers understand, and the docs were corrected
 to match. A quote whose first line names anything else stays an ordinary quote.
+
+## Nested categories replace tags
+Tags were in the brief from the start, and they were the wrong thing for this app.
+Wikipedia has no tags; Google Docs has none either. A tag is a flat label, so a wiki
+grown past a few dozen pages ends up with `podman`, `quadlet`, `quadlets` and `homelab`
+side by side, none of them saying that the first three are ways of talking about the
+last. Finding a page was never the tags' job anyway — full-text search over titles,
+bodies and file text is what answers "where is the thing about rootless units". What
+was missing is the other half: *what this wiki is about*, arranged, so it can be browsed
+downward from a subject rather than recalled by keyword.
+
+So categories, and they nest. A category is identified by its path — `homelab/podman` —
+because that is what a writer types and what a URL carries; `CategoryPath` is the single
+place that decides that "Homelab / Podman", "homelab/podman" and " HOMELAB/podman " are
+one category, and `Category.Name` keeps the capitalization of whoever created it. The
+path is denormalized onto every row, which is what makes "everything under Homelab" a
+prefix match instead of a recursive walk, and it is rewritten for a whole subtree when a
+category is renamed or moved — along with the search text of every node underneath,
+since a node's findable text is its categories' *whole ancestry* ("homelab podman"), so
+searching the parent finds the child's pages.
+
+Consequences worth stating:
+
+- **A node is filed, not labelled.** It has one place in the node tree and as many
+  categories as its subject demands. Filing under `Homelab/Podman` creates `Homelab`
+  too and makes the node a member of both; a category page lists its own members and,
+  on request (`?deep=true`), its subcategories'.
+- **Similar counts kinship, not coincidence.** A body link either way scores four, a
+  category both nodes are in scores two, a category one shares with the other's ancestry
+  scores one — so two Podman pages beat a Podman page and a Backups page, which still
+  beat two unrelated pages under the same root. (It replaces the old one-point-per-tag
+  scoring.) Which categories touch a node's ancestry is decided over the whole taxonomy
+  in memory: it is a table of dozens of rows for a two-person wiki, and that keeps the
+  node query a single `Contains`.
+- **The taxonomy has no owner.** Either user can file any node they can see and rename,
+  re-nest or delete any category — there is no per-category permission in a wiki for
+  two people. Privacy is kept where it always was, on the nodes: counts are of what the
+  asking user can see, and a category whose every member is private to the other user is
+  not listed at all, because the name of a category describes the pages in it.
+- **Empty categories stay.** A parent with only subcategories is normal, and a category
+  emptied by unfiling its last page is not garbage — it is a heading someone meant. The
+  cure for a mistaken one is deleting it, which is why rename/move/delete are a first-
+  class part of the surface (`CategoryTools` on every category page, plus REST and MCP)
+  rather than something only a DBA can do.
+- **The migration carries every tag over** as a root category of the same name, so
+  nothing that was filed becomes unfiled; nesting them afterwards is an ordinary move.
