@@ -65,3 +65,44 @@
 
     & textarea { width: 100%; min-height: 70px; margin-bottom: 8px; resize: vertical; }
 }
+
+/* What a model made of a file that carries no text of its own. */
+.file-analysis {
+    & h3 {
+        font: 500 12px/1.6 var(--font-ui);
+        color: var(--on-surface-dim);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        margin: 0 0 8px;
+    }
+
+    & .analysis-summary { margin: 0 0 12px; }
+
+    & .analysis-note {
+        margin: 0;
+        color: var(--on-surface-dim);
+        font-style: italic;
+    }
+
+    & .analysis-note.failed { font-style: normal; }
+
+    & .analysis-transcript {
+        border: 1px solid var(--outline-dim);
+        border-radius: var(--radius);
+        padding: 10px 14px;
+
+        & summary {
+            cursor: pointer;
+            color: var(--on-surface-dim);
+            font-size: 13px;
+        }
+
+        & pre {
+            margin: 10px 0 0;
+            max-height: 40vh;
+            overflow: auto;
+            white-space: pre-wrap;
+            font-family: var(--font-ui);
+        }
+    }
+}

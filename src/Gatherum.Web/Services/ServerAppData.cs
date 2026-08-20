@@ -155,7 +155,9 @@ public sealed class ServerAppData(
         var file = node.File is { Versions.Count: > 0 } body
             ? new FileFacts(body.Current.FileName, body.Current.MediaType,
                 body.Current.SizeBytes, body.Current.Number, body.Current.Hash,
-                body.Description, body.Current.ExtractedText)
+                body.Description, body.Current.ExtractedText, body.Current.Transcript,
+                body.Current.Summary, body.Current.Analysis.ToString(),
+                body.Current.AnalysisError.Length > 0 ? body.Current.AnalysisError : null)
             : null;
         return new NodeInfo(node.Id, node.Title, node.IsPrivate,
             node.Tags.Select(t => t.Tag!.Name).Order().ToList(), file);

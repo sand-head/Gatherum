@@ -16,7 +16,12 @@ COPY src ./src
 RUN dotnet publish src/Gatherum.Web -c Release -o /app
 
 # Stage 2: runtime, non-root.
+# ffmpeg is what splits an uploaded video into the audio a model listens to and the
+# frames it looks at. Without it images and audio still analyze; video records why
+# it could not.
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /app .
 RUN mkdir -p /data/files && chown -R $APP_UID /data
