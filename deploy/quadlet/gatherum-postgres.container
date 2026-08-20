@@ -2,7 +2,7 @@
 Description=Gatherum PostgreSQL
 
 [Container]
-Image=docker.io/library/postgres:16-alpine
+Image=docker.io/pgvector/pgvector:pg16
 ContainerName=gatherum-postgres
 Network=gatherum.network
 Environment=POSTGRES_DB=gatherum

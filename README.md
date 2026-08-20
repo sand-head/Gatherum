@@ -39,9 +39,15 @@ C#/Blazor — the only JavaScript is a ~65-line interop file.
   the homelab too: the parent category lists it, a search for either name finds it, and
   "Similar" counts the kinship. Categories are created by being used and maintained like
   anything else — renamed, re-nested, deleted — with their subcategories following along.
-- **Search**: PostgreSQL full-text (`tsvector` + GIN, `websearch_to_tsquery`) over
-  titles, category names, and text — including what a model read, heard, or made of your
-  media. `Ctrl`/`⌘`+`K` anywhere.
+- **Search**: two halves that answer different questions. PostgreSQL full-text
+  (`tsvector` + GIN, `websearch_to_tsquery`) over titles, category names, and text —
+  including what a model read, heard, or made of your media — finds the phrase you
+  remember word for word. Point `Gatherum__Embedding__Endpoint` at an embedding model you
+  run and it gains a second half: pages, files and transcripts are cut into passages and
+  embedded into pgvector, so a search for "why the closet gets so hot" finds the page
+  that only ever says "thermals". The two rankings are fused, never averaged, and with no
+  endpoint configured search is exactly the full-text search it always was.
+  `Ctrl`/`⌘`+`K` anywhere.
 - **Awareness**: presence shows who else is editing a document, and the editor warns
   when someone saved a newer version (their save stays in history either way).
 - **Access**: OIDC sign-in only (built for Authelia; any discovery-capable IdP works),
@@ -53,12 +59,15 @@ C#/Blazor — the only JavaScript is a ~65-line interop file.
 ## Run it locally
 
 Requires the .NET 10 SDK with the `wasm-tools` workload (`dotnet workload install
-wasm-tools`; emscripten also wants `python3` on PATH) and a PostgreSQL 16+:
+wasm-tools`; emscripten also wants `python3` on PATH) and a PostgreSQL 16+ carrying the
+[pgvector](https://github.com/pgvector/pgvector) extension — the image below has it, and
+any Postgres does once `CREATE EXTENSION vector` can run (the migration issues it, which
+wants a superuser the first time):
 
 ```sh
 docker run -d --name gatherum-pg -p 5432:5432 \
   -e POSTGRES_DB=gatherum -e POSTGRES_USER=gatherum -e POSTGRES_PASSWORD=gatherum \
-  postgres:16-alpine
+  pgvector/pgvector:pg16
 
 dotnet run --project src/Gatherum.Web
 ```
@@ -95,6 +104,17 @@ Everything configures through environment variables (`Gatherum__Section__Key` fo
 | `Gatherum__Analysis__MaxBytes` | `268435456` | Largest file sent for analysis; bigger ones upload and store as before |
 | `Gatherum__Analysis__TimeoutSeconds` | `900` | Ceiling on one analysis call |
 | `Gatherum__Analysis__FfmpegPath` | `ffmpeg` | How to invoke ffmpeg, which splits video into audio and frames |
+| `Gatherum__Embedding__Endpoint` | *(empty)* | Base URL of an OpenAI-compatible embeddings API (e.g. `http://localhost:8090/v1`); empty leaves search full-text only |
+| `Gatherum__Embedding__Model` | *(empty)* | The embedding model |
+| `Gatherum__Embedding__Dimensions` | `768` | Width of that model's vectors; startup resizes the column to match and re-embeds if it changed |
+| `Gatherum__Embedding__ApiKey` | *(empty)* | Bearer token, when your runner wants one |
+| `Gatherum__Embedding__MaxDistance` | `0.55` | How far apart two texts can be and still count as an answer; raise if search feels too literal, lower if it wanders |
+| `Gatherum__Embedding__MaxChunkChars` | `1200` | Longest passage handed to the model; suits a 512-token window |
+| `Gatherum__Embedding__MaxChunksPerNode` | `200` | Ceiling on passages per node; past it the tail stays full-text-only and the log says so |
+| `Gatherum__Embedding__BatchSize` | `16` | Passages per request |
+| `Gatherum__Embedding__SweepSeconds` | `15` | How often the worker looks for nodes whose text has changed |
+| `Gatherum__Embedding__QueryTimeoutMs` | `2000` | Ceiling on embedding a search box before answering from full-text alone |
+| `Gatherum__Embedding__TimeoutSeconds` | `120` | Ceiling on one background batch |
 
 The first user ever to sign in becomes admin. API keys are created in **Settings**,
 stored hashed, revocable, and sent as `Authorization: Bearer gk_…` to `/api` and `/mcp`.

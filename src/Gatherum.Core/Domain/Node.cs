@@ -45,9 +45,22 @@ public class Node
 
     public NpgsqlTsVector SearchVector { get; init; } = null!;
 
+    /// <summary>Fingerprint of everything a node is embedded from, computed by the
+    /// database. Compared against <see cref="EmbeddedFingerprint"/>, it is the whole of
+    /// how the embedding worker knows what to do: no flag to set, no queue to remember,
+    /// and a category rename that rewrites a hundred nodes' search text marks all
+    /// hundred without knowing this exists.</summary>
+    public string TextFingerprint { get; init; } = "";
+
+    /// <summary>The fingerprint the current embeddings were made from; empty until a
+    /// node has ever been embedded, and stale exactly when it differs from the one
+    /// above.</summary>
+    public string EmbeddedFingerprint { get; set; } = "";
+
     public List<Node> Children { get; init; } = [];
     public FileBody? File { get; set; }
     public List<NodeCategory> Categories { get; init; } = [];
     public List<NodeLink> OutboundLinks { get; init; } = [];
     public List<NodeLink> InboundLinks { get; init; } = [];
+    public List<NodeEmbedding> Embeddings { get; init; } = [];
 }

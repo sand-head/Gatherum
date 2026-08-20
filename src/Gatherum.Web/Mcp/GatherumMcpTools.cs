@@ -23,16 +23,27 @@ public class GatherumMcpTools(
         ?? throw new McpException("No authenticated user.");
 
     [McpServerTool(Name = "search")]
-    [Description("Full-text search over titles, categories, and file text (pages are Markdown " +
-        "files). Supports websearch syntax: quoted phrases, OR, -exclusions.")]
+    [Description("Search titles, categories, and file text (pages are Markdown files). " +
+        "Combines full-text matching with meaning-based matching, so a query finds pages " +
+        "that answer it without using its words. Supports websearch syntax: quoted " +
+        "phrases, OR, -exclusions — which only the full-text half honours.")]
     public async Task<IEnumerable<SearchResultDto>> Search(
         [Description("The search query.")] string query,
         [Description("Optional filter: 'page' (Markdown) or 'file' (everything else).")]
         string? kind = null,
-        [Description("Maximum results, default 20.")] int? limit = null)
+        [Description("Maximum results, default 20.")] int? limit = null,
+        [Description("'hybrid' (default), 'text' for literal matching only, or " +
+            "'semantic' for meaning only. Use 'text' when the exact spelling matters, " +
+            "such as an identifier or a quoted phrase.")]
+        string? mode = null)
     {
         NodeKind? nodeKind = kind is null ? null : ParseKind(kind);
-        var results = await search.SearchAsync(UserId, query, nodeKind, limit ?? 20);
+        var searchMode = mode is null
+            ? SearchMode.Hybrid
+            : Enum.TryParse<SearchMode>(mode, ignoreCase: true, out var parsed)
+                ? parsed
+                : throw new McpException($"Unknown search mode '{mode}'.");
+        var results = await search.SearchAsync(UserId, query, nodeKind, limit ?? 20, searchMode);
         return results.Select(SearchResultDto.From);
     }
 

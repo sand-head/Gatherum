@@ -2,9 +2,12 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Gatherum.Core.Abstractions;
 using Gatherum.Core.Services;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Gatherum.Tests;
 
@@ -16,15 +19,28 @@ public class AppIntegrationTests(PostgresFixture postgres) : IAsyncLifetime
     private WebApplicationFactory<Program> factory = null!;
     private HttpClient client = null!;
     private string storageRoot = "";
+    private readonly FakeEmbedder embedder = new();
 
     public async Task InitializeAsync()
     {
         var connectionString = await postgres.CreateDatabaseAsync();
         storageRoot = Path.Combine(Path.GetTempPath(), $"gatherum-it-{Guid.NewGuid():N}");
+        embedder.Means("cooling", "thermals", "overheating", "noisy");
         factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
             builder.UseSetting("Gatherum:Database:ConnectionString", connectionString);
             builder.UseSetting("Gatherum:Storage:Root", storageRoot);
+            // Configured so the app wires embeddings up at all; the endpoint is never
+            // reached because the embedder behind it is replaced below.
+            builder.UseSetting("Gatherum:Embedding:Endpoint", "http://embedder.invalid");
+            builder.UseSetting("Gatherum:Embedding:Model", "fake-embed");
+            builder.UseSetting("Gatherum:Embedding:Dimensions",
+                PostgresFixture.EmbeddingDimensions.ToString());
+            builder.ConfigureTestServices(services =>
+            {
+                services.RemoveAll<IEmbedder>();
+                services.AddSingleton<IEmbedder>(embedder);
+            });
         });
 
         using var scope = factory.Services.CreateScope();
@@ -177,5 +193,38 @@ public class AppIntegrationTests(PostgresFixture postgres) : IAsyncLifetime
         var text = envelope.GetProperty("result").GetProperty("content")[0]
             .GetProperty("text").GetString()!;
         return JsonDocument.Parse(text).RootElement;
+    }
+
+    [Fact]
+    public async Task A_page_is_found_over_REST_by_a_question_it_never_uses_the_words_of()
+    {
+        var create = await client.PostAsJsonAsync("/api/pages", new
+        {
+            title = "Rack notes",
+            markdown = "The overheating started after the third drive went in.",
+        });
+        Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+        var pageId = (await create.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("id").GetGuid();
+        await EmbedEverythingAsync();
+
+        var semantic = await client.GetFromJsonAsync<JsonElement>(
+            "/api/search?query=noisy&mode=semantic");
+        var literal = await client.GetFromJsonAsync<JsonElement>(
+            "/api/search?query=noisy&mode=text");
+
+        Assert.Contains(semantic.EnumerateArray(),
+            result => result.GetProperty("id").GetGuid() == pageId);
+        Assert.Empty(literal.EnumerateArray());
+    }
+
+    /// <summary>What EmbeddingWorker's sweep would do, driven on demand so the test does
+    /// not wait out an interval.</summary>
+    private async Task EmbedEverythingAsync()
+    {
+        using var scope = factory.Services.CreateScope();
+        var embeddings = scope.ServiceProvider.GetRequiredService<EmbeddingService>();
+        foreach (var node in await embeddings.StaleNodesAsync(100))
+            await embeddings.EmbedNodeAsync(node.Id);
     }
 }

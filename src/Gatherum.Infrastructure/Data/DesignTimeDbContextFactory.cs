@@ -11,7 +11,7 @@ public class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<GatherumDb
         var connectionString = Environment.GetEnvironmentVariable("Gatherum__Database__ConnectionString")
             ?? "Host=localhost;Database=gatherum;Username=gatherum;Password=gatherum";
         var options = new DbContextOptionsBuilder<GatherumDbContext>()
-            .UseNpgsql(connectionString, npgsql => npgsql.MigrationsAssembly("Gatherum.Infrastructure"))
+            .UseNpgsql(connectionString, GatherumNpgsql.Configure)
             .Options;
         return new GatherumDbContext(options);
     }

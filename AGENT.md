@@ -21,7 +21,7 @@ Podman container behind a TLS-terminating reverse proxy with Authelia for OIDC.
 dotnet workload install wasm-tools     # once; the editor island relinks SkiaSharp
 # Postgres (once):
 docker run -d --name gatherum-pg -p 5432:5432 -e POSTGRES_DB=gatherum \
-  -e POSTGRES_USER=gatherum -e POSTGRES_PASSWORD=gatherum postgres:16-alpine
+  -e POSTGRES_USER=gatherum -e POSTGRES_PASSWORD=gatherum pgvector/pgvector:pg16
 
 dotnet build
 dotnet run --project src/Gatherum.Web    # http://localhost:5140, dev auto-login
@@ -41,11 +41,15 @@ auto-login. Migrations: `dotnet ef migrations add <Name> -p src/Gatherum.Infrast
   resolution, `CategoryService` = the taxonomy and what is filed in it,
   `FileService` = bodies/versions/text editing), `Markdown/MarkdownContent`
   and `Markdown/WikiLinkSyntax` (the link conventions, read server-side), the seam
-  interfaces in `Abstractions/`, and `Services/MediaAnalysisQueue` — the hand-off from
-  an upload to the background analyzer.
+  interfaces in `Abstractions/`, `Services/MediaAnalysisQueue` — the hand-off from
+  an upload to the background analyzer — and search's two halves: `SearchService` fuses
+  them, `EmbeddingService` owns the vector one (passages, reuse, staleness, nearness),
+  with `TextChunker`, `RankFusion` and `QueryEmbeddingCache` beside it.
 - `src/Gatherum.Infrastructure` — implementations with real dependencies: filesystem
   storage, text extractors, media analysis (`Analysis/` — the OpenAI-compatible client,
-  ffmpeg, and the background worker), EF migrations.
+  ffmpeg, and the background worker), embeddings (`Embedding/` — the embeddings client
+  and the sweep worker), EF migrations and `Data/EmbeddingSchema` (which sizes the vector
+  column to the configured model at startup).
 - `src/Gatherum.Web` — the static pages and layout (`Components/`), REST API
   (`Api/`), MCP tools (`Mcp/`), auth (`Auth/`), presence + `ServerAppData`, the
   server implementation of the interactive components' data seam (`Services/`).
@@ -82,11 +86,18 @@ fresh DI scope via `Services/AppOperations`.
 - MCP and REST stay thin adapters over the same application services. No logic in
   endpoints, tools, or components.
 - Storage (`IFileStorage`), extraction (`ITextExtractor`), analysis (`IMediaAnalyzer`),
-  and authorization (`INodeAuthorizer`) are the only abstraction seams. Don't add
-  interfaces without a stated second implementation.
+  embedding (`IEmbedder`), and authorization (`INodeAuthorizer`) are the only abstraction
+  seams. Don't add interfaces without a stated second implementation.
 - Extraction is exact, cheap, and runs inside the upload request; analysis asks a model,
   takes minutes, and runs on a background worker. Never put one on the other's path —
-  an upload must return before any model is consulted.
+  an upload must return before any model is consulted. Embedding is a third tempo again:
+  a background sweep for indexing, and one bounded call on the search path — which must
+  time out into a full-text answer rather than make anyone wait. A search never fails
+  because a model is unreachable.
+- A node is stale for embedding when `TextFingerprint` (computed by the database) differs
+  from `EmbeddedFingerprint`. That comparison is the only thing that queues work. Never
+  add an enqueue call beside it: a second source of truth can only ever be the one that
+  gets forgotten.
 - Auth is OIDC-only (plus API keys). No local accounts, ever.
 - No JavaScript beyond `wwwroot/js/gatherum.js`, and nothing goes in there that
   Blazor can do natively.
@@ -143,6 +154,20 @@ touch the server only through `IAppData`.
 3. Add tests beside `MediaAnalysisTests.cs`, using `FakeMediaAnalyzer` for anything
    about queueing, reuse, or search text.
 
+**Add an embedder** (a different way to turn text into a vector):
+1. Implement `IEmbedder` in `src/Gatherum.Infrastructure/Embedding/` (cf.
+   `OpenAiEmbedder.cs`). `Model` names it: vectors are stored beside that name and
+   nothing compares two models' vectors.
+2. Register it in `GatherumServiceCollectionExtensions.AddEmbedding`, which wires
+   embeddings up only when an endpoint is configured — with none, search is full-text
+   only and no vector is ever computed.
+3. If its vectors are a different width, `Gatherum__Embedding__Dimensions` is the only
+   thing to change: startup resizes the column, drops the old vectors, and the worker
+   earns them back. Never edit the migration for this.
+4. Add tests beside `SemanticSearchTests.cs`, using `FakeEmbedder` — a real model's
+   answers are approximate, and an assertion about ranking made against one is a coin
+   toss dressed as a test.
+
 **Add a storage backend**:
 1. Implement `IFileStorage` (cf. `Storage/FileSystemStorage.cs`); save returns SHA-256.
 2. Swap the registration in `AddGatherum` (make it configurable then).
@@ -159,7 +184,8 @@ touch the server only through `IAppData`.
 - Pure logic (markdown links/rendering, hashing, snippets, media types) gets plain
   unit tests.
 - Service behavior (tree ops, privacy, categories, versions, search) gets tests against real
-  Postgres via `PostgresFixture` + `ServiceHarness` — never mock the DbContext.
+  Postgres via `PostgresFixture` + `ServiceHarness` — never mock the DbContext. The
+  fixture's Postgres must carry pgvector.
 - Cross-surface flows belong in `AppIntegrationTests` (WebApplicationFactory + API key).
 - Single test: `dotnet test --filter "DisplayName~<fragment>"`.
 

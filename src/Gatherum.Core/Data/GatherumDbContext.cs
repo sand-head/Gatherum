@@ -11,11 +11,14 @@ public class GatherumDbContext(DbContextOptions<GatherumDbContext> options) : Db
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<NodeCategory> NodeCategories => Set<NodeCategory>();
     public DbSet<NodeLink> NodeLinks => Set<NodeLink>();
+    public DbSet<NodeEmbedding> NodeEmbeddings => Set<NodeEmbedding>();
     public DbSet<User> Users => Set<User>();
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
 
     protected override void OnModelCreating(ModelBuilder model)
     {
+        model.HasPostgresExtension("vector");
+
         model.Entity<Node>(node =>
         {
             node.Property(n => n.Title).HasMaxLength(500);
@@ -33,6 +36,15 @@ public class GatherumDbContext(DbContextOptions<GatherumDbContext> options) : Db
                     """,
                     stored: true);
             node.HasIndex(n => n.SearchVector).HasMethod("GIN");
+            node.Property(n => n.TextFingerprint)
+                .HasMaxLength(32)
+                .HasComputedColumnSql(
+                    """md5(coalesce("Title", '') || E'\n' || coalesce("SearchText", ''))""",
+                    stored: true);
+            node.Property(n => n.EmbeddedFingerprint).HasMaxLength(32);
+            // The one predicate the embedding sweep runs: every node whose text has
+            // moved on from what was embedded of it.
+            node.HasIndex(n => new { n.EmbeddedFingerprint, n.TextFingerprint });
         });
 
         model.Entity<FileBody>(file =>
@@ -76,6 +88,20 @@ public class GatherumDbContext(DbContextOptions<GatherumDbContext> options) : Db
                 .HasForeignKey(l => l.SourceId).OnDelete(DeleteBehavior.Cascade);
             link.HasOne(l => l.Target).WithMany(n => n.InboundLinks)
                 .HasForeignKey(l => l.TargetId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        model.Entity<NodeEmbedding>(embedding =>
+        {
+            embedding.Property(e => e.Hash).HasMaxLength(64);
+            embedding.Property(e => e.Model).HasMaxLength(200);
+            // Dimensionless on purpose: the width is a runtime setting, applied to this
+            // column (and to the index that needs it) by EmbeddingSchema at startup, so
+            // changing embedding models is an env var rather than a migration.
+            embedding.Property(e => e.Embedding).HasColumnType("vector");
+            embedding.HasOne(e => e.Node).WithMany(n => n.Embeddings)
+                .HasForeignKey(e => e.NodeId).OnDelete(DeleteBehavior.Cascade);
+            embedding.HasIndex(e => new { e.NodeId, e.Ordinal });
+            embedding.HasIndex(e => e.Hash);
         });
 
         model.Entity<User>(user =>

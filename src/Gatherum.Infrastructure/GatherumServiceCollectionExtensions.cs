@@ -3,6 +3,7 @@ using Gatherum.Core.Abstractions;
 using Gatherum.Core.Data;
 using Gatherum.Core.Services;
 using Gatherum.Infrastructure.Analysis;
+using Gatherum.Infrastructure.Embedding;
 using Gatherum.Infrastructure.Extraction;
 using Gatherum.Infrastructure.Storage;
 using Microsoft.EntityFrameworkCore;
@@ -21,8 +22,7 @@ public static class GatherumServiceCollectionExtensions
         services.AddDbContext<GatherumDbContext>((provider, options) =>
         {
             var gatherum = provider.GetRequiredService<IOptions<GatherumOptions>>().Value;
-            options.UseNpgsql(gatherum.Database.ConnectionString,
-                npgsql => npgsql.MigrationsAssembly("Gatherum.Infrastructure"));
+            options.UseNpgsql(gatherum.Database.ConnectionString, GatherumNpgsql.Configure);
         });
 
         services.AddSingleton(TimeProvider.System);
@@ -34,11 +34,13 @@ public static class GatherumServiceCollectionExtensions
         services.AddSingleton<ITextExtractor, ImageMetadataExtractor>();
 
         AddAnalysis(services, configuration);
+        AddEmbedding(services, configuration);
 
         services.AddScoped<NodeService>();
         services.AddScoped<CategoryService>();
         services.AddScoped<FileService>();
         services.AddScoped<SearchService>();
+        services.AddScoped<EmbeddingService>();
         services.AddScoped<UserService>();
         services.AddScoped<ApiKeyService>();
         return services;
@@ -67,5 +69,31 @@ public static class GatherumServiceCollectionExtensions
                     new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", analysis.ApiKey);
         });
         services.AddHostedService<MediaAnalysisWorker>();
+    }
+
+    /// <summary>Semantic search is opt-in the same way analysis is: with no endpoint
+    /// configured no embedder is registered, no worker runs, no vector is ever computed,
+    /// and <see cref="SearchService"/> answers from the tsvector index alone. The cache
+    /// and the service are registered either way so nothing downstream has to ask
+    /// whether the feature exists.</summary>
+    private static void AddEmbedding(IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddSingleton<QueryEmbeddingCache>();
+
+        var embedding = configuration
+            .GetSection($"{GatherumOptions.Section}:{nameof(GatherumOptions.Embedding)}")
+            .Get<EmbeddingOptions>() ?? new EmbeddingOptions();
+        if (!embedding.IsConfigured)
+            return;
+
+        services.AddHttpClient<IEmbedder, OpenAiEmbedder>(client =>
+        {
+            client.BaseAddress = new Uri(embedding.Endpoint.TrimEnd('/') + "/");
+            client.Timeout = TimeSpan.FromSeconds(embedding.TimeoutSeconds);
+            if (embedding.ApiKey.Length > 0)
+                client.DefaultRequestHeaders.Authorization =
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", embedding.ApiKey);
+        });
+        services.AddHostedService<EmbeddingWorker>();
     }
 }

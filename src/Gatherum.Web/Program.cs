@@ -182,6 +182,12 @@ static async Task MigrateAsync(WebApplication app)
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<GatherumDbContext>();
     await db.Database.MigrateAsync();
+
+    // The vector column's width is a property of the configured model, not of the
+    // migration, so it is settled here — and only when a model is configured at all.
+    if (options.Embedding.IsConfigured)
+        await Gatherum.Infrastructure.Data.EmbeddingSchema.EnsureAsync(
+            db, options.Embedding.Dimensions, app.Logger);
 }
 
 public partial class Program;

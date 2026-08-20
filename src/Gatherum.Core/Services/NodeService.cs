@@ -7,7 +7,8 @@ namespace Gatherum.Core.Services;
 
 /// <summary>The tree rules: positions, moves, privacy, and links. Bodies — bytes,
 /// versions, text — belong to FileService; the taxonomy to CategoryService.</summary>
-public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeProvider clock)
+public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeProvider clock,
+    EmbeddingService embeddings)
 {
     /// <summary>Creates the tree half of a node; FileService attaches the body before
     /// saving. Position and inherited privacy are decided here so every node obeys the
@@ -190,6 +191,11 @@ public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeP
         var direct = subjectPaths.ToHashSet();
         var ancestry = subjectPaths.SelectMany(CategoryPath.Ancestry).ToHashSet();
 
+        // What the taxonomy and the links cannot say: two pages about the same thing
+        // that were never filed together and never mentioned each other.
+        var likeness = await LikenessAsync(userId, nodeId, limit, ct);
+        var alike = likeness.Keys.ToList();
+
         // Which categories touch this node's ancestry is decided over the whole (small)
         // taxonomy in memory, so the node query stays one Contains rather than a prefix
         // match per ancestor.
@@ -200,6 +206,7 @@ public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeP
         var candidates = await authorizer.VisibleTo(db.Nodes, userId)
             .Where(n => n.Id != nodeId)
             .Where(n => linkedIds.Contains(n.Id)
+                || alike.Contains(n.Id)
                 || n.Categories.Any(c => kin.Contains(c.Category!.Path)))
             .Select(n => new
             {
@@ -210,7 +217,8 @@ public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeP
             .ToListAsync(ct);
 
         return candidates
-            .OrderByDescending(c => Kinship(c.Paths) + (c.IsLinked ? 4 : 0))
+            .OrderByDescending(c => Kinship(c.Paths) + (c.IsLinked ? 4 : 0)
+                + likeness.GetValueOrDefault(c.Id) * 4)
             .ThenByDescending(c => c.UpdatedAt)
             .Take(limit)
             .Select(c => new SimilarNode(c.Id, c.Title,
@@ -227,6 +235,31 @@ public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeP
                 .Count(ancestry.Contains);
             return shared + common;
         }
+    }
+
+    /// <summary>How alike this node's text is to other nodes', in 0..1. Weighted to be
+    /// worth about what a link is worth at its strongest: writing about the same subject
+    /// is real evidence of kinship, but somebody deliberately linking two pages, or
+    /// filing them under one subject, is a statement and this is an inference.</summary>
+    private async Task<Dictionary<Guid, double>> LikenessAsync(Guid userId, Guid nodeId, int limit,
+        CancellationToken ct)
+    {
+        var centroid = await embeddings.CentroidAsync(nodeId, ct);
+        if (centroid is null)
+            return [];
+
+        var visible = authorizer.VisibleTo(db.Nodes, userId).Where(n => n.Id != nodeId);
+        var hits = await embeddings.NearestAsync(visible, centroid, limit * 6, ct);
+        var best = new Dictionary<Guid, double>();
+        foreach (var hit in hits)
+        {
+            // Cosine distance runs 0..2, but the far half is "about the opposite of this"
+            // and there is no such thing here — everything past 1 is simply unrelated.
+            var score = Math.Clamp(1 - hit.Distance, 0, 1);
+            if (score > best.GetValueOrDefault(hit.NodeId))
+                best[hit.NodeId] = score;
+        }
+        return best;
     }
 
     /// <summary>Search text is category paths + filename + description + extracted
