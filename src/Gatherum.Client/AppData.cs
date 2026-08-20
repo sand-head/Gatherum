@@ -76,7 +76,12 @@ public record TreeNodeInfo(Guid Id, Guid? ParentId, string Title, string MediaTy
 public record NodeInfo(Guid Id, string Title, bool IsPrivate,
     IReadOnlyList<CategoryRef> Categories, FileFacts? File);
 public record FileFacts(string FileName, string MediaType, long SizeBytes, int Version,
-    string Sha256, string Description, string ExtractedText);
+    string Sha256, string Description, string ExtractedText, string Transcript, string Summary,
+    string Analysis, string? AnalysisError)
+{
+    public bool AnalysisPending => Analysis == "Pending";
+    public bool AnalysisFailed => Analysis == "Failed";
+}
 public record VersionInfo(int Number, string FileName, string MediaType, long SizeBytes,
     DateTimeOffset UploadedAt, bool IsText);
 /// <summary>A category as a node wears it: the path is what it is, the name is what

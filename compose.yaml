@@ -11,6 +11,11 @@ services:
       # Gatherum__Oidc__Authority: https://auth.example.org
       # Gatherum__Oidc__ClientId: gatherum
       # Gatherum__Oidc__ClientSecret: change-me
+      # Point these at a model you run to have uploaded images read and recordings
+      # transcribed. host.docker.internal reaches a llama.cpp server on the host;
+      # without an endpoint nothing is sent anywhere.
+      # Gatherum__Analysis__Endpoint: http://host.docker.internal:8080/v1
+      # Gatherum__Analysis__Model: your-any-to-any-model
     volumes:
       - gatherum-files:/data
     depends_on:

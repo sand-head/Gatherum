@@ -40,10 +40,12 @@ auto-login. Migrations: `dotnet ef migrations add <Name> -p src/Gatherum.Infrast
   (`Services/`) where every business rule lives (`NodeService` = tree/links/title
   resolution, `CategoryService` = the taxonomy and what is filed in it,
   `FileService` = bodies/versions/text editing), `Markdown/MarkdownContent`
-  and `Markdown/WikiLinkSyntax` (the link conventions, read server-side), and the three
-  seam interfaces in `Abstractions/`.
+  and `Markdown/WikiLinkSyntax` (the link conventions, read server-side), the seam
+  interfaces in `Abstractions/`, and `Services/MediaAnalysisQueue` — the hand-off from
+  an upload to the background analyzer.
 - `src/Gatherum.Infrastructure` — implementations with real dependencies: filesystem
-  storage, text extractors, EF migrations.
+  storage, text extractors, media analysis (`Analysis/` — the OpenAI-compatible client,
+  ffmpeg, and the background worker), EF migrations.
 - `src/Gatherum.Web` — the static pages and layout (`Components/`), REST API
   (`Api/`), MCP tools (`Mcp/`), auth (`Auth/`), presence + `ServerAppData`, the
   server implementation of the interactive components' data seam (`Services/`).
@@ -79,9 +81,12 @@ fresh DI scope via `Services/AppOperations`.
   that decides how one is spelled — and nothing else names a subject. No tags.
 - MCP and REST stay thin adapters over the same application services. No logic in
   endpoints, tools, or components.
-- Storage (`IFileStorage`), extraction (`ITextExtractor`), and authorization
-  (`INodeAuthorizer`) are the only abstraction seams. Don't add interfaces without a
-  stated second implementation.
+- Storage (`IFileStorage`), extraction (`ITextExtractor`), analysis (`IMediaAnalyzer`),
+  and authorization (`INodeAuthorizer`) are the only abstraction seams. Don't add
+  interfaces without a stated second implementation.
+- Extraction is exact, cheap, and runs inside the upload request; analysis asks a model,
+  takes minutes, and runs on a background worker. Never put one on the other's path —
+  an upload must return before any model is consulted.
 - Auth is OIDC-only (plus API keys). No local accounts, ever.
 - No JavaScript beyond `wwwroot/js/gatherum.js`, and nothing goes in there that
   Blazor can do natively.
@@ -127,6 +132,16 @@ touch the server only through `IAppData`.
    `PdfTextExtractor.cs`).
 2. Register it in `GatherumServiceCollectionExtensions.AddGatherum`.
 3. Add a claim/extract test beside `FileStorageTests.cs`.
+
+**Add a media analyzer** (a new way to read, hear, or describe a medium):
+1. Implement `IMediaAnalyzer` in `src/Gatherum.Infrastructure/Analysis/` (cf.
+   `OpenAiMediaAnalyzer.cs`). Analysis is slow and fallible by nature: throw with a
+   message a person can act on, and `MediaAnalysisWorker` records it on the version.
+2. Register it in `GatherumServiceCollectionExtensions.AddAnalysis`, which only wires
+   analysis up at all when an endpoint is configured — with none, nothing claims an
+   image and every upload behaves as it did before analysis existed.
+3. Add tests beside `MediaAnalysisTests.cs`, using `FakeMediaAnalyzer` for anything
+   about queueing, reuse, or search text.
 
 **Add a storage backend**:
 1. Implement `IFileStorage` (cf. `Storage/FileSystemStorage.cs`); save returns SHA-256.

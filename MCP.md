@@ -34,7 +34,7 @@ claude mcp add --transport http gatherum http://localhost:5140/mcp \
 | Tool | Arguments | Returns |
 | --- | --- | --- |
 | `search` | `query`, `kind?` (`page`/`file`), `limit?` | Matches with kind and snippet |
-| `get_node` | `id` | Metadata + Markdown body (pages) or extracted text + file metadata (files) |
+| `get_node` | `id` | Metadata + Markdown body (pages) or extracted text + file metadata (files). Media analyzed by a model also carries `transcript` (words read off an image, speech heard in audio or video) and `summary`, with `analysis` saying whether that is `None`, `Pending`, `Complete`, or `Failed` |
 | `list_children` | `id?` (omit for roots) | Children in tree order |
 | `create_page` | `title`, `markdown`, `parentId?` | The created node (a Markdown file) |
 | `update_page` | `id`, `markdown`, `title?` | The updated node (a new version is recorded) |

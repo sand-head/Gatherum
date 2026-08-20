@@ -137,6 +137,21 @@ had to learn:
 The chrome is *derived* from block tags on every edit rather than pinned at parse, since
 block indices move as a page is written. All slopedit packages moved to 2.1.0.
 
+### Post-revision: media that carries no text of its own
+
+Uploading a photo used to index its EXIF and nothing else; a video indexed nothing at
+all. `IMediaAnalyzer` is a second seam beside `ITextExtractor` — slow, fallible, and off
+the request path — with `OpenAiMediaAnalyzer` speaking `/chat/completions` against a
+model the owner runs (llama.cpp, any-to-any). Still images get OCR and a description,
+audio gets a transcript and a summary of it, and video is split by ffmpeg into the audio
+a model listens to and frames it looks at. `FileVersion` grew `Transcript`, `Summary`,
+`Analysis`, and `AnalysisError`; both new texts feed `SearchText` and the shared DTOs.
+`MediaAnalysisQueue` hands uploads to `MediaAnalysisWorker`, which works one file at a
+time, sweeps for unfinished and pre-existing media at startup, and records failures on
+the version rather than retrying. Analysis is keyed by content hash, so identical bytes
+and restored versions inherit an answer already paid for. With no endpoint configured
+nothing is registered and every upload behaves exactly as it did before.
+
 ### Post-revision: nested categories, and tags are gone
 
 Tags left the app at the owner's request — Wikipedia has none, Google Docs has none, and

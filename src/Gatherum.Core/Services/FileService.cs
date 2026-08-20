@@ -17,6 +17,8 @@ public class FileService(
     NodeService nodes,
     IFileStorage storage,
     IEnumerable<ITextExtractor> extractors,
+    IEnumerable<IMediaAnalyzer> analyzers,
+    MediaAnalysisQueue analysisQueue,
     TimeProvider clock,
     ILogger<FileService> logger)
 {
@@ -45,8 +47,9 @@ public class FileService(
         var mediaType = MediaTypes.Resolve(declaredMediaType, fileName);
         var node = await nodes.CreateNodeAsync(userId, parentId, fileName, mediaType, ct);
         node.File = new FileBody { NodeId = node.Id };
-        await AddUploadedVersionAsync(node, userId, fileName, mediaType, content, ct);
+        var version = await AddUploadedVersionAsync(node, userId, fileName, mediaType, content, ct);
         await db.SaveChangesAsync(ct);
+        QueueAnalysis(version);
         return node;
     }
 
@@ -59,9 +62,10 @@ public class FileService(
         {
             var node = await RequireFileNodeAsync(userId, nodeId, ct);
             var mediaType = MediaTypes.Resolve(declaredMediaType, fileName);
-            await AddUploadedVersionAsync(node, userId, fileName, mediaType, content, ct);
+            var version = await AddUploadedVersionAsync(node, userId, fileName, mediaType, content, ct);
             node.MediaType = mediaType;
             await db.SaveChangesAsync(ct);
+            QueueAnalysis(version);
             return node;
         }
         finally
@@ -190,7 +194,7 @@ public class FileService(
             var version = node.File!.Versions.FirstOrDefault(v => v.Number == versionNumber)
                 ?? throw new NotFoundException($"Version {versionNumber} of node {nodeId} not found.");
 
-            AddVersion(node, new FileVersion
+            var restored = new FileVersion
             {
                 Id = Guid.NewGuid(),
                 NodeId = node.Id,
@@ -200,14 +204,20 @@ public class FileService(
                 FileName = version.FileName,
                 SizeBytes = version.SizeBytes,
                 ExtractedText = version.ExtractedText,
+                Transcript = version.Transcript,
+                Summary = version.Summary,
+                Analysis = version.Analysis,
+                AnalysisError = version.AnalysisError,
                 UploadedById = userId,
                 UploadedAt = clock.GetUtcNow(),
-            });
+            };
+            AddVersion(node, restored);
             node.MediaType = version.MediaType;
             node.UpdatedAt = clock.GetUtcNow();
             nodes.RefreshSearchText(node);
             await RefreshLinksAsync(node, userId, ct);
             await db.SaveChangesAsync(ct);
+            QueueAnalysis(restored);
             return node;
         }
         finally
@@ -215,6 +225,100 @@ public class FileService(
             gate.Release();
         }
     }
+
+    /// <summary>The background analyzer's door back in. Keyed by version rather than by
+    /// user because nothing here is a request: the bytes were authorized when they were
+    /// admitted at upload, and the worker acts for the system. Takes the node's save
+    /// gate so a transcript landing mid-autosave cannot race a version being written.
+    /// A version deleted while its model was still thinking is a no-op, not an error.</summary>
+    public Task ApplyAnalysisAsync(Guid versionId, MediaAnalysis analysis,
+        CancellationToken ct = default) =>
+        RecordAnalysisAsync(versionId, version =>
+        {
+            version.Transcript = analysis.Transcript;
+            version.Summary = analysis.Summary;
+            version.Analysis = MediaAnalysisState.Complete;
+            version.AnalysisError = "";
+        }, ct);
+
+    public Task FailAnalysisAsync(Guid versionId, string error, CancellationToken ct = default) =>
+        RecordAnalysisAsync(versionId, version =>
+        {
+            version.Analysis = MediaAnalysisState.Failed;
+            version.AnalysisError = Truncate(error, 1000);
+        }, ct);
+
+    private async Task RecordAnalysisAsync(Guid versionId, Action<FileVersion> record,
+        CancellationToken ct)
+    {
+        var nodeId = await db.FileVersions.Where(v => v.Id == versionId)
+            .Select(v => (Guid?)v.NodeId).FirstOrDefaultAsync(ct);
+        if (nodeId is not { } id)
+            return;
+
+        var gate = GateFor(id);
+        await gate.WaitAsync(ct);
+        try
+        {
+            var node = await db.Nodes
+                .Include(n => n.Categories).ThenInclude(c => c.Category)
+                .Include(n => n.File!).ThenInclude(f => f.Versions)
+                .FirstOrDefaultAsync(n => n.Id == id, ct);
+            var version = node?.File?.Versions.FirstOrDefault(v => v.Id == versionId);
+            if (node is null || version is null)
+                return;
+
+            record(version);
+            // Deliberately not touching UpdatedAt: a model finishing its work is not
+            // somebody editing, and Recent should not reshuffle hours after an upload.
+            nodes.RefreshSearchText(node);
+            await db.SaveChangesAsync(ct);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    /// <summary>Media that predates analysis being switched on: the current version of
+    /// every node an analyzer claims but nobody ever asked it about. Marks them Pending
+    /// and hands back their ids, so turning an endpoint on makes the photos already in
+    /// the tree searchable rather than only the next one uploaded. Older versions are
+    /// left alone — history is for reading back, not for spending an afternoon of a
+    /// model on.</summary>
+    public async Task<List<Guid>> BackfillAnalysisAsync(CancellationToken ct = default)
+    {
+        if (!analyzers.Any())
+            return [];
+
+        var candidates = await db.FileVersions
+            .Where(v => v.Analysis == MediaAnalysisState.None)
+            .Where(v => v.Number == db.FileVersions
+                .Where(other => other.NodeId == v.NodeId)
+                .Max(other => other.Number))
+            .Select(v => new { v.Id, v.MediaType, v.FileName })
+            .ToListAsync(ct);
+
+        var claimed = candidates
+            .Where(c => analyzers.Any(a => a.CanAnalyze(c.MediaType, c.FileName)))
+            .Select(c => c.Id)
+            .ToList();
+        if (claimed.Count > 0)
+            await db.FileVersions
+                .Where(v => claimed.Contains(v.Id))
+                .ExecuteUpdateAsync(
+                    set => set.SetProperty(v => v.Analysis, MediaAnalysisState.Pending), ct);
+        return claimed;
+    }
+
+    /// <summary>Every version still waiting on a model, oldest first — what the worker
+    /// sweeps at startup so a restart mid-transcript resumes instead of stranding.</summary>
+    public Task<List<Guid>> PendingAnalysisIdsAsync(CancellationToken ct = default) =>
+        db.FileVersions
+            .Where(v => v.Analysis == MediaAnalysisState.Pending)
+            .OrderBy(v => v.UploadedAt)
+            .Select(v => v.Id)
+            .ToListAsync(ct);
 
     public async Task SetDescriptionAsync(Guid userId, Guid nodeId, string description,
         CancellationToken ct = default)
@@ -290,12 +394,13 @@ public class FileService(
         await RefreshLinksAsync(node, userId, ct);
     }
 
-    private async Task AddUploadedVersionAsync(Node node, Guid userId, string fileName,
+    private async Task<FileVersion> AddUploadedVersionAsync(Node node, Guid userId, string fileName,
         string mediaType, Stream content, CancellationToken ct)
     {
         var blob = await storage.SaveAsync(content, ct);
         var text = await ExtractTextAsync(blob.Hash, mediaType, fileName, ct);
-        AddVersion(node, new FileVersion
+        var analysis = await PlanAnalysisAsync(blob.Hash, mediaType, fileName, ct);
+        var version = new FileVersion
         {
             Id = Guid.NewGuid(),
             NodeId = node.Id,
@@ -305,13 +410,45 @@ public class FileService(
             FileName = fileName,
             SizeBytes = blob.SizeBytes,
             ExtractedText = text,
+            Transcript = analysis.Transcript,
+            Summary = analysis.Summary,
+            Analysis = analysis.State,
             UploadedById = userId,
             UploadedAt = clock.GetUtcNow(),
-        });
+        };
+        AddVersion(node, version);
         node.UpdatedAt = clock.GetUtcNow();
         nodes.RefreshSearchText(node);
         await RefreshLinksAsync(node, userId, ct);
+        return version;
     }
+
+    /// <summary>What a new version already knows about its own analysis before any model
+    /// runs. Content-addressing pays off twice here: identical bytes uploaded again
+    /// inherit the transcript a model already spent minutes on, so only genuinely new
+    /// media ever queues.</summary>
+    private async Task<AnalysisPlan> PlanAnalysisAsync(string hash, string mediaType,
+        string fileName, CancellationToken ct)
+    {
+        if (!analyzers.Any(a => a.CanAnalyze(mediaType, fileName)))
+            return new AnalysisPlan(MediaAnalysisState.None, "", "");
+
+        var known = await db.FileVersions
+            .Where(v => v.Hash == hash && v.Analysis == MediaAnalysisState.Complete)
+            .Select(v => new { v.Transcript, v.Summary })
+            .FirstOrDefaultAsync(ct);
+        return known is null
+            ? new AnalysisPlan(MediaAnalysisState.Pending, "", "")
+            : new AnalysisPlan(MediaAnalysisState.Complete, known.Transcript, known.Summary);
+    }
+
+    private void QueueAnalysis(FileVersion version)
+    {
+        if (version.Analysis == MediaAnalysisState.Pending)
+            analysisQueue.Enqueue(version.Id);
+    }
+
+    private record AnalysisPlan(MediaAnalysisState State, string Transcript, string Summary);
 
     /// <summary>The link rows a body claims. <paramref name="userId"/> is whose eyes
     /// resolve a <c>[[wiki link]]</c>: it names a page rather than pointing at one, so
@@ -368,6 +505,9 @@ public class FileService(
         var extension = node.MediaType == MediaTypes.Markdown ? ".md" : ".txt";
         return (safe.Length == 0 ? "untitled" : safe) + extension;
     }
+
+    private static string Truncate(string value, int max) =>
+        value.Length <= max ? value : value[..max];
 
     private static SemaphoreSlim GateFor(Guid nodeId) =>
         SaveGates.GetOrAdd(nodeId, _ => new SemaphoreSlim(1, 1));

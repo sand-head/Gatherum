@@ -24,14 +24,24 @@ C#/Blazor — the only JavaScript is a ~65-line interop file.
   storage (SHA-256) on disk, inline previews (images, PDF, video, audio), descriptions,
   categories, and re-upload as a new version with old bytes retrievable. Text extraction
   (plain text/markdown/code verbatim, PDF via PdfPig, docx as its Markdown rendering,
-  image metadata) feeds search.
+  image metadata) feeds search — and see **Multimedia** below for what a model adds to
+  that on top.
+- **Multimedia**: point `Gatherum__Analysis__Endpoint` at a model you run — llama.cpp's
+  server, or anything else speaking the OpenAI API — and uploads that carry no text of
+  their own get some. Still images are read (the writing on a photographed whiteboard),
+  audio and video are transcribed, and everything gets a short summary, so a recording
+  answers to what it was *about* and not just to its filename. Analysis runs on a
+  background worker after the upload returns, survives restarts, and is reused when the
+  same bytes turn up again. Off by default; nothing is ever sent anywhere without an
+  endpoint you configured.
 - **Categories**: what a node is *about*, arranged the way an encyclopedia arranges it
   — nested, not a tag cloud. File a page under `Homelab/Podman` and it is a page about
   the homelab too: the parent category lists it, a search for either name finds it, and
   "Similar" counts the kinship. Categories are created by being used and maintained like
   anything else — renamed, re-nested, deleted — with their subcategories following along.
 - **Search**: PostgreSQL full-text (`tsvector` + GIN, `websearch_to_tsquery`) over
-  titles, category names, and text. `Ctrl`/`⌘`+`K` anywhere.
+  titles, category names, and text — including what a model read, heard, or made of your
+  media. `Ctrl`/`⌘`+`K` anywhere.
 - **Awareness**: presence shows who else is editing a document, and the editor warns
   when someone saved a newer version (their save stays in history either way).
 - **Access**: OIDC sign-in only (built for Authelia; any discovery-capable IdP works),
@@ -76,6 +86,15 @@ Everything configures through environment variables (`Gatherum__Section__Key` fo
 | `Gatherum__Oidc__ClientSecret` | *(empty)* | OIDC client secret |
 | `Gatherum__Oidc__Scopes` | `openid profile email` | Requested scopes |
 | `Gatherum__Oidc__RequestOfflineAccess` | `false` | Additionally request `offline_access` (only if your IdP allows it) |
+| `Gatherum__Analysis__Endpoint` | *(empty)* | Base URL of an OpenAI-compatible API (e.g. `http://localhost:8080/v1`); empty leaves multimedia analysis off |
+| `Gatherum__Analysis__Model` | *(empty)* | Model that reads images and writes summaries |
+| `Gatherum__Analysis__AudioModel` | *(falls back to `Model`)* | Model that transcribes speech, if a different one has the ears |
+| `Gatherum__Analysis__ApiKey` | *(empty)* | Bearer token, when your runner wants one |
+| `Gatherum__Analysis__BackfillExisting` | `true` | On first start, queue media uploaded before analysis was configured |
+| `Gatherum__Analysis__VideoFrames` | `4` | Frames sampled across a video for its summary |
+| `Gatherum__Analysis__MaxBytes` | `268435456` | Largest file sent for analysis; bigger ones upload and store as before |
+| `Gatherum__Analysis__TimeoutSeconds` | `900` | Ceiling on one analysis call |
+| `Gatherum__Analysis__FfmpegPath` | `ffmpeg` | How to invoke ffmpeg, which splits video into audio and frames |
 
 The first user ever to sign in becomes admin. API keys are created in **Settings**,
 stored hashed, revocable, and sent as `Authorization: Bearer gk_…` to `/api` and `/mcp`.

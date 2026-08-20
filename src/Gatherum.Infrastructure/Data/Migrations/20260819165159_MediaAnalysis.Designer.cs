@@ -3,6 +3,7 @@ using System;
 using Gatherum.Core.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using NpgsqlTypes;
@@ -12,9 +13,11 @@ using NpgsqlTypes;
 namespace Gatherum.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(GatherumDbContext))]
-    partial class GatherumDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260819165159_MediaAnalysis")]
+    partial class MediaAnalysis
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -64,35 +67,6 @@ namespace Gatherum.Infrastructure.Data.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("ApiKeys");
-                });
-
-            modelBuilder.Entity("Gatherum.Core.Domain.Category", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<Guid?>("ParentId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Path")
-                        .IsRequired()
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ParentId");
-
-                    b.HasIndex("Path")
-                        .IsUnique();
-
-                    b.ToTable("Categories");
                 });
 
             modelBuilder.Entity("Gatherum.Core.Domain.FileBody", b =>
@@ -234,21 +208,6 @@ namespace Gatherum.Infrastructure.Data.Migrations
                     b.ToTable("Nodes");
                 });
 
-            modelBuilder.Entity("Gatherum.Core.Domain.NodeCategory", b =>
-                {
-                    b.Property<Guid>("NodeId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("CategoryId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("NodeId", "CategoryId");
-
-                    b.HasIndex("CategoryId");
-
-                    b.ToTable("NodeCategories");
-                });
-
             modelBuilder.Entity("Gatherum.Core.Domain.NodeLink", b =>
                 {
                     b.Property<Guid>("SourceId")
@@ -262,6 +221,40 @@ namespace Gatherum.Infrastructure.Data.Migrations
                     b.HasIndex("TargetId");
 
                     b.ToTable("NodeLinks");
+                });
+
+            modelBuilder.Entity("Gatherum.Core.Domain.NodeTag", b =>
+                {
+                    b.Property<Guid>("NodeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TagId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("NodeId", "TagId");
+
+                    b.HasIndex("TagId");
+
+                    b.ToTable("NodeTags");
+                });
+
+            modelBuilder.Entity("Gatherum.Core.Domain.Tag", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("Tags");
                 });
 
             modelBuilder.Entity("Gatherum.Core.Domain.User", b =>
@@ -310,16 +303,6 @@ namespace Gatherum.Infrastructure.Data.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("Gatherum.Core.Domain.Category", b =>
-                {
-                    b.HasOne("Gatherum.Core.Domain.Category", "Parent")
-                        .WithMany("Children")
-                        .HasForeignKey("ParentId")
-                        .OnDelete(DeleteBehavior.Cascade);
-
-                    b.Navigation("Parent");
-                });
-
             modelBuilder.Entity("Gatherum.Core.Domain.FileBody", b =>
                 {
                     b.HasOne("Gatherum.Core.Domain.Node", "Node")
@@ -366,25 +349,6 @@ namespace Gatherum.Infrastructure.Data.Migrations
                     b.Navigation("Parent");
                 });
 
-            modelBuilder.Entity("Gatherum.Core.Domain.NodeCategory", b =>
-                {
-                    b.HasOne("Gatherum.Core.Domain.Category", "Category")
-                        .WithMany("Nodes")
-                        .HasForeignKey("CategoryId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Gatherum.Core.Domain.Node", "Node")
-                        .WithMany("Categories")
-                        .HasForeignKey("NodeId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Category");
-
-                    b.Navigation("Node");
-                });
-
             modelBuilder.Entity("Gatherum.Core.Domain.NodeLink", b =>
                 {
                     b.HasOne("Gatherum.Core.Domain.Node", "Source")
@@ -404,11 +368,23 @@ namespace Gatherum.Infrastructure.Data.Migrations
                     b.Navigation("Target");
                 });
 
-            modelBuilder.Entity("Gatherum.Core.Domain.Category", b =>
+            modelBuilder.Entity("Gatherum.Core.Domain.NodeTag", b =>
                 {
-                    b.Navigation("Children");
+                    b.HasOne("Gatherum.Core.Domain.Node", "Node")
+                        .WithMany("Tags")
+                        .HasForeignKey("NodeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
-                    b.Navigation("Nodes");
+                    b.HasOne("Gatherum.Core.Domain.Tag", "Tag")
+                        .WithMany("Nodes")
+                        .HasForeignKey("TagId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Node");
+
+                    b.Navigation("Tag");
                 });
 
             modelBuilder.Entity("Gatherum.Core.Domain.FileBody", b =>
@@ -418,8 +394,6 @@ namespace Gatherum.Infrastructure.Data.Migrations
 
             modelBuilder.Entity("Gatherum.Core.Domain.Node", b =>
                 {
-                    b.Navigation("Categories");
-
                     b.Navigation("Children");
 
                     b.Navigation("File");
@@ -427,6 +401,13 @@ namespace Gatherum.Infrastructure.Data.Migrations
                     b.Navigation("InboundLinks");
 
                     b.Navigation("OutboundLinks");
+
+                    b.Navigation("Tags");
+                });
+
+            modelBuilder.Entity("Gatherum.Core.Domain.Tag", b =>
+                {
+                    b.Navigation("Nodes");
                 });
 #pragma warning restore 612, 618
         }

@@ -13,7 +13,7 @@ using NpgsqlTypes;
 namespace Gatherum.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(GatherumDbContext))]
-    [Migration("20260819180124_NestedCategories")]
+    [Migration("20260820013207_NestedCategories")]
     partial class NestedCategories
     {
         /// <inheritdoc />
@@ -118,6 +118,13 @@ namespace Gatherum.Infrastructure.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<int>("Analysis")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("AnalysisError")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<string>("ExtractedText")
                         .IsRequired()
                         .HasColumnType("text");
@@ -145,6 +152,14 @@ namespace Gatherum.Infrastructure.Data.Migrations
 
                     b.Property<long>("SizeBytes")
                         .HasColumnType("bigint");
+
+                    b.Property<string>("Summary")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Transcript")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<DateTimeOffset>("UploadedAt")
                         .HasColumnType("timestamp with time zone");

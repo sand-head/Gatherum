@@ -63,11 +63,19 @@ browser sessions — including against the built container).
   carries every tag over as a root category.
 - **Tree + search** — sidebar tree mixing all nodes (create, rename, delete, menu
   move up/down/move-to, drag-drop upload), Ctrl/⌘-K palette with kind badges and
-  snippets, Postgres FTS with `websearch_to_tsquery`, title ranked above body.
+  snippets, Postgres FTS with `websearch_to_tsquery`, title ranked above body; a
+  photo or a recording is findable by what a model read, heard, or made of it.
 - **Files** — upload via picker or drop, previews (image/PDF/video/audio/text),
   description, categories, referenced-by, per-version download; extraction: text verbatim,
   PDF (PdfPig), image metadata (MetadataExtractor); media types resolved sensibly
   when browsers upload code as octet-stream.
+- **Multimedia analysis** — optional, off unless `Gatherum__Analysis__Endpoint` names an
+  OpenAI-compatible model you run. Still images are read (OCR), audio and video are
+  transcribed (video split by ffmpeg into its audio track and sampled frames), and each
+  gets a short summary; transcript and summary both feed FTS and both come back over
+  REST and MCP. Runs on a background worker after the upload returns, one file at a
+  time, resumed by a startup sweep; reused when the same SHA-256 turns up again;
+  failures land on the version with their reason and never touch the stored bytes.
 - **Links** — mentions (`[@Title](node://id)`), `[[wiki links]]` and embedded files
   parse straight from Markdown into link rows; backlinks everywhere; all three are
   clickable in the editor (Ctrl/⌘+click while editing, a plain click while reading).

@@ -1,4 +1,5 @@
 @inject IAppData Data
+@implements IDisposable
 
 @if (node?.File is { } file)
 {
@@ -32,6 +33,41 @@
             }
         </div>
 
+        @if (file.Analysis != "None")
+        {
+            <section class="file-analysis">
+                <h3>What's in it</h3>
+                @if (file.AnalysisPending)
+                {
+                    <p class="analysis-note">Being read — a transcript and a summary appear
+                        here once the model has been through it.</p>
+                }
+                else if (file.AnalysisFailed)
+                {
+                    <p class="analysis-note failed">This one could not be read.
+                        @file.AnalysisError</p>
+                }
+                else if (file.Summary.Length == 0 && file.Transcript.Length == 0)
+                {
+                    <p class="analysis-note">Nothing legible or audible in this one.</p>
+                }
+                else
+                {
+                    @if (file.Summary.Length > 0)
+                    {
+                        <p class="analysis-summary">@file.Summary</p>
+                    }
+                    @if (file.Transcript.Length > 0)
+                    {
+                        <details class="analysis-transcript" open="@(file.Summary.Length == 0)">
+                            <summary>@TranscriptLabel(file.MediaType)</summary>
+                            <pre>@file.Transcript</pre>
+                        </details>
+                    }
+                }
+            </section>
+        }
+
         <dl class="file-facts">
             <dt>File</dt><dd>@file.FileName</dd>
             <dt>Type</dt><dd>@file.MediaType</dd>
@@ -62,14 +98,66 @@
 
     private NodeInfo? node;
     private string description = "";
+    private CancellationTokenSource? watching;
 
-    protected override async Task OnParametersSetAsync() => await ReloadAsync();
+    protected override async Task OnParametersSetAsync()
+    {
+        await ReloadAsync();
+        WatchAnalysis();
+    }
+
+    public void Dispose()
+    {
+        watching?.Cancel();
+        watching?.Dispose();
+    }
 
     private async Task ReloadAsync()
     {
         node = await Data.GetNodeAsync(NodeId);
         description = node.File?.Description ?? "";
     }
+
+    /// <summary>A transcript lands minutes after the upload it belongs to, on a worker
+    /// this page knows nothing about. Polling while — and only while — this file is the
+    /// one still pending is what lets the reader watch it arrive instead of guessing
+    /// when to reload.</summary>
+    private void WatchAnalysis()
+    {
+        watching?.Cancel();
+        watching?.Dispose();
+        watching = null;
+        if (node?.File?.AnalysisPending is not true)
+            return;
+
+        var tokens = new CancellationTokenSource();
+        watching = tokens;
+        _ = PollAnalysisAsync(tokens.Token);
+    }
+
+    private async Task PollAnalysisAsync(CancellationToken ct)
+    {
+        try
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+            while (await timer.WaitForNextTickAsync(ct))
+            {
+                var latest = await Data.GetNodeAsync(NodeId);
+                if (latest.File?.AnalysisPending is true)
+                    continue;
+                node = latest;
+                await InvokeAsync(StateHasChanged);
+                return;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // The reader navigated away mid-transcript; nothing to report.
+        }
+    }
+
+    private static string TranscriptLabel(string mediaType) =>
+        mediaType.StartsWith("image/") ? "Text in the image" : "Transcript";
 
     private async Task SaveDescriptionAsync()
     {

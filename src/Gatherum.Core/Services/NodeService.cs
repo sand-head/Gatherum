@@ -230,16 +230,24 @@ public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeP
     }
 
     /// <summary>Search text is category paths + filename + description + extracted
-    /// text; the title contributes through its own tsvector weight. A path contributes
-    /// every name it is nested under, so searching "homelab" finds what sits in
-    /// "homelab/podman".</summary>
+    /// text, plus whatever a model read or heard in the file; the title contributes
+    /// through its own tsvector weight. A category path contributes every name it is
+    /// nested under, so searching "homelab" finds what sits in "homelab/podman"; a
+    /// transcript and a summary are indexed side by side on purpose, because the
+    /// transcript answers an exact phrase someone remembers seeing or hearing and the
+    /// summary answers the subject nobody said out loud.</summary>
     public void RefreshSearchText(Node node)
     {
         var categories = string.Join(' ',
             node.Categories.Select(c => CategoryPath.Words(c.Category!.Path)));
-        node.SearchText = node.File is { Versions.Count: > 0 } file
-            ? $"{categories}\n{file.Current.FileName}\n{file.Description}\n{file.Current.ExtractedText}"
-            : categories;
+        if (node.File is not { Versions.Count: > 0 } file)
+        {
+            node.SearchText = categories;
+            return;
+        }
+        var current = file.Current;
+        node.SearchText = string.Join('\n', categories, current.FileName, file.Description,
+            current.ExtractedText, current.Transcript, current.Summary);
     }
 
     public async Task ReplaceLinksAsync(Node node, IReadOnlySet<Guid> targetIds, CancellationToken ct)
