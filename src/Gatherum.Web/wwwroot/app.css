@@ -34,8 +34,8 @@
   --outline-dim: light-dark(#e9eaee, #333537);
   --selected: light-dark(#d3e3fd, #004a77);
   --on-selected: light-dark(#041e49, #c2e7ff);
-  --tag-bg: light-dark(#e8f0fe, #1f3760);
-  --on-tag: light-dark(#1967d2, #a8c7fa);
+  --chip-bg: light-dark(#e8f0fe, #1f3760);
+  --on-chip: light-dark(#1967d2, #a8c7fa);
   --danger: light-dark(#d93025, #f28b82);
   --ok: light-dark(#137333, #81c995);
   --warn: light-dark(#b06000, #fdd663);
@@ -201,14 +201,14 @@ input, textarea, select {
   }
 }
 
-/* Tag chip — shared by the tag editor and the tags page. */
-.tag {
+/* Category chip — shared by the node header's editor and the categories page. */
+.category {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   font: 500 13px/1.5 var(--font-ui);
-  color: var(--on-tag);
-  background: var(--tag-bg);
+  color: var(--on-chip);
+  background: var(--chip-bg);
   border-radius: var(--radius-s);
   padding: 3px 10px;
 
@@ -228,7 +228,7 @@ input, textarea, select {
   }
 }
 
-a.tag:hover { text-decoration: none; box-shadow: var(--shadow-1); }
+a.category:hover { text-decoration: none; box-shadow: var(--shadow-1); }
 
 /* slopedit's DocumentView in page-scroll mode pins a sticky strip to the
    nearest scroll container (.content in MainLayout). overflow: clip keeps

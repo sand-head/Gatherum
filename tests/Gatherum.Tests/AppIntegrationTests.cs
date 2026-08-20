@@ -106,6 +106,40 @@ public class AppIntegrationTests(PostgresFixture postgres) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_page_filed_in_a_nested_category_is_found_from_the_category_above()
+    {
+        var create = await client.PostAsJsonAsync("/api/pages",
+            new { title = "Quadlet notes", markdown = "Rootless units restart after reboot." });
+        var pageId = (await create.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("id").GetGuid();
+
+        var filed = await client.PostAsJsonAsync($"/api/nodes/{pageId}/categories",
+            new { path = "Homelab/Podman" });
+        filed.EnsureSuccessStatusCode();
+        Assert.Equal("homelab/podman",
+            (await filed.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("path").GetString());
+
+        // The parent category holds it only when asked to look into its subcategories.
+        var shallow = await client.GetFromJsonAsync<JsonElement>("/api/categories/homelab");
+        Assert.Empty(shallow.GetProperty("nodes").EnumerateArray());
+        Assert.Equal("homelab/podman",
+            shallow.GetProperty("subcategories")[0].GetProperty("path").GetString());
+
+        var deep = await client.GetFromJsonAsync<JsonElement>("/api/categories/homelab?deep=true");
+        Assert.Contains(deep.GetProperty("nodes").EnumerateArray(),
+            n => n.GetProperty("id").GetGuid() == pageId);
+
+        // Both names it is nested under are searchable, and MCP sees the same taxonomy.
+        var results = await client.GetFromJsonAsync<JsonElement>("/api/search?query=homelab");
+        Assert.Contains(results.EnumerateArray(), r => r.GetProperty("id").GetGuid() == pageId);
+
+        var browsed = await CallMcpToolAsync("browse_category",
+            new { path = "Homelab", deep = true });
+        Assert.Contains(browsed.GetProperty("nodes").EnumerateArray(),
+            n => n.GetProperty("id").GetGuid() == pageId);
+    }
+
+    [Fact]
     public async Task The_health_endpoint_answers_without_auth()
     {
         using var anonymous = factory.CreateClient();

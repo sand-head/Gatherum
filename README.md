@@ -2,7 +2,7 @@
 
 A self-hosted, web-first knowledge base for two people, built on one idea: **pages and
 files are the same kind of thing.** Every item is a *node* — it has a title, a place in
-one tree, tags, links, backlinks, version history, and searchable text. A page is
+one tree, categories, links, backlinks, version history, and searchable text. A page is
 simply a node whose file is Markdown; a fic chapter, a Podman quadlet, a PDF, and a
 photo all live in one tree, one search, one login, one API. Built almost entirely in
 C#/Blazor — the only JavaScript is a ~65-line interop file.
@@ -22,7 +22,7 @@ C#/Blazor — the only JavaScript is a ~65-line interop file.
   or a wiki link opens the node it names, an external link leaves the app.
 - **Files**: drag-drop or picker upload anywhere in the tree, content-addressed
   storage (SHA-256) on disk, inline previews (images, PDF, video, audio), descriptions,
-  tags, and re-upload as a new version with old bytes retrievable. Text extraction
+  categories, and re-upload as a new version with old bytes retrievable. Text extraction
   (plain text/markdown/code verbatim, PDF via PdfPig, docx as its Markdown rendering,
   image metadata) feeds search — and see **Multimedia** below for what a model adds to
   that on top.
@@ -34,9 +34,14 @@ C#/Blazor — the only JavaScript is a ~65-line interop file.
   background worker after the upload returns, survives restarts, and is reused when the
   same bytes turn up again. Off by default; nothing is ever sent anywhere without an
   endpoint you configured.
+- **Categories**: what a node is *about*, arranged the way an encyclopedia arranges it
+  — nested, not a tag cloud. File a page under `Homelab/Podman` and it is a page about
+  the homelab too: the parent category lists it, a search for either name finds it, and
+  "Similar" counts the kinship. Categories are created by being used and maintained like
+  anything else — renamed, re-nested, deleted — with their subcategories following along.
 - **Search**: PostgreSQL full-text (`tsvector` + GIN, `websearch_to_tsquery`) over
-  titles, tags, and text — including what a model read, heard, or made of your media.
-  `Ctrl`/`⌘`+`K` anywhere.
+  titles, category names, and text — including what a model read, heard, or made of your
+  media. `Ctrl`/`⌘`+`K` anywhere.
 - **Awareness**: presence shows who else is editing a document, and the editor warns
   when someone saved a newer version (their save stays in history either way).
 - **Access**: OIDC sign-in only (built for Authelia; any discovery-capable IdP works),
@@ -146,7 +151,7 @@ Then set `Gatherum__Oidc__Authority=https://auth.example.org`, the client id, an
 Two things hold all state:
 
 1. **The database** — `pg_dump gatherum > gatherum.sql` (or snapshot the
-   `gatherum-db` volume). Metadata, tags, links, versions, search text.
+   `gatherum-db` volume). Metadata, categories, links, versions, search text.
 2. **The file store** — the directory behind `Gatherum__Storage__Root` (the
    `gatherum-files` volume). Every body — pages included — is a content-addressed
    blob here, so this rsyncs cheaply.

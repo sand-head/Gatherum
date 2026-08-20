@@ -36,6 +36,7 @@ public static class GatherumServiceCollectionExtensions
         AddAnalysis(services, configuration);
 
         services.AddScoped<NodeService>();
+        services.AddScoped<CategoryService>();
         services.AddScoped<FileService>();
         services.AddScoped<SearchService>();
         services.AddScoped<UserService>();

@@ -114,7 +114,7 @@ public class MediaAnalysisTests(PostgresFixture postgres) : IAsyncLifetime
 
         var node = await harness.Files.CreateFileNodeAsync(jess, null, "clip.mp4", "video/mp4",
             new MemoryStream("fake video"u8.ToArray()));
-        await harness.Nodes.AddTagAsync(jess, node.Id, "screencast");
+        await harness.Categories.AddAsync(jess, node.Id, "Screencasts");
         await harness.AnalyzePendingAsync();
 
         var failed = await harness.ReloadAsync(jess, node.Id);
@@ -126,7 +126,7 @@ public class MediaAnalysisTests(PostgresFixture postgres) : IAsyncLifetime
         await using (content.Stream)
             Assert.Equal(10, content.SizeBytes);
         Assert.Equal(node.Id,
-            Assert.Single(await harness.Search.SearchAsync(jess, "screencast")).Id);
+            Assert.Single(await harness.Search.SearchAsync(jess, "screencasts")).Id);
     }
 
     [Fact]

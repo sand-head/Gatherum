@@ -261,7 +261,7 @@ public class FileService(
         try
         {
             var node = await db.Nodes
-                .Include(n => n.Tags).ThenInclude(t => t.Tag)
+                .Include(n => n.Categories).ThenInclude(c => c.Category)
                 .Include(n => n.File!).ThenInclude(f => f.Versions)
                 .FirstOrDefaultAsync(n => n.Id == id, ct);
             var version = node?.File?.Versions.FirstOrDefault(v => v.Id == versionId);

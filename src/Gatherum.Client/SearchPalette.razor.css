@@ -97,7 +97,7 @@
     padding: 2px 8px;
     border-radius: var(--radius-full);
 
-    &.page { background: var(--tag-bg); color: var(--on-tag); }
+    &.page { background: var(--chip-bg); color: var(--on-chip); }
     &.file { background: var(--surface-dim); color: var(--on-surface-dim); }
 }
 

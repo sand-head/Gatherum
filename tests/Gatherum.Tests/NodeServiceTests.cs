@@ -8,6 +8,7 @@ public class NodeServiceTests(PostgresFixture postgres) : IAsyncLifetime
 {
     private ServiceHarness harness = null!;
     private NodeService nodes = null!;
+    private CategoryService categories = null!;
     private FileService files = null!;
     private Guid jess;
     private Guid sam;
@@ -16,6 +17,7 @@ public class NodeServiceTests(PostgresFixture postgres) : IAsyncLifetime
     {
         harness = new ServiceHarness(await postgres.CreateDatabaseAsync());
         nodes = harness.Nodes;
+        categories = harness.Categories;
         files = harness.Files;
         jess = await harness.AddUserAsync("jess");
         sam = await harness.AddUserAsync("sam");
@@ -200,46 +202,45 @@ public class NodeServiceTests(PostgresFixture postgres) : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Tags_contribute_to_search_text_and_can_be_removed()
-    {
-        var page = await NewPageAsync(jess, null, "quadlets");
-        await nodes.AddTagAsync(jess, page.Id, " Podman ");
-        await nodes.AddTagAsync(jess, page.Id, "podman");
-
-        var fresh = await harness.ReloadAsync(jess, page.Id);
-        Assert.Contains("podman", fresh.SearchText);
-        Assert.Single(fresh.Tags);
-
-        await nodes.RemoveTagAsync(jess, page.Id, "PODMAN");
-        fresh = await harness.ReloadAsync(jess, page.Id);
-        Assert.DoesNotContain("podman", fresh.SearchText);
-        Assert.DoesNotContain(await nodes.ListTagsAsync(jess), t => t.Name == "podman");
-    }
-
-    [Fact]
-    public async Task Similar_ranks_a_link_above_shared_tags_and_hides_private_nodes()
+    public async Task Similar_ranks_a_link_above_a_shared_category_and_hides_private_nodes()
     {
         var subject = await NewPageAsync(jess, null, "subject");
-        var linkedAndTagged = await NewPageAsync(jess, null, "linked and tagged");
-        var twoTags = await NewPageAsync(jess, null, "two tags");
-        var oneTag = await NewPageAsync(jess, null, "one tag");
+        var linkedAndFiled = await NewPageAsync(jess, null, "linked and filed");
+        var twoCategories = await NewPageAsync(jess, null, "two categories");
+        var oneCategory = await NewPageAsync(jess, null, "one category");
         await NewPageAsync(jess, null, "unrelated");
         var hidden = await NewPageAsync(sam, null, "hidden");
 
         foreach (var (owner, id) in new[]
-            { (jess, subject.Id), (jess, linkedAndTagged.Id), (jess, twoTags.Id),
-              (jess, oneTag.Id), (sam, hidden.Id) })
-            await nodes.AddTagAsync(owner, id, "alpha");
-        await nodes.AddTagAsync(jess, subject.Id, "beta");
-        await nodes.AddTagAsync(jess, twoTags.Id, "beta");
-        await files.SaveTextAsync(jess, subject.Id, $"See [@x](node://{linkedAndTagged.Id})");
+            { (jess, subject.Id), (jess, linkedAndFiled.Id), (jess, twoCategories.Id),
+              (jess, oneCategory.Id), (sam, hidden.Id) })
+            await categories.AddAsync(owner, id, "Alpha");
+        await categories.AddAsync(jess, subject.Id, "Beta");
+        await categories.AddAsync(jess, twoCategories.Id, "Beta");
+        await files.SaveTextAsync(jess, subject.Id, $"See [@x](node://{linkedAndFiled.Id})");
         await nodes.SetPrivateAsync(sam, hidden.Id, true);
 
         var similar = await nodes.GetSimilarAsync(jess, subject.Id);
 
-        // linked + one shared tag (3) beats two shared tags (2) beats one (1);
-        // the untagged and the privately hidden nodes never appear.
-        Assert.Equal([linkedAndTagged.Id, twoTags.Id, oneTag.Id], similar.Select(s => s.Id));
+        // linked + one shared category (6) beats two shared (4) beats one (2); the
+        // uncategorized and the privately hidden nodes never appear.
+        Assert.Equal([linkedAndFiled.Id, twoCategories.Id, oneCategory.Id],
+            similar.Select(s => s.Id));
+    }
+
+    [Fact]
+    public async Task Similar_prefers_the_same_category_to_a_shared_ancestor()
+    {
+        var subject = await NewPageAsync(jess, null, "subject");
+        var sibling = await NewPageAsync(jess, null, "sibling");
+        var cousin = await NewPageAsync(jess, null, "cousin");
+        await categories.AddAsync(jess, subject.Id, "Homelab/Podman");
+        await categories.AddAsync(jess, sibling.Id, "Homelab/Podman");
+        await categories.AddAsync(jess, cousin.Id, "Homelab/Backups");
+
+        var similar = await nodes.GetSimilarAsync(jess, subject.Id);
+
+        Assert.Equal([sibling.Id, cousin.Id], similar.Select(s => s.Id));
     }
 
     [Fact]

@@ -20,7 +20,7 @@ claude mcp add --transport http gatherum https://<your-host>/mcp \
   --header "Authorization: Bearer gk_…"
 ```
 
-Verify with `/mcp` inside Claude Code — the `gatherum` server should list nine tools.
+Verify with `/mcp` inside Claude Code — the `gatherum` server should list eleven tools.
 
 For local development (`dotnet run`, default port 5140):
 
@@ -39,9 +39,21 @@ claude mcp add --transport http gatherum http://localhost:5140/mcp \
 | `create_page` | `title`, `markdown`, `parentId?` | The created node (a Markdown file) |
 | `update_page` | `id`, `markdown`, `title?` | The updated node (a new version is recorded) |
 | `move_node` | `id`, `newParentId?`, `position?` | Confirmation |
-| `add_tag` | `id`, `tag` | Confirmation |
-| `list_tags` | — | Tags with node counts |
+| `add_category` | `id`, `path` (e.g. `Homelab/Podman`) | The path it landed on |
+| `remove_category` | `id`, `path` | Confirmation |
+| `list_categories` | `matching?` | The category tree in path order, with member counts |
+| `browse_category` | `path`, `deep?` | The category, its ancestry, its subcategories and its nodes |
 | `get_backlinks` | `id` | Nodes linking to the given node |
+
+### Categories
+
+Categories are what a node is *about*, and they nest: filing a page under
+`Homelab/Podman` creates `Homelab` too, and the page counts as a member of both —
+`browse_category` with `deep: true` lists everything underneath. A path is spelled
+freely (`Homelab / podman` is the same category as `homelab/podman`); the capitalization
+of a category is set by whoever creates it. Removing a node from a category leaves the
+categories above it alone, and nothing is filed automatically: a node with no category
+is fine, and search still finds it.
 
 ## Markdown conventions
 

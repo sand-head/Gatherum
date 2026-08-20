@@ -14,7 +14,7 @@ else if (node is not null)
     <PageTitle>@node.Title — Gatherum</PageTitle>
     <article class="node">
         <NodeHeader @rendermode="InteractiveAuto" NodeId="@node.Id" Title="@node.Title"
-                    IsPrivate="@node.IsPrivate" Tags="@tags.ToArray()" />
+                    IsPrivate="@node.IsPrivate" Categories="@categories.ToArray()" />
 
         @if (editable)
         {
@@ -47,7 +47,7 @@ else if (node is not null)
     [Parameter] public Guid Id { get; set; }
 
     private Node? node;
-    private List<string> tags = [];
+    private List<CategoryRef> categories = [];
     private List<Node> backlinks = [];
     private string fileName = "";
     private bool editable;
@@ -58,7 +58,10 @@ else if (node is not null)
         try
         {
             node = await Ops.Nodes(s => s.GetWithBodyAsync(UserId, Id));
-            tags = node.Tags.Select(t => t.Tag!.Name).Order().ToList();
+            categories = node.Categories
+                .Select(c => new CategoryRef(c.Category!.Path, c.Category.Name))
+                .OrderBy(c => c.Path)
+                .ToList();
             backlinks = await Ops.Nodes(s => s.GetBacklinksAsync(UserId, Id));
             fileName = node.File is { Versions.Count: > 0 } file ? file.Current.FileName : "";
             editable = fileName.Length > 0 && node.File!.Current.SizeBytes <= 4 * 1024 * 1024 &&

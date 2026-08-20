@@ -125,28 +125,55 @@ public static class ApiEndpoints
             return Results.NoContent();
         });
 
-        api.MapPost("/nodes/{id:guid}/tags", async (NodeService nodes, HttpContext http, Guid id,
-            TagRequest request) =>
+        api.MapPost("/nodes/{id:guid}/categories", async (CategoryService categories,
+            HttpContext http, Guid id, CategoryRequest request) =>
         {
-            await nodes.AddTagAsync(http.User.GetUserId(), id, request.Tag);
+            var path = await categories.AddAsync(http.User.GetUserId(), id, request.Path);
+            return Results.Ok(new { path });
+        });
+
+        api.MapDelete("/nodes/{id:guid}/categories/{**path}", async (CategoryService categories,
+            HttpContext http, Guid id, string path) =>
+        {
+            await categories.RemoveAsync(http.User.GetUserId(), id, path);
             return Results.NoContent();
         });
 
-        api.MapDelete("/nodes/{id:guid}/tags/{tag}", async (NodeService nodes, HttpContext http,
-            Guid id, string tag) =>
+        api.MapGet("/categories", async (CategoryService categories, HttpContext http,
+            string? matching) =>
         {
-            await nodes.RemoveTagAsync(http.User.GetUserId(), id, tag);
+            var all = await categories.ListAsync(http.User.GetUserId(), matching);
+            return Results.Ok(all.Select(CategoryDto.From));
+        });
+
+        // Rename and move carry the path in the body: it is the thing being changed,
+        // and a route would have to spell it twice.
+        api.MapPost("/categories/rename", async (CategoryService categories,
+            RenameCategoryRequest request) =>
+        {
+            await categories.RenameAsync(request.Path, request.Name);
             return Results.NoContent();
         });
 
-        api.MapGet("/tags", async (NodeService nodes, HttpContext http, string? prefix) =>
-            Results.Ok(await nodes.ListTagsAsync(http.User.GetUserId(), prefix)));
-
-        api.MapGet("/tags/{tag}/nodes", async (NodeService nodes, HttpContext http, string tag) =>
+        api.MapPost("/categories/move", async (CategoryService categories,
+            MoveCategoryRequest request) =>
         {
-            var tagged = await nodes.GetNodesWithTagAsync(http.User.GetUserId(), tag);
-            return Results.Ok(tagged.Select(NodeSummaryDto.From));
+            await categories.MoveAsync(request.Path, request.NewParentPath);
+            return Results.NoContent();
         });
+
+        api.MapDelete("/categories/{**path}", async (CategoryService categories, string path) =>
+        {
+            await categories.DeleteAsync(path);
+            return Results.NoContent();
+        });
+
+        // A category is a page: itself, its ancestry, its subcategories and its members
+        // — the subcategories' members too when deep asks.
+        api.MapGet("/categories/{**path}", async (CategoryService categories, HttpContext http,
+            string path, bool? deep) =>
+            Results.Ok(CategoryViewDto.From(
+                await categories.GetAsync(http.User.GetUserId(), path, deep ?? false))));
 
         // Titles, not ids: what a [[wiki link]] has to ask before it can go anywhere.
         api.MapPost("/nodes/resolve-titles", async (NodeService nodes, HttpContext http,
@@ -261,6 +288,10 @@ public static class ApiEndpoints
         catch (ForbiddenException ex)
         {
             return Results.Problem(ex.Message, statusCode: StatusCodes.Status403Forbidden);
+        }
+        catch (ValidationException ex)
+        {
+            return Results.BadRequest(new { error = ex.Message });
         }
     }
 }

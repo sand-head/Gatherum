@@ -48,14 +48,15 @@ public class SearchServiceTests(PostgresFixture postgres) : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Tags_are_searchable()
+    public async Task Categories_are_searchable_by_every_name_they_are_nested_under()
     {
         var page = await harness.Files.CreateTextNodeAsync(jess, null, "Chapter 3");
-        await harness.Nodes.AddTagAsync(jess, page.Id, "worldbuilding");
+        await harness.Categories.AddAsync(jess, page.Id, "Fiction/Worldbuilding");
 
-        var results = await harness.Search.SearchAsync(jess, "worldbuilding");
-
-        Assert.Equal([page.Id], results.Select(r => r.Id));
+        Assert.Equal([page.Id],
+            (await harness.Search.SearchAsync(jess, "worldbuilding")).Select(r => r.Id));
+        Assert.Equal([page.Id],
+            (await harness.Search.SearchAsync(jess, "fiction")).Select(r => r.Id));
     }
 
     [Fact]
