@@ -1,7 +1,7 @@
 # Status
 
 As of semantic search — search runs a full-text half and a meaning half and fuses their
-rankings, and the taxonomy (which replaced tags) files a page under a subject rather than
+rankings, with the embedding model that powers the second half shipping in the box, and the taxonomy (which replaced tags) files a page under a subject rather than
 labelling it with one. Everything listed as working has
 been exercised end-to-end (unit/integration tests, API smoke tests, or scripted
 browser sessions — including against the built container).
@@ -66,8 +66,10 @@ browser sessions — including against the built container).
   move up/down/move-to, drag-drop upload), Ctrl/⌘-K palette with kind badges and
   snippets, Postgres FTS with `websearch_to_tsquery`, title ranked above body; a
   photo or a recording is findable by what a model read, heard, or made of it.
-- **Semantic search** — optional, off unless `Gatherum__Embedding__Endpoint` names an
-  OpenAI-compatible embeddings model you run. Every node's text is cut into passages,
+- **Semantic search** — on out of the box: a 23 MB int8 MiniLM ships with the app and
+  runs in-process on the CPU (~6 ms a passage), so nothing has to be stood up for search
+  to answer by meaning. `Gatherum__Embedding__Endpoint` replaces it with a better model
+  you run; `Local=false` with no endpoint turns embedding off entirely. Every node's text is cut into passages,
   embedded with its title, and stored in pgvector behind an HNSW index; a search runs
   that KNN beside the tsvector query — under the same visibility filter, so a private
   subtree is filtered in the database — and fuses the two rankings by position rather
@@ -106,7 +108,7 @@ browser sessions — including against the built container).
   exercised against a postgres container, editor verified in-browser against the
   containerized app), compose.yaml, Podman Quadlets, `/healthz`, JSON console logs
   outside Development, migrations on startup with opt-out.
-- **Tests** — 134 passing: the Markdown dialect (infobox/figure/callout round trips,
+- **Tests** — 141 passing: the Markdown dialect (infobox/figure/callout round trips,
   wiki-link spellings, extension composition, derived chrome, red-link inking, in-app
   URL shapes), markdown links, docx extraction/editing/backlinks, tree ops, privacy,
   versions (collapse, restore, re-upload, cross-author), search, title resolution, API
@@ -115,8 +117,10 @@ browser sessions — including against the built container).
   (create page → search → MCP `get_node`; wiki link → backlink → `resolve-titles`;
   file a page in a nested category → find it from the category above, over REST and
   MCP; create a page → find it over REST by a question that shares none of its words).
-  Semantic search is tested against a `FakeEmbedder` that behaves like a very small
-  model — hashed words for ordinary text, declared subjects for words that mean the same
+  The packaged model is tested as it ships (shape, normalization, determinism,
+  batch-invariance, that it tells two subjects apart, and that the shipped `MaxDistance`
+  falls between kin and strangers). Everything *around* semantic search is tested against
+  a `FakeEmbedder` that behaves like a very small model — hashed words for ordinary text, declared subjects for words that mean the same
   thing — because a real model's answers are approximate and an assertion about ranking
   made against one is a coin toss.
 
@@ -161,6 +165,11 @@ browser sessions — including against the built container).
   neighbours, so a search whose nearest passages all sit in the other user's private
   subtree can return fewer semantic results than it could have. The query over-fetches to
   make that unlikely at two people's scale; it is not a proof.
+- The packaged model is small and quantized. It is a real embedding model, not a toy, but
+  a large one you run yourself will beat it — which is what the endpoint setting is for.
+- Passages are embedded one at a time rather than batched, because quantized activations
+  are scaled per tensor and batching would make a vector depend on its neighbours. That
+  costs about 1.5× the wall clock on indexing.
 - `MaxDistance` is one number for the whole tree. A model whose distances run tighter or
   looser than the default needs it retuned by hand — there is no calibration pass.
 - Results are fused, not re-ranked: nothing reads the passages back and reconsiders them.

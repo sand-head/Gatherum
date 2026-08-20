@@ -48,16 +48,16 @@ claude mcp add --transport http gatherum http://localhost:5140/mcp \
 ### Search
 
 `search` runs two searches and fuses their rankings: a Postgres full-text match over
-titles, category names and text, and — when the owner has configured an embedding model —
-a meaning-based match over the same text cut into passages. A query therefore finds pages
-that never use its words, and the snippet of such a hit is the passage that matched rather
-than the top of the document.
+titles, category names and text, and a meaning-based match over the same text cut into
+passages. The second half needs no setup — an embedding model ships with Gatherum and runs
+in its process — so a query finds pages that never use its words, and the snippet of such
+a hit is the passage that matched rather than the top of the document.
 
 Only the full-text half honours websearch syntax (quoted phrases, `OR`, `-exclusions`), so
 pass `mode=text` when the exact spelling is the point — an identifier, a filename, a
-phrase you are quoting. `mode=semantic` asks for meaning alone. If no embedding model is
-configured, or it is unreachable, every mode still answers from full-text search: a search
-never fails because a model is down.
+phrase you are quoting. `mode=semantic` asks for meaning alone. If embeddings are turned
+off, or the owner has pointed Gatherum at an endpoint that is unreachable, every mode
+still answers from full-text search: a search never fails because a model is down.
 
 ### Categories
 

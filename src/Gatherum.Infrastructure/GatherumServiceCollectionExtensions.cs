@@ -71,29 +71,51 @@ public static class GatherumServiceCollectionExtensions
         services.AddHostedService<MediaAnalysisWorker>();
     }
 
-    /// <summary>Semantic search is opt-in the same way analysis is: with no endpoint
-    /// configured no embedder is registered, no worker runs, no vector is ever computed,
-    /// and <see cref="SearchService"/> answers from the tsvector index alone. The cache
-    /// and the service are registered either way so nothing downstream has to ask
-    /// whether the feature exists.</summary>
+    /// <summary>Unlike analysis, semantic search asks nothing of you: a model ships with
+    /// the app and runs in this process, so a fresh Gatherum searches by meaning without
+    /// being configured to. An endpoint of your own wins when there is one — it is
+    /// presumably a better model than twenty-three megabytes can be. Turned off with no
+    /// endpoint set, or built without the packaged model present, nothing is registered,
+    /// no vector is ever computed, and <see cref="SearchService"/> answers from the
+    /// tsvector index alone. The cache and the service are registered either way so
+    /// nothing downstream has to ask whether the feature exists.</summary>
     private static void AddEmbedding(IServiceCollection services, IConfiguration configuration)
     {
         services.AddSingleton<QueryEmbeddingCache>();
 
-        var embedding = configuration
-            .GetSection($"{GatherumOptions.Section}:{nameof(GatherumOptions.Embedding)}")
-            .Get<EmbeddingOptions>() ?? new EmbeddingOptions();
-        if (!embedding.IsConfigured)
+        var embedding = Embedding(configuration);
+        if (embedding.IsConfigured)
+            services.AddHttpClient<IEmbedder, OpenAiEmbedder>(client =>
+            {
+                client.BaseAddress = new Uri(embedding.Endpoint.TrimEnd('/') + "/");
+                client.Timeout = TimeSpan.FromSeconds(embedding.TimeoutSeconds);
+                if (embedding.ApiKey.Length > 0)
+                    client.DefaultRequestHeaders.Authorization =
+                        new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", embedding.ApiKey);
+            });
+        else if (UsesPackagedModel(embedding))
+            services.AddSingleton<IEmbedder, LocalEmbedder>();
+        else
             return;
 
-        services.AddHttpClient<IEmbedder, OpenAiEmbedder>(client =>
-        {
-            client.BaseAddress = new Uri(embedding.Endpoint.TrimEnd('/') + "/");
-            client.Timeout = TimeSpan.FromSeconds(embedding.TimeoutSeconds);
-            if (embedding.ApiKey.Length > 0)
-                client.DefaultRequestHeaders.Authorization =
-                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", embedding.ApiKey);
-        });
         services.AddHostedService<EmbeddingWorker>();
     }
+
+    /// <summary>Whether anything will embed — which is not the same question as whether
+    /// an endpoint is configured, and is what the vector schema has to be built for.
+    /// Startup asks it without resolving an embedder, because resolving one loads a
+    /// model.</summary>
+    public static bool EmbeddingEnabled(IConfiguration configuration)
+    {
+        var embedding = Embedding(configuration);
+        return embedding.IsConfigured || UsesPackagedModel(embedding);
+    }
+
+    private static bool UsesPackagedModel(EmbeddingOptions embedding) =>
+        embedding.Local && LocalEmbedder.IsAvailable(embedding.ModelPath);
+
+    private static EmbeddingOptions Embedding(IConfiguration configuration) =>
+        configuration
+            .GetSection($"{GatherumOptions.Section}:{nameof(GatherumOptions.Embedding)}")
+            .Get<EmbeddingOptions>() ?? new EmbeddingOptions();
 }

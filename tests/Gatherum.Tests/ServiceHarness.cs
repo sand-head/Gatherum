@@ -53,6 +53,12 @@ public sealed class ServiceHarness : IAsyncDisposable
                 Dimensions = PostgresFixture.EmbeddingDimensions,
                 QueryTimeoutMs = 5_000,
                 MaxChunkChars = 400,
+                // The shipped default is measured against the packaged model. FakeEmbedder
+                // has its own spread — subjects it was told about land together, hashed
+                // words scatter — so it states its own cutoff rather than borrowing one
+                // tuned for a model it is standing in for. LocalEmbedderTests is where the
+                // real default is held to account.
+                MaxDistance = 0.55,
             },
         });
         storage = new FileSystemStorage(settings);

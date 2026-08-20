@@ -453,3 +453,55 @@ half and logs. This is the same instinct as the analysis rule that an upload mus
 before any model is consulted: a model may make a feature better, and may never be allowed
 to make the app worse.
 
+## The embedding model ships in the box (owner direction)
+Semantic search that needs a second inference server stood up before it does anything is
+a feature most installs will never turn on, and Gatherum is meant to be one container and
+a database. So a small embedding model — MiniLM, quantized to eight bits, twenty-three
+megabytes — ships with the app and runs in its own process on the CPU at about six
+milliseconds a passage. Semantic search is therefore what Gatherum *does*, not what it can
+be configured to do, and `Gatherum__Embedding__Endpoint` becomes an override for people
+who run something better rather than the price of entry. Nothing about the privacy story
+changes: an in-process model is the strongest possible version of "nothing is ever sent
+anywhere". The cost is honest — an existing tree spends a few CPU-minutes embedding itself
+the first time it starts after this — and `Local=false` turns it off.
+
+## MiniLM rather than bge-small, because of the threshold
+On a smoke test of four questions asked in words their answers never use, both models
+ranked the right passage first. They differ in something our design cares about more.
+MiniLM answered at cosine distances of 0.75 and below while putting wrong answers at 0.87
+and above; bge-small answered between 0.43 and 0.56 and put *wrong* answers as near as
+0.45. bge's similarities bunch into a narrow band, which is a known trait and harmless if
+all you do is rank — but `MaxDistance` is a single global cutoff, and no cutoff separates
+overlapping bands. MiniLM leaves a gap to put one in. It is also smaller (23 MB against
+34) and faster. Four probes is a smoke test and not a benchmark; the shape of the
+difference is the part worth trusting.
+
+## The model is fetched by the build, not committed
+Twenty-three megabytes of weights in git history is a permanent tax on every clone, for a
+file that never merges, never diffs, and would be joined by another the first time the
+model changes. So an MSBuild target fetches it once into a gitignored `models/`, checks it
+against a known SHA-256, and every later build finds it already there; the Dockerfile does
+it in its own layer so editing source doesn't re-download it. The trade is that a cold
+build needs the network — mitigated by the two files being placeable by hand and by
+`-p:FetchEmbeddingModel=false`. The *running* app never downloads anything, which is the
+property that actually matters.
+
+## One passage per inference, though the caller batches
+Batching passages into one tensor is the obvious way to make indexing faster, and it was
+wrong here. This model's activations are quantized with a scale computed across the whole
+input tensor, so a passage embedded beside a long neighbour comes out about 0.97 cosine
+from the same passage embedded beside a short one — the test written to check padding
+found it. Random drift would have been tolerable; this is not random. A search box is
+always a batch of one, and passages would have arrived sixteen at a time, so every query
+would have sat in a different quantization regime from every document it was compared
+against — a systematic error, invisible except as slightly worse results forever. Embedding
+one at a time costs about 1.5× the wall clock and restores the property everything else
+assumes: a vector is a function of its text and of nothing else.
+
+## Published for one architecture
+ONNX Runtime ships native libraries for Windows, macOS, Android, iOS and Linux, and a
+portable publish carries every one of them — 770 MB of output, most of a gigabyte of it
+binaries this Linux image can never load. The Dockerfile therefore publishes with a
+runtime identifier picked from Docker's `TARGETARCH`, which prunes the rest and brings the
+publish to 143 MB. Local `dotnet run` and `dotnet test` are untouched.
+

@@ -23,7 +23,7 @@ dotnet workload install wasm-tools     # once; the editor island relinks SkiaSha
 docker run -d --name gatherum-pg -p 5432:5432 -e POSTGRES_DB=gatherum \
   -e POSTGRES_USER=gatherum -e POSTGRES_PASSWORD=gatherum pgvector/pgvector:pg16
 
-dotnet build
+dotnet build                             # the first build fetches the 23 MB embedding model
 dotnet run --project src/Gatherum.Web    # http://localhost:5140, dev auto-login
 dotnet test                              # needs Docker for Testcontainers
 dotnet test --filter "FullyQualifiedName~FileVersionTests"    # a single class
@@ -47,8 +47,9 @@ auto-login. Migrations: `dotnet ef migrations add <Name> -p src/Gatherum.Infrast
   with `TextChunker`, `RankFusion` and `QueryEmbeddingCache` beside it.
 - `src/Gatherum.Infrastructure` — implementations with real dependencies: filesystem
   storage, text extractors, media analysis (`Analysis/` — the OpenAI-compatible client,
-  ffmpeg, and the background worker), embeddings (`Embedding/` — the embeddings client
-  and the sweep worker), EF migrations and `Data/EmbeddingSchema` (which sizes the vector
+  ffmpeg, and the background worker), embeddings (`Embedding/` — the packaged
+  in-process model, the client for an endpoint of your own, and the sweep worker), EF
+  migrations and `Data/EmbeddingSchema` (which sizes the vector
   column to the configured model at startup).
 - `src/Gatherum.Web` — the static pages and layout (`Components/`), REST API
   (`Api/`), MCP tools (`Mcp/`), auth (`Auth/`), presence + `ServerAppData`, the
@@ -94,6 +95,13 @@ fresh DI scope via `Services/AppOperations`.
   a background sweep for indexing, and one bounded call on the search path — which must
   time out into a full-text answer rather than make anyone wait. A search never fails
   because a model is unreachable.
+- An embedding is a function of its text and nothing else. The packaged model is
+  quantized, so batching several passages into one tensor would make each one's vector
+  depend on its neighbours — and a search box, always alone, systematically unlike the
+  passages it is compared against. `LocalEmbedder` embeds one at a time on purpose; don't
+  "optimize" that away.
+- The packaged model is fetched by the build into a gitignored `models/`, verified by
+  hash, never committed and never downloaded at run time.
 - A node is stale for embedding when `TextFingerprint` (computed by the database) differs
   from `EmbeddedFingerprint`. That comparison is the only thing that queues work. Never
   add an enqueue call beside it: a second source of truth can only ever be the one that
@@ -155,12 +163,13 @@ touch the server only through `IAppData`.
    about queueing, reuse, or search text.
 
 **Add an embedder** (a different way to turn text into a vector):
-1. Implement `IEmbedder` in `src/Gatherum.Infrastructure/Embedding/` (cf.
-   `OpenAiEmbedder.cs`). `Model` names it: vectors are stored beside that name and
-   nothing compares two models' vectors.
-2. Register it in `GatherumServiceCollectionExtensions.AddEmbedding`, which wires
-   embeddings up only when an endpoint is configured — with none, search is full-text
-   only and no vector is ever computed.
+1. Implement `IEmbedder` in `src/Gatherum.Infrastructure/Embedding/` (cf. `LocalEmbedder.cs`
+   for the packaged model, `OpenAiEmbedder.cs` for one you run). `Model` names it: vectors
+   are stored beside that name and nothing compares two models' vectors.
+2. Register it in `GatherumServiceCollectionExtensions.AddEmbedding`, which picks exactly
+   one: an endpoint if configured, else the packaged model, else nothing at all. If you
+   change what that method can pick, change `EmbeddingEnabled` beside it too — startup
+   asks it whether to build the vector schema, and it must not load a model to answer.
 3. If its vectors are a different width, `Gatherum__Embedding__Dimensions` is the only
    thing to change: startup resizes the column, drops the old vectors, and the worker
    earns them back. Never edit the migration for this.
