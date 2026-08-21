@@ -6,7 +6,7 @@
 // deliberately about measurements and reachability rather than pixels — a
 // screenshot diff that fails on a font hint helps nobody, so the shots are written
 // for a human and compared by one.
-import { chromium } from "playwright";
+import { launch } from "./browser.mjs";
 import { mkdirSync } from "node:fs";
 
 const base = arg("--url") ?? "http://localhost:5140";
@@ -69,6 +69,10 @@ async function measure(page) {
       overflow: document.documentElement.scrollWidth - window.innerWidth,
       headings: document.querySelectorAll("h1").length,
       rowMenuVisible: rowMenu ? getComputedStyle(rowMenu).visibility === "visible" : null,
+      // Emulation is per-context and has been observed to lapse across a long
+      // session of navigations; a run that quietly stopped emulating a phone
+      // would report every touch rule as broken. Fail loudly instead.
+      coarse: matchMedia("(pointer: coarse)").matches,
       // The canvas must not be what a reader is handed.
       canvasInRead: document.querySelectorAll("canvas").length,
     };
@@ -77,28 +81,43 @@ async function measure(page) {
 
 async function main() {
   mkdirSync(shots, { recursive: true });
-  const browser = await chromium.launch();
+  const browser = await launch();
   const failures = [];
   const note = (where, what) => failures.push(`${where}: ${what}`);
 
+  // A context per route rather than per viewport: touch emulation is a
+  // context-level override and it does not reliably survive a long run of
+  // navigations, which is a good way to spend an afternoon fixing an app that was
+  // never broken.
+  const open = async (vp, scheme) => {
+    const ctx = await browser.newContext({
+      baseURL: base,
+      viewport: { width: vp.width, height: vp.height },
+      deviceScaleFactor: vp.dpr,
+      isMobile: vp.touch,
+      hasTouch: vp.touch,
+      colorScheme: scheme,
+    });
+    const page = await ctx.newPage();
+    await page.goto("/auth/login");
+    return { ctx, page };
+  };
+
   for (const vp of VIEWPORTS) {
     for (const scheme of ["light", "dark"]) {
-      const ctx = await browser.newContext({
-        baseURL: base,
-        viewport: { width: vp.width, height: vp.height },
-        deviceScaleFactor: vp.dpr,
-        isMobile: vp.touch,
-        hasTouch: vp.touch,
-        colorScheme: scheme,
-      });
-      const page = await ctx.newPage();
-      await page.goto("/auth/login");
+      const listing = await open(vp, scheme);
+      const found = await routes(listing.page);
+      await listing.ctx.close();
 
-      for (const [name, url] of await routes(page)) {
+      for (const [name, url] of found) {
         const where = `${name} ${vp.width}/${scheme}`;
+        const { ctx, page } = await open(vp, scheme);
         await page.goto(url, { waitUntil: "networkidle" });
         const m = await measure(page);
         await page.screenshot({ path: `${shots}/${name}-${vp.width}-${scheme}.png`, fullPage: true });
+
+        if (vp.touch && !m.coarse)
+          throw new Error(`${where}: touch emulation lapsed — this run is not measuring a phone`);
 
         if (m.overflow > 0) note(where, `${m.overflow}px of horizontal overflow`);
         if (m.headings === 0) note(where, "no <h1> — FocusOnNavigate has nothing to focus");
@@ -113,9 +132,11 @@ async function main() {
         }
         if (name === "node-read" && m.canvasInRead > 0)
           note(where, "a canvas is being rendered to read a page");
+        await ctx.close();
       }
 
       // The drawer: only below the breakpoint, and it must not survive a navigation.
+      const { ctx, page } = await open(vp, scheme);
       if (vp.touch) {
         await page.goto("/pages", { waitUntil: "networkidle" });
         await page.click(".nav-toggle");

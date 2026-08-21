@@ -30,3 +30,10 @@
     font: 500 13px/1.5 var(--font-ui);
     padding: 2px 12px;
 }
+
+/* The chip's own font shorthand out-specifies app.css's coarse-pointer rule — a
+   scoped `.category-input[b-x]` beats a bare `input` — so the 16px iOS needs has
+   to be said again here, where it can win. */
+@media (pointer: coarse) {
+    .category-input { font-size: 16px; }
+}

@@ -8,6 +8,11 @@
     margin-bottom: 22px;
 }
 
+.node-title {
+    margin: 0;
+    font: inherit;
+}
+
 .node-title-input {
     width: 100%;
     font: 400 34px/1.2 var(--font-serif);

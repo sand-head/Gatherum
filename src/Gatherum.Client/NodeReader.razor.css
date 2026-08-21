@@ -67,3 +67,20 @@
         padding-bottom: calc(16px + env(safe-area-inset-bottom));
     }
 }
+
+/* An aside is emitted as a real CSS float with an inline style — float:right,
+   width:280px — so the browser does the wrapping and this can undo it. On a phone
+   there is no width to give it: a 280px card in a 340px column left "Hardware"
+   wrapping to one word per line beside it. !important is the only thing that beats
+   an inline style, which is why it is here and nowhere else.
+
+   Above this the float stands. It squeezes the prose on a narrow desktop too, but
+   that is how the infobox has always looked and changing it is a design decision,
+   not a mobile fix. */
+@media (max-width: 700px) {
+    .reader-doc ::deep aside {
+        float: none !important;
+        width: auto !important;
+        margin-left: 0 !important;
+    }
+}

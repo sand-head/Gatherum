@@ -2,8 +2,13 @@
 @inject TreeState Tree
 
 <header class="node-header">
-    <input class="node-title-input" value="@title"
-           @onchange="e => RenameAsync(e.Value?.ToString() ?? title)" />
+    @* Every route needs an h1: Routes.razor's FocusOnNavigate looks for one, and a
+       node page had none at all — the title is a field, because editing it in place
+       is the point. So the h1 wraps the field rather than repeating its words. *@
+    <h1 class="node-title">
+        <input class="node-title-input" value="@title" aria-label="Page title"
+               @onchange="e => RenameAsync(e.Value?.ToString() ?? title)" />
+    </h1>
     <div class="node-meta">
         <CategoryEditor NodeId="@NodeId" Categories="@categories"
                         OnChanged="ReloadCategoriesAsync" />

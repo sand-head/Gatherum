@@ -19,6 +19,7 @@ dotnet run --project ../../src/Gatherum.Web
 
 # 2. once, and again whenever you want the fixtures back
 npm install
+npx playwright install chromium    # or set GATHERUM_CHROMIUM to one you already have
 npm run seed
 
 # 3. the checks

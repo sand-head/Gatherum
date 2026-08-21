@@ -9,7 +9,7 @@
 // into every request below. No API key to mint, nothing to put in a file.
 //
 // Idempotent by title: a second run edits what the first one made.
-import { chromium } from "playwright";
+import { launch } from "./browser.mjs";
 
 const base = arg("--url") ?? "http://localhost:5140";
 
@@ -17,8 +17,7 @@ const PAGES = [
   {
     title: "Homelab: the closet rack",
     categories: ["Homelab", "Homelab/Podman"],
-    markdown: `The closet holds a four-unit rack, and everything in it runs as a Podman
-quadlet under a single unprivileged user.
+    markdown: `The closet holds a four-unit rack, and everything in it runs as a Podman quadlet under a single unprivileged user.
 
 :::infobox
 ## The rack
@@ -27,8 +26,7 @@ quadlet under a single unprivileged user.
 
 ## Hardware
 
-Thermals were the whole problem for the first summer: the door is solid, the return
-is a gap under it, and nothing moves air across the top of the rack.
+Thermals were the whole problem for the first summer: the door is solid, the return is a gap under it, and nothing moves air across the top of the rack.
 
 ### The closet and its thermals
 
@@ -37,8 +35,7 @@ is a gap under it, and nothing moves air across the top of the rack.
 
 ## Podman quadlets
 
-Every service is a \`.container\` file in \`~/.config/containers/systemd\`. See
-[[Reverse proxy configuration]] and [[A page nobody has written]].
+Every service is a \`.container\` file in \`~/.config/containers/systemd\`. See [[Reverse proxy configuration]] and [[A page nobody has written]].
 
 | Service | Port | Notes |
 | --- | --- | --- |
@@ -90,7 +87,7 @@ function arg(name) {
 }
 
 async function main() {
-  const browser = await chromium.launch();
+  const browser = await launch();
   const ctx = await browser.newContext({ baseURL: base });
   const page = await ctx.newPage();
   await page.goto("/auth/login");
