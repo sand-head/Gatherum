@@ -1,0 +1,20 @@
+# Nobody edits a version number in this repository. GitVersion reads it out of the
+# git history instead: the Mainline strategy walks main from the last release tag
+# and counts what has landed since, so the number a build carries is a fact about
+# the commits it contains rather than a file somebody remembered to bump.
+workflow: GitHubFlow/v1
+
+# ConfiguredNextVersion first so a `next-version:` here, or a tag like `v1.0.0` on
+# main, can set the floor when this project is ready to say 1.0 out loud. Until then
+# Mainline counts from the root commit and main sits in 0.0.x.
+strategies:
+  - ConfiguredNextVersion
+  - Mainline
+
+branches:
+  # Continuous deployment on main: every commit that lands there is a release and
+  # gets a clean `0.0.8`, not a `0.0.8-3` waiting for someone to bless it. Branches
+  # off main keep the default continuous-delivery pre-release labels — they are
+  # proposals, and their versions say so.
+  main:
+    mode: ContinuousDeployment

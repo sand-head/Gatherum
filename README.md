@@ -128,6 +128,20 @@ Everything configures through environment variables (`Gatherum__Section__Key` fo
 The first user ever to sign in becomes admin. API keys are created in **Settings**,
 stored hashed, revocable, and sent as `Authorization: Bearer gk_…` to `/api` and `/mcp`.
 
+## Container images
+
+Every merge to `main` publishes an image to this repository's registry, versioned by
+[GitVersion](https://gitversion.net) in mainline mode — the number counts what has
+landed on `main` since the last release tag, so nothing in the tree needs bumping:
+
+```sh
+docker pull ghcr.io/sand-head/gatherum:latest   # or a version: :0.0.8, :0.0
+```
+
+`latest` and the `major.minor` tag move; the full version and the `sha-…` tag do not,
+so pin one of those in anything you actually deploy. To start a 1.x line, tag a commit
+on `main` `v1.0.0` and the versions continue from there.
+
 ## Deploying behind a reverse proxy
 
 Gatherum expects a proxy that terminates TLS and **forwards WebSockets** (the app's
@@ -150,7 +164,7 @@ Copy `deploy/quadlet/*` to `~/.config/containers/systemd/`, adjust the passwords
 OIDC settings, and image name, then:
 
 ```sh
-podman build -t localhost/gatherum:latest .
+podman pull ghcr.io/sand-head/gatherum:latest   # or build it: podman build -t localhost/gatherum:latest .
 systemctl --user daemon-reload
 systemctl --user start gatherum
 ```
