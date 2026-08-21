@@ -39,9 +39,16 @@ C#/Blazor — the only JavaScript is a ~65-line interop file.
   the homelab too: the parent category lists it, a search for either name finds it, and
   "Similar" counts the kinship. Categories are created by being used and maintained like
   anything else — renamed, re-nested, deleted — with their subcategories following along.
-- **Search**: PostgreSQL full-text (`tsvector` + GIN, `websearch_to_tsquery`) over
-  titles, category names, and text — including what a model read, heard, or made of your
-  media. `Ctrl`/`⌘`+`K` anywhere.
+- **Search**: two halves that answer different questions, and both work out of the box.
+  PostgreSQL full-text (`tsvector` + GIN, `websearch_to_tsquery`) over titles, category
+  names, and text — including what a model read, heard, or made of your media — finds the
+  phrase you remember word for word. Beside it, semantic search: pages, files and
+  transcripts are cut into passages and embedded into pgvector, so a search for "why the
+  closet gets so hot" finds the page that only ever says "thermals". The two rankings are
+  fused, never averaged. The embedding model *ships with Gatherum* — twenty-three
+  megabytes of MiniLM, run in-process on the CPU, no endpoint to stand up and nothing
+  sent anywhere — and `Gatherum__Embedding__Endpoint` overrides it with a better model if
+  you run one. `Ctrl`/`⌘`+`K` anywhere.
 - **Awareness**: presence shows who else is editing a document, and the editor warns
   when someone saved a newer version (their save stays in history either way).
 - **Access**: OIDC sign-in only (built for Authelia; any discovery-capable IdP works),
@@ -53,18 +60,27 @@ C#/Blazor — the only JavaScript is a ~65-line interop file.
 ## Run it locally
 
 Requires the .NET 10 SDK with the `wasm-tools` workload (`dotnet workload install
-wasm-tools`; emscripten also wants `python3` on PATH) and a PostgreSQL 16+:
+wasm-tools`; emscripten also wants `python3` on PATH) and a PostgreSQL 16+ carrying the
+[pgvector](https://github.com/pgvector/pgvector) extension — the image below has it, and
+any Postgres does once `CREATE EXTENSION vector` can run (the migration issues it, which
+wants a superuser the first time):
 
 ```sh
 docker run -d --name gatherum-pg -p 5432:5432 \
   -e POSTGRES_DB=gatherum -e POSTGRES_USER=gatherum -e POSTGRES_PASSWORD=gatherum \
-  postgres:16-alpine
+  pgvector/pgvector:pg16
 
 dotnet run --project src/Gatherum.Web
 ```
 
 Open http://localhost:5140. With no OIDC configured the app signs you in as a local
 "Dev User" (and warns in its logs) so everything works out of the box.
+
+The first build downloads the packaged embedding model — 23 MB of MiniLM weights and its
+vocabulary — into a gitignored `models/` folder, checks them against a known SHA-256, and
+never fetches again. To build with no network, put those two files there yourself or pass
+`-p:FetchEmbeddingModel=false` and point `Gatherum__Embedding__ModelPath` at a copy. The
+running app never downloads anything.
 
 Or run the whole stack in containers:
 
@@ -95,6 +111,19 @@ Everything configures through environment variables (`Gatherum__Section__Key` fo
 | `Gatherum__Analysis__MaxBytes` | `268435456` | Largest file sent for analysis; bigger ones upload and store as before |
 | `Gatherum__Analysis__TimeoutSeconds` | `900` | Ceiling on one analysis call |
 | `Gatherum__Analysis__FfmpegPath` | `ffmpeg` | How to invoke ffmpeg, which splits video into audio and frames |
+| `Gatherum__Embedding__Endpoint` | *(empty)* | Base URL of an OpenAI-compatible embeddings API (e.g. `http://localhost:8090/v1`); set, it replaces the packaged model |
+| `Gatherum__Embedding__Model` | *(empty)* | The embedding model at that endpoint |
+| `Gatherum__Embedding__Local` | `true` | Use the packaged MiniLM when no endpoint is set; `false` with no endpoint leaves search full-text only |
+| `Gatherum__Embedding__ModelPath` | `models/all-MiniLM-L6-v2` | Where the packaged model lives; relative to the app directory |
+| `Gatherum__Embedding__Dimensions` | `384` | Width of the model's vectors (the packaged one's); startup resizes the column to match and re-embeds if it changed |
+| `Gatherum__Embedding__ApiKey` | *(empty)* | Bearer token, when your runner wants one |
+| `Gatherum__Embedding__MaxDistance` | `0.8` | How far apart two texts can be and still count as an answer; measured for the packaged model, and a property of whichever model you use — raise if search feels too literal, lower if it wanders |
+| `Gatherum__Embedding__MaxChunkChars` | `800` | Longest passage handed to the model; keeps inside the packaged model's 256-token window |
+| `Gatherum__Embedding__MaxChunksPerNode` | `200` | Ceiling on passages per node; past it the tail stays full-text-only and the log says so |
+| `Gatherum__Embedding__BatchSize` | `16` | Passages per request |
+| `Gatherum__Embedding__SweepSeconds` | `15` | How often the worker looks for nodes whose text has changed |
+| `Gatherum__Embedding__QueryTimeoutMs` | `2000` | Ceiling on embedding a search box before answering from full-text alone |
+| `Gatherum__Embedding__TimeoutSeconds` | `120` | Ceiling on one background batch |
 
 The first user ever to sign in becomes admin. API keys are created in **Settings**,
 stored hashed, revocable, and sent as `Authorization: Bearer gk_…` to `/api` and `/mcp`.

@@ -1,7 +1,8 @@
 # Status
 
-As of nested categories — the taxonomy replaced tags, and a page is filed under a
-subject rather than labelled with one. Everything listed as working has
+As of semantic search — search runs a full-text half and a meaning half and fuses their
+rankings, with the embedding model that powers the second half shipping in the box, and the taxonomy (which replaced tags) files a page under a subject rather than
+labelling it with one. Everything listed as working has
 been exercised end-to-end (unit/integration tests, API smoke tests, or scripted
 browser sessions — including against the built container).
 
@@ -65,6 +66,23 @@ browser sessions — including against the built container).
   move up/down/move-to, drag-drop upload), Ctrl/⌘-K palette with kind badges and
   snippets, Postgres FTS with `websearch_to_tsquery`, title ranked above body; a
   photo or a recording is findable by what a model read, heard, or made of it.
+- **Semantic search** — on out of the box: a 23 MB int8 MiniLM ships with the app and
+  runs in-process on the CPU (~6 ms a passage), so nothing has to be stood up for search
+  to answer by meaning. `Gatherum__Embedding__Endpoint` replaces it with a better model
+  you run; `Local=false` with no endpoint turns embedding off entirely. Every node's text is cut into passages,
+  embedded with its title, and stored in pgvector behind an HNSW index; a search runs
+  that KNN beside the tsvector query — under the same visibility filter, so a private
+  subtree is filtered in the database — and fuses the two rankings by position rather
+  than by score. A hit only the vector half found is snippeted from the passage that
+  matched. Nodes are re-embedded by a sweep over a fingerprint the database computes, so
+  an edit, a transcript landing hours later, and a category rename three levels up all
+  re-embed without anything having to enqueue them; a passage's vector is keyed by the
+  hash of what was embedded, so editing one paragraph of a long page re-embeds one
+  paragraph. `Similar` scores the same likeness alongside categories and links. REST and
+  MCP take `mode=hybrid|text|semantic`. The column's width comes from configuration at
+  startup, so changing models is an env var and a re-embed, not a migration. A model that
+  is unconfigured, unreachable, or slower than `QueryTimeoutMs` yields a full-text answer
+  — never a failed search.
 - **Files** — upload via picker or drop, previews (image/PDF/video/audio/text),
   description, categories, referenced-by, per-version download; extraction: text verbatim,
   PDF (PdfPig), image metadata (MetadataExtractor); media types resolved sensibly
@@ -90,7 +108,7 @@ browser sessions — including against the built container).
   exercised against a postgres container, editor verified in-browser against the
   containerized app), compose.yaml, Podman Quadlets, `/healthz`, JSON console logs
   outside Development, migrations on startup with opt-out.
-- **Tests** — 96 passing: the Markdown dialect (infobox/figure/callout round trips,
+- **Tests** — 141 passing: the Markdown dialect (infobox/figure/callout round trips,
   wiki-link spellings, extension composition, derived chrome, red-link inking, in-app
   URL shapes), markdown links, docx extraction/editing/backlinks, tree ops, privacy,
   versions (collapse, restore, re-upload, cross-author), search, title resolution, API
@@ -98,7 +116,13 @@ browser sessions — including against the built container).
   path spelling), and integration tests booting the app on Testcontainers Postgres
   (create page → search → MCP `get_node`; wiki link → backlink → `resolve-titles`;
   file a page in a nested category → find it from the category above, over REST and
-  MCP).
+  MCP; create a page → find it over REST by a question that shares none of its words).
+  The packaged model is tested as it ships (shape, normalization, determinism,
+  batch-invariance, that it tells two subjects apart, and that the shipped `MaxDistance`
+  falls between kin and strangers). Everything *around* semantic search is tested against
+  a `FakeEmbedder` that behaves like a very small model — hashed words for ordinary text, declared subjects for words that mean the same
+  thing — because a real model's answers are approximate and an assertion about ranking
+  made against one is a coin toss.
 
 ## Stubbed / not shipped (tracked in PLAN.md)
 
@@ -137,6 +161,21 @@ browser sessions — including against the built container).
 - File bytes are never garbage-collected when nodes are deleted.
 - Saves serialize per node in-process; scaling beyond one app instance needs a
   database-level lock.
+- Semantic hits are filtered for visibility *after* the HNSW index has picked its
+  neighbours, so a search whose nearest passages all sit in the other user's private
+  subtree can return fewer semantic results than it could have. The query over-fetches to
+  make that unlikely at two people's scale; it is not a proof.
+- The packaged model is small and quantized. It is a real embedding model, not a toy, but
+  a large one you run yourself will beat it — which is what the endpoint setting is for.
+- Passages are embedded one at a time rather than batched, because quantized activations
+  are scaled per tensor and batching would make a vector depend on its neighbours. That
+  costs about 1.5× the wall clock on indexing.
+- `MaxDistance` is one number for the whole tree. A model whose distances run tighter or
+  looser than the default needs it retuned by hand — there is no calibration pass.
+- Results are fused, not re-ranked: nothing reads the passages back and reconsiders them.
+  A cross-encoder would rank better and would cost a model call per result.
+- Postgres must now carry pgvector. The shipped images do; a hand-rolled Postgres needs
+  the extension installed and a superuser for the first migration.
 
 ## Run it
 

@@ -33,7 +33,7 @@ claude mcp add --transport http gatherum http://localhost:5140/mcp \
 
 | Tool | Arguments | Returns |
 | --- | --- | --- |
-| `search` | `query`, `kind?` (`page`/`file`), `limit?` | Matches with kind and snippet |
+| `search` | `query`, `kind?` (`page`/`file`), `limit?`, `mode?` (`hybrid`/`text`/`semantic`) | Matches with kind and snippet |
 | `get_node` | `id` | Metadata + Markdown body (pages) or extracted text + file metadata (files). Media analyzed by a model also carries `transcript` (words read off an image, speech heard in audio or video) and `summary`, with `analysis` saying whether that is `None`, `Pending`, `Complete`, or `Failed` |
 | `list_children` | `id?` (omit for roots) | Children in tree order |
 | `create_page` | `title`, `markdown`, `parentId?` | The created node (a Markdown file) |
@@ -44,6 +44,20 @@ claude mcp add --transport http gatherum http://localhost:5140/mcp \
 | `list_categories` | `matching?` | The category tree in path order, with member counts |
 | `browse_category` | `path`, `deep?` | The category, its ancestry, its subcategories and its nodes |
 | `get_backlinks` | `id` | Nodes linking to the given node |
+
+### Search
+
+`search` runs two searches and fuses their rankings: a Postgres full-text match over
+titles, category names and text, and a meaning-based match over the same text cut into
+passages. The second half needs no setup — an embedding model ships with Gatherum and runs
+in its process — so a query finds pages that never use its words, and the snippet of such
+a hit is the passage that matched rather than the top of the document.
+
+Only the full-text half honours websearch syntax (quoted phrases, `OR`, `-exclusions`), so
+pass `mode=text` when the exact spelling is the point — an identifier, a filename, a
+phrase you are quoting. `mode=semantic` asks for meaning alone. If embeddings are turned
+off, or the owner has pointed Gatherum at an endpoint that is unreachable, every mode
+still answers from full-text search: a search never fails because a model is down.
 
 ### Categories
 

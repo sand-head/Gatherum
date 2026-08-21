@@ -167,6 +167,41 @@ editable in place; the node header's chips file and unfile; REST gained
 and `browse_category` in place of `add_tag`/`list_tags`. The migration turns every
 existing tag into a root category of the same name.
 
+### Post-revision: search grows a second half
+
+Full-text search finds the words you remember; it cannot find the page you can only
+describe. `IEmbedder` is a third seam beside extraction and analysis, with
+`OpenAiEmbedder` speaking `/embeddings` against an embedding model the owner runs (a
+second llama.cpp instance, since a chat model asked for embeddings gives poor ones). Each
+node's text is cut into passages by `TextChunker`, embedded with the node's title, and
+stored in a pgvector column whose width is settled at startup from configuration rather
+than pinned in a migration. `Node.TextFingerprint` — a generated column — makes staleness
+a property of the data, so `EmbeddingWorker` sweeps for it rather than being handed work,
+and a category rename re-embeds everything filed under it without knowing embeddings
+exist. `SearchService` now runs the tsvector query and a KNN query under one visibility
+filter and fuses their rankings with `RankFusion` (reciprocal rank fusion); a hit only the
+vector half found is snippeted from the passage that matched. `Similar` gained the same
+sense, so a page can be kin to one it shares no category and no link with. REST and MCP
+gained `mode=hybrid|text|semantic`. Off unless an endpoint is configured, and bounded on
+the query path by `QueryTimeoutMs`, so a model that is missing, unreachable, or slow means
+full-text search and never a failed search.
+
+### Post-revision: the embedding model moves into the box
+
+Semantic search shipped opt-in, needing an embedding endpoint stood up beside the app;
+at the owner's request it became something Gatherum simply does. `LocalEmbedder` runs a
+23 MB int8 MiniLM in-process on ONNX Runtime with `Microsoft.ML.Tokenizers` for WordPiece,
+chosen over bge-small because a single global `MaxDistance` needs a gap between right and
+wrong answers and only MiniLM leaves one. The weights are fetched by an MSBuild target
+into a gitignored `models/`, hash-checked, and baked into the image in their own Docker
+layer — never committed, never downloaded at run time. Passages are embedded one at a time
+rather than batched, because quantized activations are scaled per tensor and batching
+would put queries and documents in different regimes. `AddEmbedding` now picks exactly one
+embedder — endpoint, else packaged model, else nothing — and the defaults were retuned to
+the model that ships (384 dimensions, `MaxDistance` 0.8, 800-character passages). The
+container publishes against a single runtime identifier, since ONNX's other platforms are
+most of a gigabyte of dead weight.
+
 ### Shoulds — status (updated again)
 
 - Tag pages with autocomplete: **superseded** — categories, with path autocomplete.

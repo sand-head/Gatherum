@@ -12,13 +12,24 @@ COPY src/Gatherum.Client/Gatherum.Client.csproj src/Gatherum.Client/
 COPY src/Gatherum.Infrastructure/Gatherum.Infrastructure.csproj src/Gatherum.Infrastructure/
 COPY src/Gatherum.Web/Gatherum.Web.csproj src/Gatherum.Web/
 RUN dotnet restore src/Gatherum.Web
+# The packaged embedding model, in its own layer: editing source shouldn't re-download
+# twenty-three megabytes of weights. The publish below finds them already fetched.
+RUN dotnet msbuild src/Gatherum.Infrastructure/Gatherum.Infrastructure.csproj \
+    -t:FetchEmbeddingModel
 COPY src ./src
-RUN dotnet publish src/Gatherum.Web -c Release -o /app
+# Published for one architecture on purpose. ONNX Runtime ships native libraries for
+# every platform it supports, and a portable publish carries all of them — most of a
+# gigabyte of Windows, Android and macOS binaries this Linux image can never load. A RID
+# leaves only the one it will.
+ARG TARGETARCH
+RUN RID="linux-$(case "$TARGETARCH" in arm64) echo arm64;; *) echo x64;; esac)" \
+    && dotnet publish src/Gatherum.Web -c Release -r "$RID" --self-contained false -o /app
 
 # Stage 2: runtime, non-root.
 # ffmpeg is what splits an uploaded video into the audio a model listens to and the
 # frames it looks at. Without it images and audio still analyze; video records why
-# it could not.
+# it could not. The embedding model needs nothing installed: ONNX Runtime's native
+# library is published alongside the app, and the weights beside it.
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
     && rm -rf /var/lib/apt/lists/*

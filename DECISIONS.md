@@ -376,3 +376,132 @@ Consequences worth stating:
   rather than something only a DBA can do.
 - **The migration carries every tag over** as a root category of the same name, so
   nothing that was filed becomes unfiled; nesting them afterwards is an ordinary move.
+
+## Semantic search is a second half, not a replacement
+The obvious reading of "I want semantic search" is that vectors replace the tsvector
+index. They must not. Full-text search is what answers a quoted phrase, an identifier, a
+filename, and a `-exclusion`; an embedding model is bad at all four, because it is built
+to ignore exactly the spelling those depend on. Vectors answer the other question — the
+page about the thing you can describe but not name. So `SearchService` runs both halves
+and fuses them, `websearch_to_tsquery` keeps its syntax, and the modes exist to ask for
+one half deliberately rather than to choose a default.
+
+## Fused by rank, never by score
+`ts_rank` and cosine distance share no scale, no range, and no meaning. Normalizing them
+into one number is a guess that silently decides how much a lexical hit is worth against a
+semantic one, and the guess would have to be re-tuned for every embedding model. Reciprocal
+rank fusion reads only positions, so it needs no such constant: a result near the top of
+either list places well, and one near the top of both wins. It also degrades to exactly
+the old ordering when one list is empty, which is what makes an unconfigured Gatherum, or
+one whose model is asleep, behave as it always did.
+
+## pgvector, and the Postgres image that carries it
+Vectors could have been stored as `real[]` and scored in C#, which would have kept the
+stock `postgres:16-alpine` image. It was the wrong trade for the same reason the tsvector
+column was: this app has already decided that Postgres is where search lives, and half a
+search engine in the database with the other half in a `foreach` is worse than either.
+The cost is honest and one line — `pgvector/pgvector:pg16` in `compose.yaml`, the quadlet,
+and the test fixture — and the migration's `CREATE EXTENSION vector` wants a superuser
+the first time, which the official images' `POSTGRES_USER` already is.
+
+## The vector column's width is a runtime setting, not a migration
+pgvector puts a column's dimension in its type, and every model has its own. Pinning one
+in the migration would have made "try a different embedding model" a schema change, which
+is exactly the experiment the owner should be able to run with an env var. So the
+migration leaves the column dimensionless, and `EmbeddingSchema` sizes it at startup from
+`Gatherum__Embedding__Dimensions`, building the HNSW index that a sized column makes
+possible. Changing that number drops every stored vector and clears every node's embedded
+fingerprint — vectors from two models are not comparable, and blending them mis-ranks
+silently rather than failing — and the worker earns them back over the next few minutes.
+
+## A database-computed fingerprint replaces the queue
+Media analysis is handed work by the upload that created it, because analysis belongs to a
+version's bytes and only an upload makes those. Embedding does not work that way: a node's
+vectors go stale when somebody edits it, when a transcript lands on it hours later, when
+it is filed under a new category, and when a category three levels up is renamed and a
+hundred nodes' search text is rewritten by one `UPDATE`. Every one of those would have
+needed its own enqueue call, and the last one has no upload path to hang it on. So
+`Node.TextFingerprint` is a stored generated column — `md5(title || search text)` — and a
+node is stale exactly when it differs from `EmbeddedFingerprint`. The sweep reads one
+index. Nothing has to remember to enqueue, because there is nothing to remember.
+
+## Passages, not one vector per node
+A single vector per node is the cheaper design and the wrong one here, where a node may be
+an hour of transcribed video or a fic chapter. Averaging that into one point puts it
+vaguely near everything and close to nothing, and loses the ability to say *which* part
+answered. Nodes are cut into passages on their own paragraph boundaries, each passage
+carrying the tail of the one before so a sentence split across a seam survives somewhere,
+and each embedded with the node's title so a paragraph that never repeats the subject
+still belongs to it. A passage's vector is keyed by the hash of exactly what was embedded,
+so editing one paragraph of a long page re-embeds one passage, and the same text uploaded
+twice is paid for once — the same content-addressing that already governs bytes and
+transcripts.
+
+## A distance ceiling, or every search finds something
+KNN always returns its k nearest neighbours, however far away they are. Left alone, that
+turns "no results" into a palette full of the least-unrelated pages in the tree, which is
+worse than an empty list because it looks like an answer. `Gatherum__Embedding__MaxDistance`
+is the cutoff past which a passage is not an answer at all. It is a property of the model
+rather than of Gatherum, so it is configurable and documented as the knob to turn when
+search feels too literal or starts to wander.
+
+## The search box gets a deadline the indexer does not
+Embedding a batch of passages in the background may take a minute; nobody is watching. The
+same call on the search path has about two seconds before a person believes the app is
+broken. `QueryTimeoutMs` bounds it, and expiry is not an error — it returns the full-text
+half and logs. This is the same instinct as the analysis rule that an upload must return
+before any model is consulted: a model may make a feature better, and may never be allowed
+to make the app worse.
+
+## The embedding model ships in the box (owner direction)
+Semantic search that needs a second inference server stood up before it does anything is
+a feature most installs will never turn on, and Gatherum is meant to be one container and
+a database. So a small embedding model — MiniLM, quantized to eight bits, twenty-three
+megabytes — ships with the app and runs in its own process on the CPU at about six
+milliseconds a passage. Semantic search is therefore what Gatherum *does*, not what it can
+be configured to do, and `Gatherum__Embedding__Endpoint` becomes an override for people
+who run something better rather than the price of entry. Nothing about the privacy story
+changes: an in-process model is the strongest possible version of "nothing is ever sent
+anywhere". The cost is honest — an existing tree spends a few CPU-minutes embedding itself
+the first time it starts after this — and `Local=false` turns it off.
+
+## MiniLM rather than bge-small, because of the threshold
+On a smoke test of four questions asked in words their answers never use, both models
+ranked the right passage first. They differ in something our design cares about more.
+MiniLM answered at cosine distances of 0.75 and below while putting wrong answers at 0.87
+and above; bge-small answered between 0.43 and 0.56 and put *wrong* answers as near as
+0.45. bge's similarities bunch into a narrow band, which is a known trait and harmless if
+all you do is rank — but `MaxDistance` is a single global cutoff, and no cutoff separates
+overlapping bands. MiniLM leaves a gap to put one in. It is also smaller (23 MB against
+34) and faster. Four probes is a smoke test and not a benchmark; the shape of the
+difference is the part worth trusting.
+
+## The model is fetched by the build, not committed
+Twenty-three megabytes of weights in git history is a permanent tax on every clone, for a
+file that never merges, never diffs, and would be joined by another the first time the
+model changes. So an MSBuild target fetches it once into a gitignored `models/`, checks it
+against a known SHA-256, and every later build finds it already there; the Dockerfile does
+it in its own layer so editing source doesn't re-download it. The trade is that a cold
+build needs the network — mitigated by the two files being placeable by hand and by
+`-p:FetchEmbeddingModel=false`. The *running* app never downloads anything, which is the
+property that actually matters.
+
+## One passage per inference, though the caller batches
+Batching passages into one tensor is the obvious way to make indexing faster, and it was
+wrong here. This model's activations are quantized with a scale computed across the whole
+input tensor, so a passage embedded beside a long neighbour comes out about 0.97 cosine
+from the same passage embedded beside a short one — the test written to check padding
+found it. Random drift would have been tolerable; this is not random. A search box is
+always a batch of one, and passages would have arrived sixteen at a time, so every query
+would have sat in a different quantization regime from every document it was compared
+against — a systematic error, invisible except as slightly worse results forever. Embedding
+one at a time costs about 1.5× the wall clock and restores the property everything else
+assumes: a vector is a function of its text and of nothing else.
+
+## Published for one architecture
+ONNX Runtime ships native libraries for Windows, macOS, Android, iOS and Linux, and a
+portable publish carries every one of them — 770 MB of output, most of a gigabyte of it
+binaries this Linux image can never load. The Dockerfile therefore publishes with a
+runtime identifier picked from Docker's `TARGETARCH`, which prunes the rest and brings the
+publish to 143 MB. Local `dotnet run` and `dotnet test` are untouched.
+

@@ -13,8 +13,56 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.29.0" />
+    <PackageReference Include="Microsoft.ML.Tokenizers" Version="2.0.0" />
     <PackageReference Include="PdfPig" Version="0.1.15" />
     <PackageReference Include="SlopEdit.Docx" Version="2.1.0" />
   </ItemGroup>
+
+  <!-- The packaged embedding model. Twenty-three megabytes of weights don't belong in
+       git history, so the build fetches them once into a gitignored folder and checks
+       what it got against a known hash; every later build finds them already there.
+       Nothing is downloaded at run time — a running Gatherum never reaches the network
+       for this. Building offline: place the two files yourself, or set
+       FetchEmbeddingModel=false and point Gatherum__Embedding__ModelPath at a copy. -->
+  <PropertyGroup>
+    <EmbeddingModelDirectory>$(MSBuildThisFileDirectory)..\..\models\all-MiniLM-L6-v2\</EmbeddingModelDirectory>
+    <FetchEmbeddingModel Condition="'$(FetchEmbeddingModel)' == ''">true</FetchEmbeddingModel>
+    <EmbeddingModelUrl>https://huggingface.co/Xenova/all-MiniLM-L6-v2/resolve/main/onnx/model_int8.onnx</EmbeddingModelUrl>
+    <EmbeddingModelHash>afdb6f1a0e45b715d0bb9b11772f032c399babd23bfc31fed1c170afc848bdb1</EmbeddingModelHash>
+    <EmbeddingVocabularyUrl>https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/vocab.txt</EmbeddingVocabularyUrl>
+    <EmbeddingVocabularyHash>07eced375cec144d27c900241f3e339478dec958f92fddbc551f295c992038a3</EmbeddingVocabularyHash>
+  </PropertyGroup>
+
+  <!-- Before AssignTargetPaths, not BeforeBuild: the Content items below are declared
+       inside this target because on a cold build the files they point at do not exist
+       yet at evaluation time, and AssignTargetPaths is the last moment they can join. -->
+  <Target Name="FetchEmbeddingModel" BeforeTargets="AssignTargetPaths"
+          Condition="'$(FetchEmbeddingModel)' == 'true'">
+    <DownloadFile SourceUrl="$(EmbeddingModelUrl)" DestinationFolder="$(EmbeddingModelDirectory)"
+                  DestinationFileName="model.onnx" Retries="3" SkipUnchangedFiles="true"
+                  Condition="!Exists('$(EmbeddingModelDirectory)model.onnx')" />
+    <DownloadFile SourceUrl="$(EmbeddingVocabularyUrl)" DestinationFolder="$(EmbeddingModelDirectory)"
+                  DestinationFileName="vocab.txt" Retries="3" SkipUnchangedFiles="true"
+                  Condition="!Exists('$(EmbeddingModelDirectory)vocab.txt')" />
+
+    <GetFileHash Files="$(EmbeddingModelDirectory)model.onnx" Algorithm="SHA256" HashEncoding="hex">
+      <Output TaskParameter="Hash" PropertyName="FetchedModelHash" />
+    </GetFileHash>
+    <GetFileHash Files="$(EmbeddingModelDirectory)vocab.txt" Algorithm="SHA256" HashEncoding="hex">
+      <Output TaskParameter="Hash" PropertyName="FetchedVocabularyHash" />
+    </GetFileHash>
+    <Error Condition="'$(FetchedModelHash)' != '$(EmbeddingModelHash)'"
+           Text="The embedding model at $(EmbeddingModelDirectory)model.onnx hashes to $(FetchedModelHash), not $(EmbeddingModelHash). Delete it to fetch again." />
+    <Error Condition="'$(FetchedVocabularyHash)' != '$(EmbeddingVocabularyHash)'"
+           Text="The embedding vocabulary at $(EmbeddingModelDirectory)vocab.txt hashes to $(FetchedVocabularyHash), not $(EmbeddingVocabularyHash). Delete it to fetch again." />
+
+    <ItemGroup>
+      <Content Include="$(EmbeddingModelDirectory)model.onnx"
+               Link="models/all-MiniLM-L6-v2/model.onnx" CopyToOutputDirectory="PreserveNewest" />
+      <Content Include="$(EmbeddingModelDirectory)vocab.txt"
+               Link="models/all-MiniLM-L6-v2/vocab.txt" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+  </Target>
 
 </Project>

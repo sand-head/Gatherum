@@ -433,3 +433,6 @@ src/Gatherum.Web/wwwroot/js/dist/
 
 # Local dev run of the app stores uploads here (Gatherum__Storage__Root default)
 src/Gatherum.Web/data/
+
+# Fetched by the build, not committed: the packaged embedding model.
+models/

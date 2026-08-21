@@ -14,10 +14,14 @@ public static class ApiEndpoints
         api.AddEndpointFilter(TranslateDomainErrors);
 
         api.MapGet("/search", async (SearchService search, HttpContext http,
-            string query, string? kind, int? limit) =>
+            string query, string? kind, int? limit, string? mode) =>
         {
             NodeKind? nodeKind = kind is null ? null : Enum.Parse<NodeKind>(kind, ignoreCase: true);
-            var results = await search.SearchAsync(http.User.GetUserId(), query, nodeKind, limit ?? 20);
+            var searchMode = mode is null
+                ? SearchMode.Hybrid
+                : Enum.Parse<SearchMode>(mode, ignoreCase: true);
+            var results = await search.SearchAsync(http.User.GetUserId(), query, nodeKind,
+                limit ?? 20, searchMode);
             return Results.Ok(results.Select(SearchResultDto.From));
         });
 

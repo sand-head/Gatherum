@@ -22,6 +22,12 @@ public sealed class ServiceHarness : IAsyncDisposable
     public SearchService Search { get; }
     public ManualClock Clock { get; } = new();
     public MediaAnalysisQueue AnalysisQueue { get; } = new();
+    public EmbeddingService Embeddings { get; }
+
+    /// <summary>Stands in for an embedding model. Registers no subjects by default, so
+    /// every text embeds to the same point and the tests that predate semantic search
+    /// see a vector half that ranks nothing above anything.</summary>
+    public FakeEmbedder Embedder { get; } = new();
 
     /// <summary>Stands in for a model without one: tests say what it should have read
     /// and heard, and assert on everything around it — the queueing, the reuse, the
@@ -37,15 +43,34 @@ public sealed class ServiceHarness : IAsyncDisposable
     {
         Db = PostgresFixture.CreateContext(connectionString);
         var authorizer = new DefaultNodeAuthorizer();
-        storage = new FileSystemStorage(Options.Create(
-            new GatherumOptions { Storage = new StorageOptions { Root = storageRoot } }));
-        Nodes = new NodeService(Db, authorizer, Clock);
+        var settings = Options.Create(new GatherumOptions
+        {
+            Storage = new StorageOptions { Root = storageRoot },
+            Embedding = new EmbeddingOptions
+            {
+                Endpoint = "http://embedder.invalid",
+                Model = "fake-embed",
+                Dimensions = PostgresFixture.EmbeddingDimensions,
+                QueryTimeoutMs = 5_000,
+                MaxChunkChars = 400,
+                // The shipped default is measured against the packaged model. FakeEmbedder
+                // has its own spread — subjects it was told about land together, hashed
+                // words scatter — so it states its own cutoff rather than borrowing one
+                // tuned for a model it is standing in for. LocalEmbedderTests is where the
+                // real default is held to account.
+                MaxDistance = 0.55,
+            },
+        });
+        storage = new FileSystemStorage(settings);
+        Embeddings = new EmbeddingService(Db, [Embedder], new QueryEmbeddingCache(), settings,
+            NullLogger<EmbeddingService>.Instance);
+        Nodes = new NodeService(Db, authorizer, Clock, Embeddings);
         Categories = new CategoryService(Db, Nodes, authorizer);
         Files = new FileService(Db, Nodes, storage,
             [new PlainTextExtractor(), new PdfTextExtractor(), new DocxTextExtractor(),
                 new ImageMetadataExtractor()],
             [Analyzer], AnalysisQueue, Clock, NullLogger<FileService>.Instance);
-        Search = new SearchService(Db, authorizer);
+        Search = new SearchService(Db, authorizer, Embeddings);
     }
 
     public async Task<Guid> AddUserAsync(string name)
@@ -60,6 +85,16 @@ public sealed class ServiceHarness : IAsyncDisposable
         Db.Users.Add(user);
         await Db.SaveChangesAsync();
         return user.Id;
+    }
+
+    /// <summary>One pass of what EmbeddingWorker does per sweep: find the nodes whose
+    /// text has moved on from their vectors, and re-embed them. The worker keeps no logic
+    /// of its own beyond the interval, so this exercises the same door it calls.</summary>
+    public async Task EmbedStaleAsync()
+    {
+        foreach (var node in await Embeddings.StaleNodesAsync(1000))
+            await Embeddings.EmbedNodeAsync(node.Id);
+        Db.ChangeTracker.Clear();
     }
 
     /// <summary>One pass of what MediaAnalysisWorker does per queued file, minus the
