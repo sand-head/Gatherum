@@ -13,7 +13,8 @@ C#/Blazor — the only JavaScript is a ~65-line interop file.
   auto-format as you type, tables, images), with a Source-mode toggle for pages;
   code and text files edit in its code editor with syntax highlighting. Autosave,
   mention insertion that links nodes together, and every save is a version — old
-  versions viewable, downloadable, restorable.
+  versions downloadable, restorable, and viewable as HTML rather than as a canvas, so a
+  preview is searchable, selectable and printable like the article it is.
 - **Wiki words**: pages speak a small dialect the editor is taught per document —
   `[[Wiki links]]` that resolve by title (red, with an offer to write the page, when
   nothing answers to that name), `:::infobox` and `:::figure` asides the prose wraps

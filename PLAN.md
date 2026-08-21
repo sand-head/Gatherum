@@ -202,6 +202,21 @@ the model that ships (384 dimensions, `MaxDistance` 0.8, 800-character passages)
 container publishes against a single runtime identifier, since ONNX's other platforms are
 most of a gigabyte of dead weight.
 
+### Post-revision: slopedit 2.2 — reading is HTML, not a canvas
+
+slopedit 2.2 gave document mode a second renderer. `DocumentHtmlView` emits a
+`RichDocument` as HTML from the same theme, measurer, layout and `DocumentMetrics` the
+canvas draws from — and serves the browser the very font files Skia measured — so the
+two renderers agree about where a line wraps rather than merely looking alike. Gatherum's
+one read-only document, an old Markdown version in the history panel, is that component
+now: a preview a reader can Ctrl+F, select, copy and print, whose pictures are `<img>`s
+the browser fetches and caches itself, and which costs no canvas at all. The wiki's own
+vocabulary rides along, because the chrome is on the document rather than in the renderer
+— an infobox is an `<aside>` carrying its card and header band, a callout keeps its tint,
+a wiki link keeps its URL — and `ReadOnlyHtmlTests` is the host's half of upstream's
+parity promise. Editing is still the canvas, which is what a caret, a selection and
+proportional hit-testing need. All slopedit packages moved to 2.2.0.
+
 ### Shoulds — status (updated again)
 
 - Tag pages with autocomplete: **superseded** — categories, with path autocomplete.

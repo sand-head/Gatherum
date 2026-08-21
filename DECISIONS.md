@@ -526,3 +526,22 @@ untenable one. The workflow therefore publishes `linux/amd64` and nothing else. 
 who needs arm64 can `docker build` on an arm64 machine and get a correct image with no
 changes; adding `platforms: linux/amd64,linux/arm64` to the workflow is a one-line
 change the day a native arm64 runner is available.
+
+## Reading a version is HTML; editing is still a canvas (slopedit 2.2)
+The canvas exists for the things a browser will not give us: a caret, a selection,
+proportional hit-testing, an IME. A version preview has none of them, and paying for one
+there cost the reader everything the browser does better — Ctrl+F, screen readers, native
+selection and copy, `<img>` with its own cache, and a page that prints as a page rather
+than as a screenshot. So the history panel's preview is `DocumentHtmlView` and the editor
+is unchanged. The two renderers are the same document by construction (same theme, same
+measurer, same layout, same metrics, the same font files served to the browser), so this
+is a re-render, not a second reading of the page.
+
+Two things were deliberately not done with it. Links in the preview stay the browser's:
+`wikilink:` keeps its URL and a mention's `node://` — outside the emitter's allow-list —
+renders as a link with nowhere to go, exactly as the canvas painted it in a view that
+routed no clicks. Wiring the editor's link routing into the panel would have copied
+`FollowLinkAsync` into a second component to make *history* navigate away from itself.
+And a page still opens in the editor rather than in a Read tab with an Edit button: the
+component upstream suggests for one is now here, but which surface a page opens in is a
+product decision, not a consequence of a package bump.

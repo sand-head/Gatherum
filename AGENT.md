@@ -56,9 +56,10 @@ auto-login. Migrations: `dotnet ef migrations add <Name> -p src/Gatherum.Infrast
   server implementation of the interactive components' data seam (`Services/`).
 - `src/Gatherum.Client` — every interactive component, all Interactive Auto: the
   editor (`NodeEditor` hosting slopedit's `DocumentView` for pages and docx,
-  `EditorView` for code/source), tree, sidebar panels (contents/similar/recent),
-  search palette, node header, categories, version
-  panel, file view, and settings keys — plus Gatherum's Markdown dialect, which lives
+  `EditorView` for code/source; a document that is read rather than edited goes to
+  `DocumentHtmlView` instead — the version panel's preview is the one today), tree,
+  sidebar panels (contents/similar/recent), search palette, node header, categories,
+  version panel, file view, and settings keys — plus Gatherum's Markdown dialect, which lives
   here because it is the editor's word: `GatherumMarkdown` (the extension set and the
   only read/write door), `AsideExtension`/`CalloutExtension`/`BlockTags`,
   `DocumentChrome` (floats and decorations derived from tags), `ChromeInk`, `WikiLinks`
