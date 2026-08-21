@@ -1,11 +1,11 @@
-.hint { color: var(--on-surface-dim); max-width: 60ch; }
+.hint { color: var(--on-surface-dim); max-width: min(60ch, 100%); }
 
 /* The list arrives in path order, so one indent per level draws the whole tree. */
 .category-tree {
     list-style: none;
     padding: 0;
     margin: 0 0 24px;
-    max-width: 640px;
+    max-width: min(640px, 100%);
 
     & li {
         display: flex;
@@ -48,7 +48,7 @@
     list-style: none;
     padding: 0;
     margin: 0;
-    max-width: 640px;
+    max-width: min(640px, 100%);
 
     & li { border-bottom: 1px solid var(--outline-dim); }
 

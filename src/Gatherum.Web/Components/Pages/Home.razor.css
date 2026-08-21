@@ -1,6 +1,6 @@
 /* Search-engine homepage: the wordmark centered in calm space. */
 .home {
-    max-width: 560px;
+    max-width: min(560px, 100%);
     margin: 16vh auto 0;
     text-align: center;
 }

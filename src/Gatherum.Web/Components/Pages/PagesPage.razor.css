@@ -1,7 +1,7 @@
 /* The whole tree gets the article measure — wide rows scale where the old
    sidebar tree could not. */
 .pages {
-    max-width: 760px;
+    max-width: min(760px, 100%);
 }
 
 .hint {
