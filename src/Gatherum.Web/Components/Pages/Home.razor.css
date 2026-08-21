@@ -1,12 +1,12 @@
 /* Search-engine homepage: the wordmark centered in calm space. */
 .home {
     max-width: min(560px, 100%);
-    margin: 16vh auto 0;
+    margin: clamp(24px, 16vh, 200px) auto 0;
     text-align: center;
 }
 
 h1 {
-    font: 400 44px/1.15 var(--font-serif);
+    font: 400 clamp(32px, 11vw, 44px)/1.15 var(--font-serif);
     letter-spacing: 0.5px;
     margin: 0 0 14px;
 }

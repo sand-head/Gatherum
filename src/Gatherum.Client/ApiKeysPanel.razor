@@ -22,19 +22,23 @@
         </div>
     }
 
-    <table class="key-table">
-        <thead>
-            <tr><th>Name</th><th>Key</th><th>Created</th><th>Last used</th><th></th></tr>
+    @* The roles are redundant while this is a table and load-bearing once it is
+       not: below the compact breakpoint the rows become cards, and display:
+       block on a table element drops its implicit role. data-label carries the
+       column head down into the card, where the thead is gone. *@
+    <table class="key-table stacked-table" role="table">
+        <thead role="rowgroup">
+            <tr role="row"><th>Name</th><th>Key</th><th>Created</th><th>Last used</th><th></th></tr>
         </thead>
-        <tbody>
+        <tbody role="rowgroup">
             @foreach (var key in keys)
             {
-                <tr class="@(key.IsActive ? "" : "revoked")">
-                    <td>@key.Name</td>
-                    <td><code>@key.Prefix…</code></td>
-                    <td>@key.CreatedAt.LocalDateTime.ToString("d")</td>
-                    <td>@(key.LastUsedAt?.LocalDateTime.ToString("g") ?? "never")</td>
-                    <td>
+                <tr role="row" class="@(key.IsActive ? "" : "revoked")">
+                    <td role="cell" data-label="Name">@key.Name</td>
+                    <td role="cell" data-label="Key"><code>@key.Prefix…</code></td>
+                    <td role="cell" data-label="Created">@key.CreatedAt.LocalDateTime.ToString("d")</td>
+                    <td role="cell" data-label="Last used">@(key.LastUsedAt?.LocalDateTime.ToString("g") ?? "never")</td>
+                    <td role="cell">
                         @if (key.IsActive)
                         {
                             <button class="danger" @onclick="() => RevokeAsync(key.Id)">Revoke</button>

@@ -7,11 +7,16 @@
     margin: 0 0 24px;
     max-width: min(640px, 100%);
 
+    /* The indent compounds, and an uncapped 20px per level walks a deep
+       taxonomy straight off a narrow screen. Both the step and the level it
+       stops growing at are variables so that only the narrow layout has to
+       care — up here nothing is capped and nothing changes. */
     & li {
         display: flex;
         align-items: baseline;
         gap: 8px;
-        padding: 5px 8px 5px calc(8px + var(--depth) * 20px);
+        min-width: 0;
+        padding: 5px 8px 5px calc(8px + min(var(--depth), var(--depth-cap, 99)) * var(--indent, 20px));
         border-radius: var(--radius-s);
 
         &:hover { background: var(--hover); }
@@ -71,4 +76,8 @@
     place-items: center;
     color: var(--on-surface-dim);
     flex-shrink: 0;
+}
+
+@media (max-width: 480px) {
+    .category-tree { --indent: 12px; --depth-cap: 4; }
 }

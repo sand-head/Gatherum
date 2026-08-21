@@ -11,16 +11,18 @@
     </button>
     @if (open)
     {
-        <table>
-            <tbody>
+        @* Roles because the rows become cards below the compact breakpoint, and
+           display: block on a table element drops its implicit role. *@
+        <table class="stacked-table" role="table">
+            <tbody role="rowgroup">
                 @foreach (var version in versions)
                 {
-                    <tr class="@(previewing == version.Number ? "selected" : "")">
-                        <td>#@version.Number</td>
-                        <td>@version.FileName</td>
-                        <td>@FormatSize(version.SizeBytes)</td>
-                        <td><time>@version.UploadedAt.LocalDateTime.ToString("g")</time></td>
-                        <td>
+                    <tr role="row" class="@(previewing == version.Number ? "selected" : "")">
+                        <td role="cell" data-label="Version">#@version.Number</td>
+                        <td role="cell" data-label="File">@version.FileName</td>
+                        <td role="cell" data-label="Size">@FormatSize(version.SizeBytes)</td>
+                        <td role="cell" data-label="Uploaded"><time>@version.UploadedAt.LocalDateTime.ToString("g")</time></td>
+                        <td role="cell">
                             @if (version.IsText)
                             {
                                 <button class="ghost" @onclick="() => PreviewAsync(version)">view</button>

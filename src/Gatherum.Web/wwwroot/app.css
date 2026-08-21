@@ -266,6 +266,59 @@ a.category:hover { text-decoration: none; box-shadow: var(--shadow-1); }
 
 .text-danger { color: var(--danger); }
 
+/* A wide table on a narrow screen. Five columns do not fit 390px in any
+   arrangement that is still a table, so below the compact breakpoint each row
+   becomes a card and each cell a labelled line, the label coming from the
+   cell's own data-label because the head is gone. A cell with no label is an
+   actions cell and simply fills the row.
+
+   Shared by the version list and the key list, so it lives here rather than
+   twice — and the child combinators are deliberate: a scoped `td[b-xyz]` ties
+   with `.stacked-table td` on specificity, and the isolation bundle loads after
+   this file, so a tie would silently lose. display: block also drops a table
+   element's implicit role, which is why the markup states its roles.  */
+@media (max-width: 480px) {
+  .stacked-table,
+  .stacked-table > tbody { display: block; }
+
+  .stacked-table > thead { display: none; }
+
+  .stacked-table > tbody > tr {
+    display: block;
+    border: 1px solid var(--outline-dim);
+    border-radius: var(--radius);
+    padding: 8px 12px;
+    margin-bottom: 8px;
+  }
+
+  .stacked-table > tbody > tr > td {
+    display: flex;
+    gap: 12px;
+    justify-content: space-between;
+    align-items: baseline;
+    border: none;
+    padding: 3px 0;
+    text-align: right;
+
+    &::before {
+      content: attr(data-label);
+      flex-shrink: 0;
+      font: 500 11px/1.6 var(--font-ui);
+      color: var(--on-surface-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      text-align: left;
+    }
+
+    &:not([data-label]) {
+      justify-content: flex-end;
+      padding-top: 8px;
+
+      &::before { content: none; }
+    }
+  }
+}
+
 /* Touch. Two rules follow from a coarse pointer and belong here rather than in
    a component, because they are about the native elements this file already
    owns: a finger cannot reliably hit a control shorter than about 44px, and

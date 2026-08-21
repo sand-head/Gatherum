@@ -5,7 +5,7 @@
 .tree-row {
     display: flex;
     align-items: center;
-    padding-left: calc(var(--depth) * 14px);
+    padding-left: calc(min(var(--depth), var(--depth-cap, 99)) * var(--indent, 14px));
     border-radius: var(--radius-full);
     transition: background-color 0.1s;
 
@@ -137,6 +137,10 @@
 /* Without a hover there is nothing to reveal the row menu, and every per-node
    action lives behind it — new page inside, upload inside, move, privacy,
    delete. On a touch device it is simply always there. */
+@media (max-width: 480px) {
+    .tree-row { --indent: 10px; --depth-cap: 5; }
+}
+
 @media (hover: none) {
     .row-menu { visibility: visible; }
 
