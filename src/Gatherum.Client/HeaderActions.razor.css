@@ -71,3 +71,7 @@
         & .label, & .caret { display: none; }
     }
 }
+
+@media (pointer: coarse) {
+    .menu button, .menu .menu-upload { padding: 12px; }
+}

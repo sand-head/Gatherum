@@ -133,3 +133,26 @@
 
     &:hover { background: color-mix(in srgb, var(--danger) 8%, transparent); }
 }
+
+/* Without a hover there is nothing to reveal the row menu, and every per-node
+   action lives behind it — new page inside, upload inside, move, privacy,
+   delete. On a touch device it is simply always there. */
+@media (hover: none) {
+    .row-menu { visibility: visible; }
+
+    /* Same reasoning: a truncated title whose remainder lives in a tooltip is
+       a title a finger cannot read. The row grows instead. */
+    .node-title { white-space: normal; overflow: visible; text-overflow: clip; }
+}
+
+/* The row is the target worth growing: a full-width link at the tap floor is
+   easier to hit than any icon. The icons themselves do not change size — only
+   the boxes around them, and the state layer with them. */
+@media (pointer: coarse) {
+    .tree-row { min-height: var(--tap); }
+    .chevron, .row-menu { width: var(--tap); height: var(--tap); }
+    /* The row's own height does not reach the link: a centered flex child keeps
+       its content height, and the link is the target that matters here. */
+    ::deep .tree-link { min-height: var(--tap); }
+    .menu button, .menu .menu-upload { padding: 11px 14px; }
+}

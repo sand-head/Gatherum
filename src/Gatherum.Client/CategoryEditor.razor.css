@@ -8,6 +8,7 @@
 /* The "add category" affordance is a ghost chip that becomes real on entry. */
 .category-input {
     width: 110px;
+    max-width: 100%;
     font: 500 13px/1.5 var(--font-ui);
     color: var(--on-surface-dim);
     background: none;
@@ -21,4 +22,11 @@
         box-shadow: none;
         color: var(--on-surface);
     }
+}
+
+/* Appears only once there is something to add, so the row stays a row of chips
+   until it is doing work. */
+.category-add {
+    font: 500 13px/1.5 var(--font-ui);
+    padding: 2px 12px;
 }

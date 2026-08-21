@@ -266,6 +266,19 @@ a.category:hover { text-decoration: none; box-shadow: var(--shadow-1); }
 
 .text-danger { color: var(--danger); }
 
+/* Touch. Two rules follow from a coarse pointer and belong here rather than in
+   a component, because they are about the native elements this file already
+   owns: a finger cannot reliably hit a control shorter than about 44px, and
+   iOS Safari zooms into any field whose text is under 16px and never zooms back
+   out — which is why every input in the app used to trap a reader at 1.4x. The
+   chip's own × is not a pill and keeps the chip's height. */
+@media (pointer: coarse) {
+  input, textarea, select { font-size: 16px; min-height: var(--tap); }
+
+  button, .button { min-height: var(--tap); }
+  .category button { min-height: 0; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; }
 }

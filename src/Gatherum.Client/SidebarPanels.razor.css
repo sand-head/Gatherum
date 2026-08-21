@@ -73,3 +73,13 @@
     font-size: 13px;
     color: var(--on-surface-dim);
 }
+
+/* Ellipsis puts the rest of a title in a tooltip, and a tooltip is not
+   reachable by touch. In the drawer there is room to simply wrap it. */
+@media (hover: none) {
+    .links a, .contents button {
+        white-space: normal;
+        overflow: visible;
+        text-overflow: clip;
+    }
+}

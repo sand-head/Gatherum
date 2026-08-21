@@ -134,3 +134,8 @@
         & span, & kbd { display: none; }
     }
 }
+
+@media (pointer: coarse) {
+    .search-trigger { min-height: var(--tap); }
+    .palette-result { padding: 12px; }
+}

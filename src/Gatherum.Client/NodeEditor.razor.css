@@ -74,6 +74,21 @@
     & input { width: 100%; margin-bottom: 6px; }
 }
 
+.picker-close {
+    float: right;
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    margin: -4px -4px 0 4px;
+    border: none;
+    border-radius: var(--radius-full);
+    color: var(--on-surface-dim);
+
+    &:hover { background: var(--hover); color: var(--on-surface); }
+}
+
 .mention-results {
     display: flex;
     flex-direction: column;

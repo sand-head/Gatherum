@@ -304,6 +304,24 @@
     }
 }
 
+/* Touch, at any width — a tablet is a coarse pointer with a wide viewport, so
+   this is not the narrow layout's business. The icons keep their size; the
+   boxes and their state layers grow to the tap floor. */
+@media (pointer: coarse) {
+    .nav-toggle, .theme-toggle, .account-button {
+        width: var(--tap);
+        height: var(--tap);
+    }
+
+    .account-menu {
+        top: calc(var(--tap) + 12px);
+
+        & a, & form button { padding: 12px; }
+    }
+
+    .sidebar-foot ::deep a { padding: 11px 14px; }
+}
+
 /* Blazor's built-in error bar — hidden in app.css; these rules style it if
    a dev re-enables it. Light-only by design. */
 #blazor-error-ui {

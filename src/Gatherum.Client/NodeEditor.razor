@@ -77,6 +77,14 @@
     @if (picker != Picker.None)
     {
         <div class="mention-dialog">
+            @* Escape was the only way out, which is not a way out on a phone. *@
+            <button class="picker-close" title="Close" aria-label="Close"
+                    @onclick="() => picker = Picker.None">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                    <path d="M6 6l12 12M18 6L6 18" />
+                </svg>
+            </button>
             <input placeholder="@PickerPlaceholder" value="@pickerQuery"
                    @oninput="OnPickerQuery" @onkeydown="OnPickerKey" autofocus />
             @if (picker == Picker.WikiLink && pickerQuery.Trim().Length > 0)

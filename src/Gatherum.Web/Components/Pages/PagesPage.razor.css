@@ -9,3 +9,10 @@
     font-size: 13.5px;
     color: var(--on-surface-dim);
 }
+
+/* The drop zone is a pointer gesture with no touch equivalent, so a finger is
+   not told about it. Uploading from here is the row menu's "Upload file
+   inside", which works either way. */
+@media (hover: none) {
+    .drag-hint { display: none; }
+}
