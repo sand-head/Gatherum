@@ -38,10 +38,13 @@
         </table>
         @if (previewDoc is not null)
         {
-            <div class="history-preview document-surface">
-                <DocumentView Grid="previewDoc" ReadOnly="true" ImageSource="Data.GetImageAsync"
-                              Theme="EditorThemes.For(AppTheme.IsDark)"
-                              AriaLabel="Version preview" />
+            <div class="history-preview">
+                @* Reading, not editing: the HTML renderer gives an old version Ctrl+F,
+                   native selection, its own pictures and a real page to print, and costs
+                   no canvas. The padding is this panel's; the view adds none of its own. *@
+                <DocumentHtmlView Grid="previewDoc" Theme="EditorThemes.For(AppTheme.IsDark)"
+                                  ContentPadding="0" TopPadding="0"
+                                  AriaLabel="Version preview" />
             </div>
         }
         else if (previewText is not null)

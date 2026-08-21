@@ -24,8 +24,10 @@ browser sessions — including against the built container).
   docx bytes with the same autosave collapse; their search text is the canonical
   Markdown rendering, so docx mentions backlink like pages (all verified end-to-end,
   including from the WebAssembly home). Autosave with indicator, "Link node…" mention insertion as real link
-  runs, version history with restore (old Markdown previews in a read-only
-  `DocumentView`). Every interactive component — editor, tree, search palette, node
+  runs, version history with restore (an old Markdown version previews through
+  `DocumentHtmlView` — the same document as HTML rather than as a canvas, so it is
+  findable with Ctrl+F, selectable, printable, and its pictures are the browser's).
+  Every interactive component — editor, tree, search palette, node
   header, categories, versions, file view, settings keys — is an Interactive Auto island in
   `Gatherum.Client` over one `IAppData` seam (services on the server circuit, HTTP
   under WebAssembly): the first visit renders on the server while the runtime
@@ -108,9 +110,11 @@ browser sessions — including against the built container).
   exercised against a postgres container, editor verified in-browser against the
   containerized app), compose.yaml, Podman Quadlets, `/healthz`, JSON console logs
   outside Development, migrations on startup with opt-out.
-- **Tests** — 141 passing: the Markdown dialect (infobox/figure/callout round trips,
+- **Tests** — 144 passing: the Markdown dialect (infobox/figure/callout round trips,
   wiki-link spellings, extension composition, derived chrome, red-link inking, in-app
-  URL shapes), markdown links, docx extraction/editing/backlinks, tree ops, privacy,
+  URL shapes) and the same dialect as read-only HTML (the aside and its card, a
+  callout's tint, a wiki link's URL, a mention that keeps its look and loses its
+  target), markdown links, docx extraction/editing/backlinks, tree ops, privacy,
   versions (collapse, restore, re-upload, cross-author), search, title resolution, API
   keys, storage/extraction, the taxonomy (nesting, counts, privacy, rename/move/delete,
   path spelling), and integration tests booting the app on Testcontainers Postgres
