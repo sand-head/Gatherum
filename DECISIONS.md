@@ -505,3 +505,24 @@ binaries this Linux image can never load. The Dockerfile therefore publishes wit
 runtime identifier picked from Docker's `TARGETARCH`, which prunes the rest and brings the
 publish to 143 MB. Local `dotnet run` and `dotnet test` are untouched.
 
+
+## Versions come from the history, not from a file
+The container workflow needs a number, and the two usual sources are both bad: a
+hand-edited `<Version>` drifts from what shipped, and a date stamp says nothing about
+what changed. GitVersion in mainline mode reads the number off `main` itself — count
+what has landed since the last release tag — so a version is a fact about the commits
+an image contains, and merging is the only thing anyone has to remember to do. In
+GitVersion 6 that is a *strategy* rather than the old `mode: Mainline`, which no longer
+parses: `strategies: [ConfiguredNextVersion, Mainline]` on the GitHubFlow preset, with
+`main` set to `ContinuousDeployment` so a merge produces a clean `0.0.8` instead of a
+`0.0.8-3` waiting to be blessed. Untagged, the count starts at the root commit and main
+sits in 0.0.x; tagging a commit `v1.0.0` moves the floor and the counting continues.
+
+## The published image is amd64 only
+The Dockerfile already reads `TARGETARCH` and would build arm64 correctly, but the
+build links a WebAssembly runtime with emscripten and installs the `wasm-tools`
+workload, and doing that under QEMU on a hosted runner turns a long build into an
+untenable one. The workflow therefore publishes `linux/amd64` and nothing else. Anyone
+who needs arm64 can `docker build` on an arm64 machine and get a correct image with no
+changes; adding `platforms: linux/amd64,linux/arm64` to the workflow is a one-line
+change the day a native arm64 runner is available.

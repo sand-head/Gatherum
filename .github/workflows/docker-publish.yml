@@ -1,0 +1,104 @@
+# Every merge that lands on main is a release. GitVersion turns the history into a
+# number, the Dockerfile turns the tree into an image, and the image goes to this
+# repository's own container registry under that number.
+name: Publish container image
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# A pull request only proves the image still builds, so a newer push may cancel it.
+# A run on main publishes something, and nothing published gets thrown away.
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    name: Build and publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v5
+        with:
+          # GitVersion counts commits back to the version source and reads release
+          # tags. A shallow clone has neither.
+          fetch-depth: 0
+
+      - name: Install GitVersion
+        uses: gittools/actions/gitversion/setup@v4.7.0
+        with:
+          # Pinned rather than tracking v4: each action release declares the range of
+          # GitVersion it will run, and 4.7.0 is the one whose range covers 6.2+.
+          versionSpec: '6.x'
+
+      - name: Determine version
+        id: version
+        uses: gittools/actions/gitversion/execute@v4.7.0
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Sign in to the registry
+        # Nothing to sign in to on a pull request: those runs build and stop.
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Work out tags and labels
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          # The owner here is spelled with a capital, which a registry will not
+          # accept; the action lowercases the image name for us.
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=${{ steps.version.outputs.semVer }}
+            type=raw,value=${{ steps.version.outputs.major }}.${{ steps.version.outputs.minor }},enable={{is_default_branch}}
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=pr
+            type=sha,format=short
+          labels: |
+            org.opencontainers.image.version=${{ steps.version.outputs.fullSemVer }}
+
+      - name: Build and publish
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          # One architecture, matching the runner. The Dockerfile publishes a single
+          # runtime identifier on purpose, and building the WebAssembly island under
+          # emulation costs far more than an arm64 image is worth here.
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # The SDK layers, the restored packages and the embedding model weights are
+          # the slow part of this build, and none of them change most days.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Say what was published
+        if: github.event_name != 'pull_request'
+        # Through the environment rather than inline `${{ }}`: these values are built
+        # out of branch names, and a branch name is not a thing to paste into a shell.
+        env:
+          VERSION: ${{ steps.version.outputs.fullSemVer }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          {
+            echo "### Published \`$VERSION\`"
+            echo
+            echo '```'
+            echo "$TAGS"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
