@@ -545,3 +545,95 @@ routed no clicks. Wiring the editor's link routing into the panel would have cop
 And a page still opens in the editor rather than in a Read tab with an Edit button: the
 component upstream suggests for one is now here, but which surface a page opens in is a
 product decision, not a consequence of a package bump.
+
+## Mobile: two measured breakpoints, a popover drawer, and reading before editing
+The app had one width media query in the whole tree, and all it did was narrow the
+sidebar. Measured in Chromium against the real stylesheets, that left a 390px phone
+with a 104px article column — about one word per line — and `/pages` ellipsising tree
+titles down to single letters. This is the pass that fixed it, and four of its calls
+are worth writing down.
+
+**The breakpoints are measured, not conventional.** 700px is where a 236px sidebar
+stops leaving room for a comfortable reading measure (a 45ch line needs about 650px of
+viewport with the sidebar in flow, 50ch about 690px), and 480px is where a five-column
+table stops being a table. They are pixel literals in the `@media` prelude because a
+custom property cannot be read from a media query; the sizes those queries *vary* —
+`--gutter`, `--pane-pad`, `--sidebar-w`, `--tap` — are tokens in `app.css`, so a
+breakpoint redefines a value instead of restating the rule that used it. Every width
+above 700px is unchanged to the pixel, which was the constraint the whole pass was
+written under.
+
+**The drawer is the native `popover` API, not a component.** It gives the top layer,
+light-dismiss, Escape and a backdrop for nothing, the way the account menu already
+does, and it needs no state — which matters, because a stateful shell component would
+have to be an Interactive Auto island in `Gatherum.Client` and any slip to Interactive
+Server would pin the whole app back to the circuit. The cost is that `[popover]` brings
+UA defaults with it and they apply whether or not it is open: without an explicit
+`position: static` reset on the wide layout the sidebar is `position: fixed` at *every*
+width. That reset lives with the wide-layout rule rather than in the drawer query, and
+the drawer closes on navigation through the same delegated click listener in
+`gatherum.js` that already closes the account menu.
+
+**Below 700px the page scrolls, above it the pane does.** An inner scroll container
+means the mobile URL bar can never collapse and the reader pays for it on every screen;
+page scrolling also hands slopedit's page-mode sticky strip the document as its scroll
+container, which is the ancestor it wants. Two scroll models, one breakpoint, and the
+header comment in `MainLayout.razor.css` says which is which — the file's original claim
+that `.content` is always the scroller is now only true above the line.
+
+**Touch is `(hover: none)` and `(pointer: coarse)`, never a width.** A tablet is a coarse
+pointer with a wide viewport. The row menu was `visibility: hidden` until `:hover`, which
+put every per-node action — new page inside, upload inside, move, privacy, delete —
+behind a gesture a phone does not have; it is unconditional under `(hover: none)`. Tap
+targets grow their boxes, not their icons, under `(pointer: coarse)` only, so desktop
+density survives. Fields go to 16px there because iOS Safari zooms into anything smaller
+on focus and never zooms back out.
+
+The one genuinely new JavaScript is `scrollToHeading`, and it is here under protest:
+`DocumentHtmlView` emits `h1`–`h6` without ids while the document numbers blocks, so the
+read view's Contents panel addresses a heading by its position among the emitted
+headings — and Blazor has no native way to reach the nth descendant of an element and
+scroll it into view.
+
+## A page reads; editing is a URL (the Read tab, finally)
+The previous entry left this parked: "which surface a page opens in is a product
+decision, not a consequence of a package bump." The decision is that a page reads.
+
+`/nodes/{id}` renders `DocumentHtmlView` and `/nodes/{id}?edit` renders the canvas. A
+URL rather than a toggle for three reasons, in ascending order of how much they matter:
+`NodePage` is static SSR and cannot hold interactive state anyway; the edit surface
+becomes bookmarkable and the back button leaves it, which is what a wiki's Edit tab has
+always been; and a static pass through the read view emits the article itself, so the
+first response already carries the prose — a reader on a phone gets the page without
+waiting for WebAssembly and never downloads a canvas to read one. `?edit` is a presence
+check on a `string?`, not a `bool`, because Blazor binds a bool query parameter through
+`bool.TryParse` and that rejects `?edit=1`.
+
+Reading also fixes something the canvas could not: following a link while editing needs
+Ctrl+click, since a plain click must place the caret, and a finger cannot Ctrl+click. The
+routing itself moved to `LinkRouter`, shared by both surfaces — the four cases are the
+same either way and only what follows differs, the editor having a save to flush first.
+The offer to write a red link's missing page now lands where you actually discover it.
+
+`OutlineState` needed no change: it was already written to take a publisher and to clear
+only its own entries, so the reader is simply a second publisher. Images needed nothing
+either — Gatherum writes `/api/files/…` into a document, so the read view's plain `<img>`
+fetches them same-origin and gets the browser's own lazy-loading and cache.
+`DocumentHtmlView` has no `ImageSource` parameter and does not need one.
+
+## Layout gets a test net, and it is not in CI
+`dotnet test` has no browser and CI only proves the image builds, so nothing in the tree
+could have caught any of the above — every one of them was found by measuring a real
+page in a real browser. `tests/mobile` is that, kept: a small Playwright harness that
+seeds fixtures through the REST API (dev auto-signin, no key to mint) and then asserts,
+at four widths in both schemes, that nothing overflows horizontally, that no control is
+under 44px and no field under 16px on a coarse pointer, that the row menu is hover-gated
+on a mouse and not on a finger, that the drawer opens and does not survive a navigation,
+that every route has the `h1` `FocusOnNavigate` needs, and that reading a page renders no
+canvas.
+
+Playwright is a real new dependency and it is deliberately **not** wired into `dotnet
+test` or the workflow: it wants a browser, a database and a running server, and a
+screenshot diff that fails on a font hint helps nobody. It writes its screenshots for a
+human to look at and compares none of them. Run it when you touch layout.
+
