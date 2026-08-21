@@ -190,6 +190,14 @@ button.danger, .button.danger {
   &:hover { background: color-mix(in srgb, var(--danger) 8%, transparent); }
 }
 
+/* An anchor dressed as a button is inline, so it ignores a height — including the
+   touch floor below. Give it a box. */
+a.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 button.ghost, .button.ghost {
   border: none;
   padding: 5px 10px;

@@ -1,0 +1,69 @@
+/* The read view is the article, so it wears as little as possible: one action
+   above it and then the prose, at the measure the content pane already sets. */
+
+.reader {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.reader-bar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+/* DocumentHtmlView brings its own type, colors and spacing — everything here is
+   derived from the same numbers the canvas draws from — so this adds no padding
+   of its own and only gives the emitted <img> and <table> somewhere to be. */
+.reader-doc {
+    min-width: 0;
+
+    & ::deep img { max-width: 100%; height: auto; }
+
+    /* A table that will not fit scrolls in its own box rather than widening the
+       article. The view already caps it at 100%; this is for the case where its
+       own column widths cannot go narrower. */
+    & ::deep .se-table { display: block; overflow-x: auto; }
+}
+
+.reader-source {
+    margin: 0;
+    max-width: 100%;
+}
+
+/* The same offer the editor makes, in the place it is more often wanted: a red
+   link is usually discovered while reading. */
+.dead-link-card {
+    position: fixed;
+    top: 18vh;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 120;
+    width: min(420px, 90vw);
+    background: var(--surface-raised);
+    border-radius: var(--radius-l);
+    box-shadow: var(--shadow-3);
+    padding: 16px 18px;
+
+    & p { margin: 0 0 12px; }
+}
+
+.dead-link-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+@media (max-width: 480px) {
+    .dead-link-card {
+        top: auto;
+        bottom: 0;
+        left: 0;
+        transform: none;
+        width: 100%;
+        border-radius: var(--radius-l) var(--radius-l) 0 0;
+        padding-bottom: calc(16px + env(safe-area-inset-bottom));
+    }
+}

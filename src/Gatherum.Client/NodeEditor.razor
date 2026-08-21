@@ -51,6 +51,9 @@
             </button>
         }
         <span class="save-indicator">@saveLabel</span>
+        @* Editing is a URL now, so leaving it is a navigation — and it has to flush
+           what autosave has not written yet before it goes. *@
+        <button class="primary" @onclick="DoneAsync">Done</button>
         <span class="render-home" title="Where the editor is rendering">
             @(RendererInfo.IsInteractive ? RendererInfo.Name : "…")
         </span>
@@ -323,38 +326,39 @@
         _ = ResolveWikiLinksAsync();
     }
 
-    /// <summary>A link the reader clicked (Ctrl+click while editing — a plain click
-    /// still places the caret). Where it goes is the host's call: a wiki link resolves
-    /// by title, a mention or an embedded file by id, and anything with a scheme of its
-    /// own leaves the app. A title nobody has written yet is an offer, not an error.</summary>
+    /// <summary>A link the reader Ctrl+clicked — a plain click still places the caret.
+    /// Where it goes is <see cref="LinkRouter"/>'s answer, shared with the read view;
+    /// what is done with it is the editor's, because there is a save to flush first and
+    /// a title nobody has written yet is an offer rather than an error.</summary>
     private async Task FollowLinkAsync(string url)
     {
-        if (WikiLinkExtension.TargetOf(url) is { Length: > 0 } title)
+        LinkRouter.Target target;
+        try
         {
-            try
-            {
-                var resolved = await Data.ResolveTitlesAsync([title]);
-                if (resolved.TryGetValue(title, out var byTitle))
-                    await GoToAsync($"/nodes/{byTitle}");
-                else
-                    deadLink = title;
-            }
-            catch (Exception)
-            {
-                // A link that can't be resolved right now stays where it is; the click
-                // is not worth taking the editor down for.
-                saveLabel = "Couldn't reach the server";
-            }
+            target = await LinkRouter.ResolveAsync(Data, url);
+        }
+        catch (Exception)
+        {
+            // A link that can't be resolved right now stays where it is; the click
+            // is not worth taking the editor down for.
+            saveLabel = "Couldn't reach the server";
             return;
         }
-        if (NodeUrl.TryParse(url, out var nodeId))
+        switch (target.Kind)
         {
-            await GoToAsync($"/nodes/{nodeId}");
-            return;
+            case LinkRouter.LinkKind.Node:
+                await GoToAsync(target.Url);
+                break;
+            case LinkRouter.LinkKind.External:
+                await GoToAsync(target.Url, external: true);
+                break;
+            case LinkRouter.LinkKind.UnwrittenTitle:
+                deadLink = target.Title;
+                break;
         }
-        if (NodeUrl.IsExternal(url))
-            await GoToAsync(url, external: true);
     }
+
+    private Task DoneAsync() => GoToAsync($"/nodes/{NodeId}");
 
     private async Task GoToAsync(string url, bool external = false)
     {
