@@ -63,5 +63,9 @@ export function initChrome() {
     // so close an open account menu when one of its items is followed.
     if (e.target.closest('#account-menu a, #account-menu button'))
       document.getElementById('account-menu')?.hidePopover();
+    // The navigation drawer has the same problem and the same cure: a tapped
+    // link routes without a page load, so the drawer would stay open over it.
+    if (e.target.closest('#nav-drawer a'))
+      document.getElementById('nav-drawer')?.hidePopover();
   });
 }

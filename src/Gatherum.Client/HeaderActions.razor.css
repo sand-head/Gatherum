@@ -11,6 +11,9 @@
     & .caret { margin-left: -2px; }
 }
 
+/* The word is its own element only so the narrow layout can drop it. */
+.new-button .label { white-space: nowrap; }
+
 /* Invisible click-away layer under the menu. */
 .scrim {
     position: fixed;
@@ -54,4 +57,17 @@
     & svg { color: var(--on-surface-dim); flex-shrink: 0; }
 
     &:hover { background: var(--hover); }
+}
+
+/* Same reasoning as the search pill: below the breakpoint the plus carries it. */
+@media (max-width: 700px) {
+    .new-button {
+        justify-content: center;
+        gap: 0;
+        width: 40px;
+        height: 40px;
+        padding: 0;
+
+        & .label, & .caret { display: none; }
+    }
 }

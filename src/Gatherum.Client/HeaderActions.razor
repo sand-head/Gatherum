@@ -3,12 +3,15 @@
 @inject NavigationManager Navigation
 
 <div class="header-actions">
-    <button class="primary new-button" @onclick="() => menuOpen = !menuOpen">
+    @* The label is hidden below the shell breakpoint, so the name has to be
+       stated rather than read off the button's own text. *@
+    <button class="primary new-button" title="New" aria-label="New"
+            @onclick="() => menuOpen = !menuOpen">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="2" stroke-linecap="round" aria-hidden="true">
             <path d="M12 5v14M5 12h14" />
         </svg>
-        New
+        <span class="label">New</span>
         <svg class="caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="m6 9 6 6 6-6" />

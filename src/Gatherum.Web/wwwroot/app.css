@@ -68,7 +68,7 @@
      redefines a value instead of restating the rule that used it. The
      breakpoints themselves stay literal in the @media prelude: a custom
      property cannot be read from a media query. There are two, and they are
-     measured rather than conventional — 780px, where the sidebar stops fitting
+     measured rather than conventional — 700px, where the sidebar stops fitting
      beside a comfortable reading measure and becomes a drawer, and 480px, where
      tables stop being tables. --tap is the touch-target floor, applied only
      under a coarse pointer so desktop density survives. */

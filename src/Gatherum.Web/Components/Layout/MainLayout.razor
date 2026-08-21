@@ -2,6 +2,16 @@
 
 <div class="shell">
     <header class="topbar">
+        @* Only ever visible below the shell breakpoint, where the sidebar is a
+           drawer. popovertarget does the whole job: top layer, light-dismiss,
+           Escape, and a backdrop — the same mechanism as the account menu. *@
+        <button type="button" class="nav-toggle" popovertarget="nav-drawer"
+                title="Navigation" aria-label="Open navigation">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                <path d="M4 7h16M4 12h16M4 17h16" />
+            </svg>
+        </button>
         <a class="brand" href="/">Gatherum</a>
         <div class="topbar-search">
             <SearchPalette @rendermode="InteractiveAuto" />
@@ -58,7 +68,10 @@
         </div>
     </header>
     <div class="body">
-        <aside class="sidebar">
+        @* Carries the popover attribute at every width, but only behaves as one
+           below the breakpoint: above it the .sidebar rule's own display beats
+           the UA's [popover] display:none and the aside sits in flow as before. *@
+        <aside id="nav-drawer" popover class="sidebar">
             @* Reading context, not a file manager: the article's contents, similar
                articles, and recent visits. The full tree lives at /pages. *@
             <SidebarPanels @rendermode="InteractiveAuto" />
