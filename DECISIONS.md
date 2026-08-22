@@ -637,3 +637,31 @@ test` or the workflow: it wants a browser, a database and a running server, and 
 screenshot diff that fails on a font hint helps nobody. It writes its screenshots for a
 human to look at and compares none of them. Run it when you touch layout.
 
+## The host does not restyle what slopedit renders
+The read view briefly shipped three CSS overrides against `DocumentHtmlView`'s output —
+`img` sizing, `display: block; overflow-x: auto` on `.se-table`, and an `!important`
+float collapse on the aside so an infobox would stop squeezing prose on a phone. All
+three are now gone, and the rule is that none of their kind come back.
+
+The two renderers are one document rendered twice, and that is enforced rather than
+hoped for: the HTML is derived from the same theme, the same measurer's line height and
+baseline, the same `DocumentMetrics`, and — where a browser could not be asked to reach
+the same answer — the layout's own numbers, with a reflection-driven parity suite
+upstream that fails when any member of the model makes no difference to the emitted
+HTML. A host reaching in to restyle the output turns a re-render into a
+reinterpretation: the page would read differently from how it edits, which is the one
+thing the split exists to prevent. The table override was the clearest case — `display:
+block` on a `<table>` discards the `<col>` widths the emitter hands over under
+`table-layout: fixed`, which *are* the canvas's slack-first column squeeze — and the
+`img` rule was merely redundant, since `.se-img` already carries `max-width: 100%`.
+
+So the mobile float problem is upstream's, and it is a real one: an aside is 280px wide
+against a ~340px column at 390px, in the canvas and in the HTML alike. The fix belongs
+in the layout, where one rule serves both — a float whose remaining measure falls below
+something readable should not float, and the parity suite should cover it. Until then it
+is a known gap (STATUS.md), not a host workaround.
+
+`.reader-doc` is therefore a box for the view to sit in and nothing else, and the
+comment in `NodeReader.razor.css` says so, because the next person to see a squeezed
+heading on a phone will reach for exactly the rule that was just removed.
+
