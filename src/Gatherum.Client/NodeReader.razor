@@ -26,6 +26,11 @@
     @if (doc is not null)
     {
         <div class="reader-doc" @ref="docHost">
+            @* ContentPadding is slopedit's own parameter, not a style override, and
+               the host is entitled to set it — but it decides the column the layout
+               measures, so it has to be the same number the editor passes or the two
+               wrap in different places. The article's breathing room is .content's
+               padding; the document does not need its own. *@
             <DocumentHtmlView Grid="doc" Theme="EditorThemes.For(AppTheme.IsDark)"
                               ContentPadding="0" TopPadding="0"
                               OnLinkActivated="FollowAsync" AriaLabel="Article" />

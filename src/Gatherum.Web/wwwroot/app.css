@@ -274,6 +274,24 @@ a.category:hover { text-decoration: none; box-shadow: var(--shadow-1); }
 
 .text-danger { color: var(--danger); }
 
+/* Get out of the document's way. DocumentHtmlView emits bare elements — <code>,
+   <pre>, <a>, headings — and the rules above are written for bare elements, so
+   Gatherum's inline-code chip lands on slopedit's code with 5px of padding a
+   side that the canvas knows nothing about. Two code spans is 20px, which is
+   enough to move a wrap point, and then a page reads differently from how it
+   edits: the one thing the two renderers exist to prevent.
+
+   This is not styling slopedit's output — it is refusing to. Everything reset
+   here is something app.css set and slopedit does not, so undoing it hands the
+   element back to the document's own rules. Anything slopedit does set already
+   wins on specificity and never reaches these lines. */
+.slopedit-html-view :is(code, pre) {
+  background: none;
+  border-radius: 0;
+  padding: 0;
+  overflow-wrap: normal;
+}
+
 /* A wide table on a narrow screen. Five columns do not fit 390px in any
    arrangement that is still a table, so below the compact breakpoint each row
    becomes a card and each cell a labelled line, the label coming from the

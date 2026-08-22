@@ -665,3 +665,32 @@ is a known gap (STATUS.md), not a host workaround.
 comment in `NodeReader.razor.css` says so, because the next person to see a squeezed
 heading on a phone will reach for exactly the rule that was just removed.
 
+## Two ways a host breaks that parity without touching a slopedit rule
+Not restyling the output turns out to be necessary and not sufficient. Both renderers
+were still wrapping in different places, and neither cause was a rule aimed at
+slopedit.
+
+**The first was a parameter set on one surface and not the other.** The read view was
+built by copying the version panel's `DocumentHtmlView` call, `ContentPadding="0"`
+included — which is right for that panel, because `.history-preview` supplies its own
+padding — while the editor's `DocumentView` took slopedit's default of 24px. Content
+padding is not decoration: it decides the column the layout measures. 24px a side is 48
+off the measure, which is the difference between "Hard / ware" and "H / a / rdware"
+beside a 280px float. `ContentPadding` is slopedit's own parameter and the host is
+entitled to set it — the value here is 0 on both, because the content pane already
+supplies the article's margin and a phone has no width to spare — but it has to be the
+*same* number on both surfaces or they are not rendering the same document.
+
+**The second was app.css doing what app.css is for.** `DocumentHtmlView` emits bare
+`<code>`, `<pre>`, `<a>` and headings, and this file styles bare elements — so
+Gatherum's inline-code chip landed on slopedit's code with 5px of padding a side that
+the canvas knows nothing about. Two code spans in a paragraph is 20px, enough to move a
+line break. Anything slopedit sets itself wins on specificity and was never at risk;
+what leaked was precisely what slopedit leaves alone. The reset in app.css keyed on
+`.slopedit-html-view` is therefore not styling the document either — it is refusing to,
+and handing each element back to the document's own rules.
+
+The general shape: a host controls the box the view sits in and the parameters it is
+given, and nothing inside. Give both surfaces the same parameters, keep global element
+styles out, and the two renderers agree line for line — verified at 390px across a page
+carrying an infobox, a callout, a table, inline code and wiki links.

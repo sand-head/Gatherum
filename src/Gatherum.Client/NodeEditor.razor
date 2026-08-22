@@ -62,8 +62,11 @@
     @if (richDoc is not null && !sourceMode)
     {
         <div class="document-surface">
+            @* ContentPadding: 0 to match the read view. It sets the column the layout
+               measures, so the two surfaces wrap at the same points only while they
+               agree about it — the pane's own padding is the article's margin. *@
             <DocumentView @ref="docView" Grid="richDoc" OnChange="OnChanged"
-                          Theme="EditorThemes.For(AppTheme.IsDark)"
+                          Theme="EditorThemes.For(AppTheme.IsDark)" ContentPadding="0"
                           ImageSource="Data.GetImageAsync" OnLinkActivated="FollowLinkAsync"
                           AriaLabel="Document editor" />
         </div>
