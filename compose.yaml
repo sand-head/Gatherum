@@ -7,8 +7,7 @@
 
 services:
   gatherum:
-    build: .
-    image: gatherum:latest
+    image: ghcr.io/sand-head/gatherum:latest
     # Whoever owns the data directory on the host. The image's own user is 1654;
     # TrueNAS SCALE hands its apps 568, and its datasets are owned to match. Set
     # GATHERUM_UID/GID to whatever `stat -c %u:%g` reports for your data directory —
