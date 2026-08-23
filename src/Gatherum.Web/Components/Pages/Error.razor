@@ -1,5 +1,11 @@
 ﻿@page "/Error"
 @using System.Diagnostics
+@using Microsoft.AspNetCore.Authorization
+@* The fallback policy demands a signed-in user, and this page is where an unauthenticated
+   request lands when anything throws. Without this it demands a login, the login fails
+   for whatever reason brought us here, and the two redirect at each other forever with
+   the return URL re-encoding each lap — an error page that hides the error. *@
+@attribute [AllowAnonymous]
 
 <PageTitle>Error</PageTitle>
 

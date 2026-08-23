@@ -290,6 +290,35 @@ public class AppIntegrationTests(PostgresFixture postgres) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task The_error_pages_answer_a_signed_out_visitor_instead_of_looping()
+    {
+        // Every page needs a signed-in user, and these two are where an unauthenticated
+        // request lands when something goes wrong. If they demand a login too, the login
+        // failure that brought you there sends you back, and the pair redirect at each
+        // other forever with the return URL re-encoding each lap — an error page that
+        // hides the error, which is the worst possible thing for one to do.
+        using var anonymous = factory.CreateClient(
+            new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        foreach (var path in new[] { "/Error", "/not-found" })
+        {
+            var response = await anonymous.GetAsync(path);
+            Assert.False(IsRedirectToLogin(response), $"{path} redirected to sign in.");
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        }
+
+        // A path matching no route is a different question and deliberately left alone:
+        // the fallback policy sends an anonymous stranger to sign in before any 404 is
+        // reached. That is not the loop — nothing re-executes — and changing it would be
+        // a decision about what an unauthenticated visitor is allowed to learn exists.
+        Assert.True(IsRedirectToLogin(await anonymous.GetAsync("/no-such-page")));
+    }
+
+    private static bool IsRedirectToLogin(HttpResponseMessage response) =>
+        response.StatusCode is HttpStatusCode.Redirect or HttpStatusCode.Found
+            && response.Headers.Location?.OriginalString.Contains("/auth/login") == true;
+
+    [Fact]
     public void Without_an_identity_provider_the_app_refuses_to_start_outside_development()
     {
         // The development auto-login signs in whoever asks, without authenticating them.

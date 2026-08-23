@@ -85,6 +85,25 @@ if (oidc.IsConfigured)
         if (oidc.RequestOfflineAccess && !options.Scope.Contains(OpenIdConnectScope.OfflineAccess))
             options.Scope.Add(OpenIdConnectScope.OfflineAccess);
 
+        options.Events.OnRedirectToIdentityProvider = context =>
+        {
+            // The identity provider matches this string exactly, and when it does not the
+            // error it returns names neither the value it got nor the ones it holds. Worse,
+            // with Pushed Authorization Requests — which the handler uses whenever the
+            // provider advertises the endpoint — the request never touches the browser, so
+            // there is nowhere else to read it from. One line here turns "invalid_request"
+            // into an answer.
+            context.HttpContext.RequestServices
+                .GetRequiredService<ILoggerFactory>()
+                .CreateLogger("Gatherum.Auth")
+                .LogInformation(
+                    "Authorization request to {Authority} with redirect_uri {RedirectUri}. " +
+                    "The provider must have this registered exactly, scheme included.",
+                    context.ProtocolMessage.IssuerAddress,
+                    context.ProtocolMessage.RedirectUri);
+            return Task.CompletedTask;
+        };
+
         options.Events.OnTicketReceived = async context =>
         {
             var oidcIdentity = context.Principal!;
