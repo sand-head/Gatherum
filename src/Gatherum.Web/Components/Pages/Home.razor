@@ -1,16 +1,82 @@
 @page "/"
+@inherits GatherumComponent
+@inject AppOperations Ops
+@using Microsoft.AspNetCore.Authorization
+@using Gatherum.Core.Services
+@* The front door of a wiki that can publish. A stranger gets the public index; the
+   people who own the place get the same page they always had. *@
+@attribute [AllowAnonymous]
 
 <PageTitle>Gatherum</PageTitle>
 
 <div class="home">
     <h1>Gatherum</h1>
-    <p class="tagline">
-        One tree where pages and files are the same kind of thing — a page is simply a
-        Markdown file.
-    </p>
-    <p class="hint">
-        Create or upload from <strong>New</strong> in the header, browse the tree under
-        <a href="/pages">All pages</a>, or press
-        <kbd>Ctrl</kbd>+<kbd>K</kbd> (<kbd>⌘K</kbd>) to search everything.
-    </p>
+    @if (SignedIn)
+    {
+        <p class="tagline">
+            One tree where pages and files are the same kind of thing — a page is simply a
+            Markdown file.
+        </p>
+        <p class="hint">
+            Create or upload from <strong>New</strong> in the header, browse the tree under
+            <a href="/pages">All pages</a>, or press
+            <kbd>Ctrl</kbd>+<kbd>K</kbd> (<kbd>⌘K</kbd>) to search everything.
+        </p>
+    }
+    else if (published.Count > 0)
+    {
+        <p class="tagline">Published pages and files.</p>
+        <ul class="public-index">
+            @foreach (var (node, depth) in published)
+            {
+                <li style="--depth: @depth">
+                    <a href="/nodes/@node.Id">@node.Title</a>
+                </li>
+            }
+        </ul>
+        <p class="hint">
+            <a href="/auth/login">Sign in</a> to see everything else.
+        </p>
+    }
+    else
+    {
+        @* Nothing published is the default state, and saying so is friendlier than an
+           empty list somebody has to interpret. *@
+        <p class="tagline">Nothing here has been published yet.</p>
+        <p class="hint"><a href="/auth/login">Sign in</a> if this is your wiki.</p>
+    }
 </div>
+
+@code {
+    private List<(TreeNode Node, int Depth)> published = [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (SignedIn)
+            return;
+
+        // VisibleTo answers an anonymous caller with what is Listed and nothing else, so
+        // an unlisted page never appears here however deep in a published tree it sits.
+        var tree = await Ops.Nodes(s => s.GetTreeAsync(ViewerId));
+        published = Flatten(tree.ToLookup(n => n.ParentId), null, 0).ToList();
+    }
+
+    /// <summary>Depth-first, so the published half reads as the tree it is rather than a
+    /// flat list. A node whose parent is not itself public is a root here — publishing a
+    /// page without publishing what contains it should still show the page.</summary>
+    private static IEnumerable<(TreeNode, int)> Flatten(
+        ILookup<Guid?, TreeNode> byParent, Guid? parentId, int depth)
+    {
+        var known = byParent.SelectMany(g => g).Select(n => n.Id).ToHashSet();
+        var here = parentId is null
+            ? byParent.SelectMany(g => g).Where(n => n.ParentId is null || !known.Contains(n.ParentId.Value))
+            : byParent[parentId];
+
+        foreach (var node in here.OrderBy(n => n.Position).ThenBy(n => n.Title))
+        {
+            yield return (node, depth);
+            foreach (var descendant in Flatten(byParent, node.Id, depth + 1))
+                yield return descendant;
+        }
+    }
+}

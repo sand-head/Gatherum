@@ -89,16 +89,20 @@ public class AccessService(GatherumDbContext db, TimeProvider clock, NodeMetadat
         var children = nodes.ToLookup(n => n.ParentId);
 
         var wanted = new Dictionary<(Guid Node, Guid User), AccessRole>();
-        var pending = new Stack<(Node Node, bool Public, Dictionary<Guid, AccessRole> Inherited)>(
-            children[null].Select(n => (n, false, new Dictionary<Guid, AccessRole>())));
+        var pending = new Stack<(Node Node, NodeReach Inherited, Dictionary<Guid, AccessRole> Grants)>(
+            children[null].Select(n => (n, NodeReach.None, new Dictionary<Guid, AccessRole>())));
 
         while (pending.Count > 0)
         {
-            var (node, inheritedPublic, inherited) = pending.Pop();
+            var (node, inheritedReach, inherited) = pending.Pop();
             var carried = node.InheritAccess ? inherited : [];
 
-            node.EffectivePublic = node.Access == AccessMode.Public
-                || (node.InheritAccess && inheritedPublic);
+            // Reach is additive downward like the grants are, so it is a maximum: a page
+            // inside a published directory is published, and inherit:false is how a
+            // subtree stays tighter than what contains it.
+            node.Reach = node.InheritAccess
+                ? (NodeReach)Math.Max((int)node.Access.Reach(), (int)inheritedReach)
+                : node.Access.Reach();
 
             var effective = new Dictionary<Guid, AccessRole>(carried);
             foreach (var grant in grants[node.Id])
@@ -115,7 +119,7 @@ public class AccessService(GatherumDbContext db, TimeProvider clock, NodeMetadat
                 wanted[(node.Id, user)] = role;
 
             foreach (var child in children[node.Id])
-                pending.Push((child, node.EffectivePublic, effective));
+                pending.Push((child, node.Reach, effective));
         }
 
         foreach (var entry in existing)

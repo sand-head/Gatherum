@@ -4,28 +4,32 @@ using Microsoft.Extensions.Options;
 
 namespace Gatherum.Core.Services;
 
-/// <summary>Ownership, the effective-public flag, and the access closure — three columns
-/// and one join, no ancestor walk. <see cref="AccessService"/> keeps all three true.
+/// <summary>Two questions that look like one until a node is unlisted.
 ///
-/// The instance-wide public switch is honoured here rather than at the edge, because here
-/// is the one place every visibility-sensitive query passes through: turning it off hides
-/// public nodes from search, tree, categories and direct reads in the same breath, and
-/// without rewriting a single thing somebody recorded on disk.</summary>
+/// <see cref="VisibleTo"/> answers "what may this caller enumerate" — the tree, search,
+/// category pages, backlinks, wiki-link resolution. <see cref="CanSee"/> answers "may this
+/// caller reach this particular node", which is what a direct link asks. For every other
+/// access mode the two agree; unlisted is the one that says yes to the second and no to
+/// the first, and its id is what stands in for permission.
+///
+/// Both are ownership, one column and one join — no ancestor walk. The instance-wide
+/// public switch is honoured here rather than at the edge, because here is the one place
+/// every visibility-sensitive query passes through.</summary>
 public class DefaultNodeAuthorizer(IOptions<GatherumOptions> options) : INodeAuthorizer
 {
-    private bool AllowPublic => options.Value.Sharing.AllowPublic;
+    private NodeReach Ceiling => options.Value.Sharing.AllowPublic ? NodeReach.Listed : NodeReach.None;
 
     public IQueryable<Node> VisibleTo(IQueryable<Node> nodes, Guid? userId)
     {
-        var allowPublic = AllowPublic;
+        var ceiling = Ceiling;
         return userId is { } id
-            ? nodes.Where(n => (allowPublic && n.EffectivePublic) || n.OwnerId == id
-                || n.AccessEntries.Any(e => e.UserId == id))
-            : nodes.Where(n => allowPublic && n.EffectivePublic);
+            ? nodes.Where(n => (n.Reach == NodeReach.Listed && ceiling >= NodeReach.Listed)
+                || n.OwnerId == id || n.AccessEntries.Any(e => e.UserId == id))
+            : nodes.Where(n => n.Reach == NodeReach.Listed && ceiling >= NodeReach.Listed);
     }
 
     public bool CanSee(Node node, Guid? userId) =>
-        (AllowPublic && node.EffectivePublic)
+        (node.Reach >= NodeReach.WithLink && Ceiling >= node.Reach)
         || (userId is { } id && (node.OwnerId == id || node.AccessEntries.Any(e => e.UserId == id)));
 
     public bool CanEdit(Node node, Guid? userId) =>

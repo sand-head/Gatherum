@@ -42,9 +42,9 @@
             <span class="node-title">@Node.Title</span>
             @* Private is the default, so it is the exceptions that earn a badge:
                shared with somebody, or out on the internet. *@
-            @if (Node.IsPublic)
+            @if (Node.Reach == "Listed")
             {
-                <span class="node-public" title="Public — anyone on the internet can read this">
+                <span class="node-public node-badge" title="Public — anyone on the internet can read this">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                          stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <circle cx="12" cy="12" r="9" />
@@ -52,9 +52,19 @@
                     </svg>
                 </span>
             }
+            else if (Node.Reach == "WithLink")
+            {
+                <span class="node-unlisted node-badge" title="Unlisted — anyone with the link can read this">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                         stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1" />
+                        <path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1" />
+                    </svg>
+                </span>
+            }
             else if (Node.Access == "Shared")
             {
-                <span class="node-shared" title="Shared with someone">
+                <span class="node-shared node-badge" title="Shared with someone">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                          stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
@@ -65,7 +75,7 @@
             }
             @if (!Node.Owned)
             {
-                <span class="node-foreign" title="Shared with you — lives in its owner's tree">↗</span>
+                <span class="node-foreign node-badge" title="Shared with you — lives in its owner's tree">↗</span>
             }
         </NavLink>
         <button class="row-menu" title="More actions" @onclick="() => menuOpen = !menuOpen">
@@ -87,11 +97,25 @@
             <button @onclick="() => Tree.MoveBy(Node, -1)">Move up</button>
             <button @onclick="() => Tree.MoveBy(Node, +1)">Move down</button>
             <button @onclick="() => Tree.BeginMove(Node)">Move to…</button>
-            @* Publishing is the gesture worth making visible and a little alarming;
-               sharing with a person needs a name, and goes through the share control. *@
-            <button disabled="@(!Node.Owned)" @onclick="() => Tree.TogglePublicAsync(Node)">
-                @(Node.IsPublic ? "Unpublish" : "Publish to the internet…")
-            </button>
+            @* Three states worth naming rather than a toggle to cycle. Publishing is the
+               one that deserves to read as a decision, so it says where it puts you. *@
+            @if (Node.Owned)
+            {
+                <div class="menu-group" role="group" aria-label="Who can reach this">
+                    <button class="@(Node.Reach == "None" ? "chosen" : null)"
+                            @onclick='() => Tree.SetAccessAsync(Node, "Private")'>
+                        Private
+                    </button>
+                    <button class="@(Node.Reach == "WithLink" ? "chosen" : null)"
+                            @onclick='() => Tree.SetAccessAsync(Node, "Unlisted")'>
+                        Unlisted — anyone with the link
+                    </button>
+                    <button class="@(Node.Reach == "Listed" ? "chosen" : null)"
+                            @onclick='() => Tree.SetAccessAsync(Node, "Public")'>
+                        Public — on the internet
+                    </button>
+                </div>
+            }
             <button class="danger" @onclick="() => Tree.DeleteAsync(Node)">Delete</button>
         </div>
     }

@@ -63,7 +63,7 @@ public class CategoryService(GatherumDbContext db, NodeService nodes, INodeAutho
     /// members, so listing it would describe pages they can't see. An empty category is
     /// nobody's secret and stays. <paramref name="matching"/> filters the list after the
     /// counting, so a filtered row still knows its real size.</summary>
-    public async Task<List<CategorySummary>> ListAsync(Guid userId, string? matching = null,
+    public async Task<List<CategorySummary>> ListAsync(Guid? userId, string? matching = null,
         CancellationToken ct = default)
     {
         var categories = await db.Categories
@@ -105,7 +105,7 @@ public class CategoryService(GatherumDbContext db, NodeService nodes, INodeAutho
     /// <summary>One category as a page of the wiki: where it sits, what is nested under
     /// it, and what it holds — its own members, or the whole subtree's when
     /// <paramref name="deep"/> asks.</summary>
-    public async Task<CategoryView> GetAsync(Guid userId, string path, bool deep = false,
+    public async Task<CategoryView> GetAsync(Guid? userId, string path, bool deep = false,
         CancellationToken ct = default)
     {
         var normalized = CategoryPath.Normalize(path);
@@ -124,7 +124,7 @@ public class CategoryService(GatherumDbContext db, NodeService nodes, INodeAutho
     /// <summary>The nodes in a category — its own members, plus its subcategories' when
     /// <paramref name="deep"/> asks, since a page about Podman is a page about the
     /// homelab.</summary>
-    public Task<List<Node>> GetNodesAsync(Guid userId, string path, bool deep = false,
+    public Task<List<Node>> GetNodesAsync(Guid? userId, string path, bool deep = false,
         CancellationToken ct = default)
     {
         var normalized = CategoryPath.Normalize(path);

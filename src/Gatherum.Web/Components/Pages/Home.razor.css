@@ -20,3 +20,26 @@ h1 {
     color: var(--on-surface-dim);
     margin: 0;
 }
+
+/* The published half of the tree, indented as the tree it is. */
+.public-index {
+    list-style: none;
+    margin: 1.5rem 0;
+    padding: 0;
+    text-align: left;
+    display: inline-block;
+    min-width: min(28rem, 100%);
+}
+
+.public-index li {
+    padding: 0.3rem 0;
+    padding-left: calc(var(--depth) * 1.25rem);
+}
+
+.public-index a {
+    color: var(--on-surface);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+}
+
+.public-index a:hover { border-bottom-color: currentColor; }

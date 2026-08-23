@@ -74,7 +74,7 @@ public record PresenceInfo(IReadOnlyList<string> Editors, int HeadVersion);
 public record SearchHit(Guid Id, string Kind, string Title, string Snippet);
 public record TitleMatch(string Title, Guid Id);
 public record TreeNodeInfo(Guid Id, Guid? ParentId, string Title, string MediaType,
-    string Kind, int Position, string Access, bool IsPublic, bool Owned);
+    string Kind, int Position, string Access, string Reach, bool Owned);
 public record NodeInfo(Guid Id, string Title, string Access,
     IReadOnlyList<CategoryRef> Categories, FileFacts? File);
 public record FileFacts(string FileName, string MediaType, long SizeBytes, int Version,

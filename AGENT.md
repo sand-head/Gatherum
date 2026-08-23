@@ -91,7 +91,11 @@ fresh DI scope via `Services/AppOperations`.
   column may disagree. Access is orthogonal to location — only an owner sets it, and only
   where an owner could have written it.
 - Private by default. A node with no declaration is its owner's alone, which is also what
-  an unprepared directory means. `AccessMode.Public` is the internet, unauthenticated.
+  an unprepared directory means. `AccessMode.Public` is the internet, unauthenticated;
+  `Unlisted` is reachable by link and in no listing.
+- Reaching and enumerating are two questions. `INodeAuthorizer.CanSee` answers a direct
+  link and needs `NodeReach.WithLink`; `VisibleTo` answers every listing and needs
+  `Listed`. Never answer one with the other — unlisted is the case where they differ.
 - Two trees, and only two: nodes have one place in the node tree, and categories nest
   in their own. A category is identified by its path — `CategoryPath` is the only place
   that decides how one is spelled — and nothing else names a subject. No tags.

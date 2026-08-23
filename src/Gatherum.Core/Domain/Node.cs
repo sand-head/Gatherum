@@ -34,10 +34,10 @@ public class Node
     /// for a subtree that has to be tighter than the one containing it.</summary>
     public bool InheritAccess { get; set; } = true;
 
-    /// <summary>Reachable without signing in, once inheritance has been applied.
-    /// Denormalized from <see cref="Access"/> up the ancestry so an anonymous request is
-    /// a single-column filter. Written only by <see cref="Services.AccessService"/>.</summary>
-    public bool EffectivePublic { get; set; }
+    /// <summary>How far this node reaches once inheritance has been applied, denormalized
+    /// from <see cref="Access"/> up the ancestry so both visibility questions stay
+    /// single-column filters. Written only by <see cref="Services.AccessService"/>.</summary>
+    public NodeReach Reach { get; set; }
 
     /// <summary>Ownership is the path: whoever owns the root directory this node was
     /// found under owns the node, and nothing recorded anywhere may disagree. That is

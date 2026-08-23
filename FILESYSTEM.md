@@ -152,7 +152,8 @@ below, that equivalence is load-bearing rather than merely tidy.
 |---|---|
 | `private` (default) | owner only |
 | `shared` | owner + named grantees |
-| `public` | **anyone on the internet, unauthenticated** |
+| `unlisted` | **anyone holding the link** — reachable, and in no listing |
+| `public` | **anyone on the internet, unauthenticated** — reachable and listed |
 
 Grants name a user and a role — `reader` or `editor`. The owner always has full access and
 cannot be locked out of their own directory. Inheritance is downward and additive: a
@@ -161,6 +162,27 @@ with what it inherits. Since the default is closed, the common gesture is openin
 something up, and additive inheritance makes that the easy one — share `Homelab/` and
 everything in it is shared. An access block may set `inherit: false` to start from nothing
 where a subtree needs to be tighter than its parent.
+
+### Unlisted separates reaching from enumerating
+
+Everywhere else, "may you see this" and "may you find this" have the same answer, and
+`INodeAuthorizer` can serve both from one predicate. Unlisted is where they come apart: the
+id is the permission, so a direct link opens it and no tree, search, category page,
+backlink or wiki-link resolution ever mentions it.
+
+That splits the seam in two. `VisibleTo` answers enumeration and needs `Listed`; `CanSee`
+answers a direct link and needs `WithLink`. The denormalized column stops being a boolean
+and becomes an ordered `NodeReach` — `None`, `WithLink`, `Listed` — which also makes
+inheritance a maximum rather than a boolean or. `Shared` has no place on that scale:
+naming a person is not reach, and the grant closure already records it.
+
+The owner and the grantees are unaffected — an unlisted node stays in *their* tree and
+*their* search. Unlisted hides it from people who do not already have access some other
+way, which is the only reading that makes it useful.
+
+Unlisted pages send `noindex, nofollow`. Nothing links to them, but a crawler can arrive
+by a leaked referrer, and a search engine is exactly the thing that turns "anyone with the
+link" into "everyone".
 
 ### Public means public
 
@@ -318,9 +340,13 @@ disk.
    hides every public node at once, immediately and without editing what an owner
    recorded on disk.
 5. **Union tree** — *partly*. The data is right: `GetTreeAsync` returns owned plus
-   shared-in, and `TreeNode.Owned` distinguishes them. The UI shows badges and disables
-   publishing on somebody else's node, but there is no share-with-a-person control and no
-   grouping of shared-in items.
+   shared-in, and `TreeNode.Owned` distinguishes them. The UI shows badges and offers the
+   three reach states on nodes you own, but there is still no share-with-a-person control
+   and no grouping of shared-in items.
+7. **Reading in a browser without signing in** — *done*. `/` is the published index for a
+   stranger and the usual home for everybody else; a node page renders for whoever may
+   reach it, read-only and with no editor island; the chrome offers Sign in and nothing
+   that writes.
 6. **External change reconciliation** — *partly*. The startup scan is the mechanism and it
    works, including identity-by-recorded-id and new-version-on-external-edit. There is no
    `FileSystemWatcher`, no content-hash rename detection, and no self-write suppression,

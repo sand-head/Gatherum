@@ -103,11 +103,11 @@ public record SimilarDto(Guid Id, string Kind, string Title)
 }
 
 public record TreeNodeDto(Guid Id, Guid? ParentId, string Title, string MediaType, string Kind,
-    int Position, string Access, bool IsPublic, bool Owned)
+    int Position, string Access, string Reach, bool Owned)
 {
     public static TreeNodeDto From(TreeNode node) => new(node.Id, node.ParentId, node.Title,
         node.MediaType, node.Kind.ToString(), node.Position, node.Access.ToString(),
-        node.IsPublic, node.Owned);
+        node.Reach.ToString(), node.Owned);
 }
 
 public record VersionDto(int Number, string FileName, string MediaType, long SizeBytes,

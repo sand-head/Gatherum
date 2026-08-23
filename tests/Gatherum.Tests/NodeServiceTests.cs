@@ -156,6 +156,55 @@ public class NodeServiceTests(PostgresFixture postgres) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Unlisted_is_reachable_by_link_and_absent_from_every_listing()
+    {
+        var unlisted = await NewPageAsync(jess, null, "Half-written thoughts");
+        await files.SaveTextAsync(jess, unlisted.Id, "the closet gets hot");
+        var listed = await NewPageAsync(jess, null, "Published");
+        await harness.Access.SetAccessAsync(jess, listed.Id, AccessMode.Public);
+        await harness.Access.SetAccessAsync(jess, unlisted.Id, AccessMode.Unlisted);
+        await harness.EmbedStaleAsync();
+
+        // Reachable by anyone holding the id — signed in as somebody else, or nobody.
+        Assert.Equal("Half-written thoughts", (await nodes.GetWithBodyAsync(sam, unlisted.Id)).Title);
+        Assert.Equal("Half-written thoughts", (await nodes.GetWithBodyAsync(null, unlisted.Id)).Title);
+
+        // And in no listing that would have handed the id out.
+        Assert.Equal([listed.Id], (await nodes.GetTreeAsync(null)).Select(n => n.Id));
+        Assert.DoesNotContain(await nodes.GetTreeAsync(sam), n => n.Id == unlisted.Id);
+        Assert.DoesNotContain(await harness.Search.SearchAsync(null, "closet"),
+            hit => hit.Id == unlisted.Id);
+        Assert.DoesNotContain(await harness.Search.SearchAsync(sam, "closet"),
+            hit => hit.Id == unlisted.Id);
+        Assert.DoesNotContain("Half-written thoughts",
+            (await nodes.ResolveTitlesAsync(null, ["Half-written thoughts"])).Keys);
+
+        // Its owner still sees it everywhere, which is the point of the distinction:
+        // unlisted hides it from people who do not already have access another way.
+        Assert.Contains(await nodes.GetTreeAsync(jess), n => n.Id == unlisted.Id);
+        Assert.Contains(await harness.Search.SearchAsync(jess, "closet"),
+            hit => hit.Id == unlisted.Id);
+    }
+
+    [Fact]
+    public async Task An_unlisted_child_of_a_published_directory_is_still_published()
+    {
+        // Reach is additive downward like grants are, so declaring a child *less* open
+        // than what contains it does nothing on its own — inherit:false is that gesture.
+        var directory = await NewPageAsync(jess, null, "Published");
+        var inside = await NewPageAsync(jess, directory.Id, "Inside");
+        await harness.Access.SetAccessAsync(jess, directory.Id, AccessMode.Public);
+        await harness.Access.SetAccessAsync(jess, inside.Id, AccessMode.Unlisted);
+
+        Assert.Contains(await nodes.GetTreeAsync(null), n => n.Id == inside.Id);
+
+        await harness.Access.SetAccessAsync(jess, inside.Id, AccessMode.Unlisted, inherit: false);
+
+        Assert.DoesNotContain(await nodes.GetTreeAsync(null), n => n.Id == inside.Id);
+        Assert.Equal("Inside", (await nodes.GetWithBodyAsync(null, inside.Id)).Title);
+    }
+
+    [Fact]
     public async Task Turning_public_sharing_off_hides_public_nodes_at_once()
     {
         var page = await NewPageAsync(jess, null, "published");
@@ -163,6 +212,7 @@ public class NodeServiceTests(PostgresFixture postgres) : IAsyncLifetime
         Assert.Single(await nodes.GetTreeAsync(null));
 
         harness.Settings.Value.Sharing.AllowPublic = false;
+
 
         // Immediate, and without rewriting anything the owner recorded: the node still
         // says it is public, and nothing anonymous can reach it.
