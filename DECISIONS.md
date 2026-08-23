@@ -694,3 +694,33 @@ The general shape: a host controls the box the view sits in and the parameters i
 given, and nothing inside. Give both surfaces the same parameters, keep global element
 styles out, and the two renderers agree line for line — verified at 390px across a page
 carrying an infobox, a callout, a table, inline code and wiki links.
+
+## slopedit 2.2.2: the phone fixes landed where they belonged
+The float that would not collapse was written up here as upstream's, and it is fixed
+upstream. 2.2.2 collapses a floated run back into the flow at the page's full measure
+when the page cannot spare `MinBodyWidthPx` (280 by default) beside it and its gutter,
+so the infobox that crushed "Hardware" to "Hard / ware" at 390px now stacks above the
+prose and both surfaces show the same thing. Nothing in Gatherum configures it; the
+default is the behaviour we wanted, and the version bump is the whole change.
+
+The way it is implemented is the reason the CSS override had to come out rather than
+merely be tidied. The decision lives in the layout — `IsFloatCollapsed(i)`, a function
+of the current measure — and both renderers read it: the canvas stacks on it and
+`RichHtmlWriter` emits `float:none;width:100%` for it. A media query in this repo's
+stylesheet would have been a second opinion about where the breakpoint is, and the
+Read/Edit switch would have stopped being a re-render. It also gets something a media
+query could not: turn the phone to landscape and the aside comes back, because the
+measure changed rather than the viewport class.
+
+Two more things arrive with it. A table too wide for any squeeze now keeps its natural
+width and scrolls inside its own band — the canvas clips and translates, the HTML wraps
+the `<table>` in an `overflow-x:auto` container — which is what the removed
+`.se-table { display: block }` override was reaching for and getting wrong, since that
+rule discarded the very `<col>` widths the two renderers share. And the canvas learned
+that a hyphen is a break opportunity, which is a wrap-parity fix that shows up most on
+narrow pages, where every line end is a fresh chance to disagree.
+
+The mobile checks gained an assertion that no aside is still floated on a phone. Gatherum
+does not decide that and must not, but it is the outcome the reading experience depends
+on, so a future package bump cannot quietly take it away.
+

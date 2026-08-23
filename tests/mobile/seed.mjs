@@ -42,6 +42,29 @@ Every service is a \`.container\` file in \`~/.config/containers/systemd\`. See 
 | caddy | 443 | terminates TLS |
 | gatherum | 8080 | behind caddy |
 
+## A wide table
+
+Past the point where every column is at its longest word there is nowhere left to squeeze, so this one scrolls in its own band rather than shrinking the article.
+
+| Service | Image | Published port | Restart policy | Volume | Notes |
+| --- | --- | --- | --- | --- | --- |
+| caddy | docker.io/library/caddy:2 | 443 | on-failure | /srv/caddy | terminates TLS for everything |
+| gatherum | ghcr.io/sand-head/gatherum | 8080 | always | /data/files | behind caddy on the same net |
+
+## Two asides in a row
+
+:::infobox
+## First card
+Nothing but a blank line separates these.
+:::
+
+:::infobox
+## Second card
+Which is the case that used to overlap.
+:::
+
+Prose after both, so the flow has somewhere to resume.
+
 ## A heading with a deliberately long title that will not fit a phone in one line
 
 Text after it, so the outline has something to scroll to.

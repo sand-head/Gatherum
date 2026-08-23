@@ -153,12 +153,6 @@ browser sessions — including against the built container).
   upstream's call, not the host's.
 - Bold inside a callout's title is absorbed by the title's own bold; everything else in
   a title (links, code, emphasis) round-trips.
-- A float does not collapse when the measure cannot hold it, so an infobox on a phone
-  leaves the prose beside it about one word wide — "Hardware" reads as "Hard / ware" at
-  390px, where the aside is 280px against a 340px column. Both renderers agree about it
-  exactly, which is the point: it is one layout rule in slopedit and not something a
-  host can paper over. Restyling the emitted HTML would fix the page and break the
-  parity the two renderers exist to keep — see DECISIONS.md.
 - No live co-editing: presence + versions instead of CRDT merging (DECISIONS.md; the
   trade was chosen deliberately with the no-JS direction).
 - The first visit in a fresh browser renders on the server circuit while the WASM

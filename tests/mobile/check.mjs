@@ -75,6 +75,13 @@ async function measure(page) {
       coarse: matchMedia("(pointer: coarse)").matches,
       // The canvas must not be what a reader is handed.
       canvasInRead: document.querySelectorAll("canvas").length,
+      // slopedit collapses a float when the page cannot spare MinBodyWidthPx
+      // beside it, which is what keeps an infobox from crushing the prose to one
+      // word per line on a phone. The host does not decide it and must not: this
+      // asserts the outcome, so the mobile reading experience cannot regress
+      // quietly under a package bump.
+      floatedAsides: [...document.querySelectorAll(".reader-doc aside")]
+        .filter((a) => getComputedStyle(a).float !== "none").length,
     };
   }, { TAP, FONT, INTERACTIVE });
 }
@@ -132,6 +139,8 @@ async function main() {
         }
         if (name === "node-read" && m.canvasInRead > 0)
           note(where, "a canvas is being rendered to read a page");
+        if (name === "node-read" && vp.touch && m.floatedAsides > 0)
+          note(where, `${m.floatedAsides} aside(s) still floated on a phone`);
         await ctx.close();
       }
 
