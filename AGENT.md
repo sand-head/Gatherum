@@ -204,6 +204,11 @@ touch the server only through `IAppData`.
 Deviations and judgment calls go in [DECISIONS.md](DECISIONS.md) when they happen —
 commit messages alone don't count.
 
+[FILESYSTEM.md](FILESYSTEM.md) is a *proposed* architecture, not a description of the
+code: the directory tree becomes the system of record and the database demotes to a
+derived index. Nothing in it is built. Read it before changing storage, node identity,
+or the privacy model, and update the rules above when a stage of it lands.
+
 ## What not to do
 
 - No new projects without a real boundary that demands one.
