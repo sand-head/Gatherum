@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.DataProtection;
 using Gatherum.Core;
 using Gatherum.Core.Data;
 using Gatherum.Infrastructure;
@@ -106,6 +107,20 @@ if (oidc.IsConfigured)
     });
 }
 
+// Sign-in cookies are protected by keys that have to outlive the container. Left to
+// itself ASP.NET keeps them under the runtime user's home directory — which lives inside
+// the image, and which a container running as an arbitrary uid (TrueNAS hands its apps
+// 568) may not even be able to write. Either way the keys are regenerated on restart and
+// everyone is silently signed out; unwritable, they are never persisted at all.
+var keyRing = new DirectoryInfo(Path.GetFullPath(
+    builder.Configuration[$"{GatherumOptions.Section}:Storage:KeyRing"]
+        ?? new StorageOptions().KeyRing));
+EnsureWritable(keyRing);
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(keyRing)
+    // Pinned so the keys stay readable across renames of the app or its directory.
+    .SetApplicationName("Gatherum");
+
 builder.Services.AddAnonymousRateLimits();
 
 builder.Services.AddAuthorization(options =>
@@ -197,6 +212,29 @@ if (!oidc.IsConfigured)
 }
 
 app.Run();
+
+/// <summary>Fails at startup rather than at the first sign-in. An unwritable key ring
+/// does not throw when it is configured — it throws, or silently falls back to keys that
+/// die with the process, once somebody tries to log in.</summary>
+static void EnsureWritable(DirectoryInfo directory)
+{
+    try
+    {
+        directory.Create();
+        var probe = Path.Combine(directory.FullName, $".probe-{Guid.NewGuid():N}");
+        File.WriteAllBytes(probe, []);
+        File.Delete(probe);
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+    {
+        throw new InvalidOperationException(
+            $"The key ring at '{directory.FullName}' is not writable by this process " +
+            $"(uid {Environment.UserName}). Sign-in cookies are protected by keys kept " +
+            "there, so without it every restart would sign everyone out. Give the " +
+            "directory to the user the container runs as, or point " +
+            "Gatherum__Storage__KeyRing somewhere writable.", ex);
+    }
+}
 
 static async Task MigrateAsync(WebApplication app)
 {

@@ -119,6 +119,11 @@ fresh DI scope via `Services/AppOperations`.
   gets forgotten.
 - A user's root directory is named after their OIDC `preferred_username`, assigned once
   and never renamed — moving it would mean moving every file they own.
+- Data Protection keys go to `Gatherum__Storage__KeyRing` (`/data/keys`), beside the
+  storage root and never inside it — the reindex walks the root. They must outlive the
+  container: the default location is the runtime user's home, which is inside the image
+  and unwritable when the container runs as an unmapped uid, and losing them signs
+  everyone out.
 - The anonymous rate limiter partitions on the client address, which behind a proxy means
   `X-Forwarded-For` — enabled by `ASPNETCORE_FORWARDEDHEADERS_ENABLED` in the Dockerfile,
   and trusted from any peer, so the loopback bind is what stops header spoofing. Don't

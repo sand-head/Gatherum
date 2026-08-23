@@ -90,9 +90,21 @@ deployment needs and refuses to start without them:
 
 ```sh
 cp .env.example .env          # fill in the password and your OIDC client
-mkdir -p data && sudo chown -R 1654:1654 data   # the container runs as uid 1654
+mkdir -p data && sudo chown -R 1654:1654 data   # the image's user is uid 1654
 docker compose up --build     # or: podman compose up --build
 ```
+
+**On TrueNAS SCALE**, or anywhere else that runs containers as a fixed user, don't chown
+anything: point `GATHERUM_DATA` at your dataset and set `GATHERUM_UID`/`GATHERUM_GID` to
+the user that owns it — `568` for TrueNAS's `apps`. `stat -c %u:%g /path/to/dataset` if
+you are unsure. A mismatch here is a container that cannot write its own knowledge base.
+
+That user needs to own the whole of `${GATHERUM_DATA}`, not just `files/`. Alongside it
+sits `keys/`, which holds what protects sign-in cookies. It is outside `files/` on purpose
+— the reindex walks `files/`, and key material is not a node — and it lives on the host
+rather than in the container because otherwise every restart would sign everyone out.
+Gatherum refuses to start if it cannot write there, rather than discovering it at the
+first login.
 
 Then point your reverse proxy at `127.0.0.1:8080`. The port is bound to loopback on
 purpose — see the note under Configuration about forwarded headers.

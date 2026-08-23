@@ -53,6 +53,15 @@ public class StorageOptions
     /// because it is also how a lost database recovers — the same scan, and the reason
     /// there is nothing else to do about one.</summary>
     public bool ReindexOnStartup { get; set; } = true;
+
+    /// <summary>Where the keys that protect sign-in cookies are kept. Deliberately beside
+    /// <see cref="Root"/> rather than inside it: the reindex walks the root, and key
+    /// material is not a node.
+    ///
+    /// It has to be somewhere that outlives the container, or every restart invalidates
+    /// every session — ASP.NET otherwise keeps these under the runtime user's home
+    /// directory, which is inside the image on a good day and unwritable on a bad one.</summary>
+    public string KeyRing { get; set; } = "data/keys";
 }
 
 public class OidcOptions

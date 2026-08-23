@@ -9,6 +9,11 @@ services:
   gatherum:
     build: .
     image: gatherum:latest
+    # Whoever owns the data directory on the host. The image's own user is 1654;
+    # TrueNAS SCALE hands its apps 568, and its datasets are owned to match. Set
+    # GATHERUM_UID/GID to whatever `stat -c %u:%g` reports for your data directory —
+    # a mismatch here is a container that cannot write its own knowledge base.
+    user: "${GATHERUM_UID:-1654}:${GATHERUM_GID:-1654}"
     ports:
       # Loopback on purpose. The reverse proxy in front of this is the only thing that
       # should reach the port: the app trusts X-Forwarded-For from whoever connects
@@ -36,6 +41,10 @@ services:
       # knowledge base now: one directory per user, every page and file a plain file
       # you can read, grep, rsync and restore without Gatherum running. Keeping it
       # somewhere you can point a backup at is the whole point of the design.
+      #
+      # It holds files/ (the knowledge base) and keys/ (what protects sign-in cookies,
+      # kept outside files/ because the reindex walks that and key material is not a
+      # node). Both must be writable by the user above.
       - ${GATHERUM_DATA:-./data}:/data
     depends_on:
       postgres:
