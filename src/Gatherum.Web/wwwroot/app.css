@@ -64,6 +64,19 @@
   --radius-l: 16px;
   --radius-full: 100vmax;
 
+  /* Layout — the handful of sizes the responsive layer varies, so a breakpoint
+     redefines a value instead of restating the rule that used it. The
+     breakpoints themselves stay literal in the @media prelude: a custom
+     property cannot be read from a media query. There are two, and they are
+     measured rather than conventional — 700px, where the sidebar stops fitting
+     beside a comfortable reading measure and becomes a drawer, and 480px, where
+     tables stop being tables. --tap is the touch-target floor, applied only
+     under a coarse pointer so desktop density survives. */
+  --gutter: 12px;
+  --pane-pad: clamp(24px, 5vw, 56px);
+  --sidebar-w: 290px;
+  --tap: 44px;
+
   scrollbar-color: light-dark(#c4c7c5, #5f6368) transparent;
 }
 
@@ -116,14 +129,25 @@ kbd {
 }
 
 code, pre { font-family: var(--font-mono); font-size: 0.92em; }
-code { background: var(--surface-dim); border-radius: 4px; padding: 1px 5px; }
+
+/* Inline code is where the app's unbreakable strings live — a bearer-token
+   header, a key prefix, a media type, a trace id — and none of them have a
+   space to break at. Let them break anywhere rather than push a narrow column
+   sideways. Inside a <pre> the opposite is right: code there is meant to be
+   read as written, and the block scrolls. */
+code {
+  background: var(--surface-dim);
+  border-radius: 4px;
+  padding: 1px 5px;
+  overflow-wrap: anywhere;
+}
 pre {
   background: var(--surface-dim);
   border-radius: var(--radius-s);
   padding: 12px 14px;
   overflow-x: auto;
 
-  & code { background: none; padding: 0; }
+  & code { background: none; padding: 0; overflow-wrap: normal; }
 }
 
 /* Controls — Material pills: outlined by default, .primary filled,
@@ -164,6 +188,14 @@ button.danger, .button.danger {
   color: var(--danger);
 
   &:hover { background: color-mix(in srgb, var(--danger) 8%, transparent); }
+}
+
+/* An anchor dressed as a button is inline, so it ignores a height — including the
+   touch floor below. Give it a box. */
+a.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 button.ghost, .button.ghost {
@@ -241,6 +273,90 @@ a.category:hover { text-decoration: none; box-shadow: var(--shadow-1); }
 }
 
 .text-danger { color: var(--danger); }
+
+/* Get out of the document's way. DocumentHtmlView emits bare elements — <code>,
+   <pre>, <a>, headings — and the rules above are written for bare elements, so
+   Gatherum's inline-code chip lands on slopedit's code with 5px of padding a
+   side that the canvas knows nothing about. Two code spans is 20px, which is
+   enough to move a wrap point, and then a page reads differently from how it
+   edits: the one thing the two renderers exist to prevent.
+
+   This is not styling slopedit's output — it is refusing to. Everything reset
+   here is something app.css set and slopedit does not, so undoing it hands the
+   element back to the document's own rules. Anything slopedit does set already
+   wins on specificity and never reaches these lines. */
+.slopedit-html-view :is(code, pre) {
+  background: none;
+  border-radius: 0;
+  padding: 0;
+  overflow-wrap: normal;
+}
+
+/* A wide table on a narrow screen. Five columns do not fit 390px in any
+   arrangement that is still a table, so below the compact breakpoint each row
+   becomes a card and each cell a labelled line, the label coming from the
+   cell's own data-label because the head is gone. A cell with no label is an
+   actions cell and simply fills the row.
+
+   Shared by the version list and the key list, so it lives here rather than
+   twice — and the child combinators are deliberate: a scoped `td[b-xyz]` ties
+   with `.stacked-table td` on specificity, and the isolation bundle loads after
+   this file, so a tie would silently lose. display: block also drops a table
+   element's implicit role, which is why the markup states its roles.  */
+@media (max-width: 480px) {
+  .stacked-table,
+  .stacked-table > tbody { display: block; }
+
+  .stacked-table > thead { display: none; }
+
+  .stacked-table > tbody > tr {
+    display: block;
+    border: 1px solid var(--outline-dim);
+    border-radius: var(--radius);
+    padding: 8px 12px;
+    margin-bottom: 8px;
+  }
+
+  .stacked-table > tbody > tr > td {
+    display: flex;
+    gap: 12px;
+    justify-content: space-between;
+    align-items: baseline;
+    border: none;
+    padding: 3px 0;
+    text-align: right;
+
+    &::before {
+      content: attr(data-label);
+      flex-shrink: 0;
+      font: 500 11px/1.6 var(--font-ui);
+      color: var(--on-surface-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      text-align: left;
+    }
+
+    &:not([data-label]) {
+      justify-content: flex-end;
+      padding-top: 8px;
+
+      &::before { content: none; }
+    }
+  }
+}
+
+/* Touch. Two rules follow from a coarse pointer and belong here rather than in
+   a component, because they are about the native elements this file already
+   owns: a finger cannot reliably hit a control shorter than about 44px, and
+   iOS Safari zooms into any field whose text is under 16px and never zooms back
+   out — which is why every input in the app used to trap a reader at 1.4x. The
+   chip's own × is not a pill and keeps the chip's height. */
+@media (pointer: coarse) {
+  input, textarea, select { font-size: 16px; min-height: var(--tap); }
+
+  button, .button { min-height: var(--tap); }
+  .category button { min-height: 0; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; }

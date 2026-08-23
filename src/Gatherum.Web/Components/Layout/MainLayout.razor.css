@@ -1,7 +1,11 @@
 /* App shell: a top header and the sidebar share the tonal ground with no seam
    between them; the content pane floats below-right as a rounded sheet (the
    sheet itself is the scroll container — slopedit pins its sticky strip to
-   .content, keep it scrolling). */
+   .content, keep it scrolling).
+
+   That holds above the shell breakpoint at the foot of this file. Below it the
+   sidebar becomes a drawer and the document scrolls instead of the sheet, so
+   the strip pins to the page — see the comment there. */
 
 .shell {
     display: flex;
@@ -34,6 +38,21 @@
     display: flex;
     align-items: center;
     gap: 8px;
+}
+
+/* The drawer's handle. Out of flow above the shell breakpoint, where the
+   sidebar is permanent and a button offering to open it would be a lie. */
+.nav-toggle {
+    display: none;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border: none;
+    border-radius: var(--radius-full);
+    color: var(--on-surface-dim);
+
+    &:hover { background: var(--hover); color: var(--on-surface); }
 }
 
 .theme-toggle {
@@ -79,7 +98,7 @@
     margin: 0;
     display: none;
     flex-direction: column;
-    min-width: 180px;
+    min-width: min(180px, calc(100vw - 24px));
     padding: 6px;
     background: var(--surface-raised);
     color: var(--on-surface);
@@ -118,8 +137,22 @@
     min-height: 0;
 }
 
+/* The aside carries [popover] at every width so the narrow layout can open it
+   as a drawer. Up here that attribute is meant to be inert, which means undoing
+   every UA default it brings with it — fixed positioning, inset 0, an auto
+   margin, a border, a canvas background — so the aside is simply a column in
+   the flex row. Undo them here, not in the drawer query, so a rule that is only
+   about the wide layout stays with the wide layout. */
 .sidebar {
-    width: 290px;
+    position: static;
+    inset: auto;
+    width: var(--sidebar-w);
+    height: auto;
+    margin: 0;
+    border: none;
+    background: none;
+    color: inherit;
+    overflow: visible;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
@@ -152,8 +185,8 @@
 .content {
     flex: 1;
     min-width: 0;
-    margin: 0 12px 10px 2px;
-    padding: 32px clamp(24px, 5vw, 56px) 48px;
+    margin: 0 var(--gutter) 10px 2px;
+    padding: 32px var(--pane-pad) 48px;
     background: var(--surface);
     border: 1px solid var(--outline-dim);
     border-radius: var(--radius-l);
@@ -167,8 +200,126 @@
         gap: 10px;
         padding: 8px 10px 6px 14px;
     }
-    .sidebar { width: 236px; }
+    .shell { --sidebar-w: 236px; }
     .content { margin: 0 6px 6px 0; padding: 20px; }
+}
+
+/* The shell breakpoint. Below it the sidebar cannot share the width with a
+   readable article — at 390px it left the text column 104px, about one word
+   per line — so it becomes a drawer and the article gets the whole pane.
+
+   Two other things change with it. The topbar collapses to icons, because six
+   labelled controls do not fit 360px. And the page takes over scrolling from
+   the content pane: an inner scroller means the mobile URL bar never collapses
+   and the user pays for it permanently, while page scrolling also hands
+   slopedit's page-mode sticky strip the document as its scroll container,
+   which is the ancestor it wants. Above the breakpoint the app-shell model is
+   untouched. */
+@media (max-width: 700px) {
+    .shell {
+        height: auto;
+        min-height: 100dvh;
+        --gutter: 8px;
+        --pane-pad: 16px;
+    }
+
+    .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 8px;
+        background: var(--surface-ground);
+    }
+
+    .nav-toggle { display: grid; }
+
+    .brand {
+        flex: 1 1 auto;
+        min-width: 0;
+        font-size: 17px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .topbar-search { width: auto; }
+    .topbar-actions { gap: 2px; }
+    .nav-toggle, .theme-toggle, .account-button { width: 40px; height: 40px; }
+
+    .body { display: block; }
+
+    .content {
+        margin: 0 var(--gutter) var(--gutter);
+        padding: 20px var(--pane-pad) 32px;
+        overflow-y: visible;
+        scrollbar-gutter: auto;
+    }
+
+    /* The drawer. Everything here undoes a [popover] UA default — the centered
+       inset, the margin, the border and the canvas background — and the
+       display pair is what restores popover semantics after the base rule's
+       own display: flex overrode the UA's display: none for the wide layout. */
+    .sidebar {
+        display: none;
+        position: fixed;
+        inset: 0 auto 0 0;
+        width: min(320px, 86vw);
+        height: 100dvh;
+        margin: 0;
+        padding: 10px 12px 12px;
+        background: var(--surface-ground);
+        color: var(--on-surface);
+        border: none;
+        border-right: 1px solid var(--outline-dim);
+        border-radius: 0;
+        overflow: hidden;
+        translate: -100% 0;
+        transition: translate 0.2s ease,
+                    overlay 0.2s allow-discrete,
+                    display 0.2s allow-discrete;
+
+        &:popover-open {
+            display: flex;
+            translate: 0 0;
+
+            @starting-style { translate: -100% 0; }
+        }
+
+        &::backdrop {
+            background: rgb(0 0 0 / 0.4);
+            opacity: 0;
+            transition: opacity 0.2s ease,
+                        overlay 0.2s allow-discrete,
+                        display 0.2s allow-discrete;
+        }
+
+        &:popover-open::backdrop {
+            opacity: 1;
+
+            @starting-style { opacity: 0; }
+        }
+    }
+}
+
+/* Touch, at any width — a tablet is a coarse pointer with a wide viewport, so
+   this is not the narrow layout's business. The icons keep their size; the
+   boxes and their state layers grow to the tap floor. */
+@media (pointer: coarse) {
+    .nav-toggle, .theme-toggle, .account-button {
+        width: var(--tap);
+        height: var(--tap);
+    }
+
+    .account-menu {
+        top: calc(var(--tap) + 12px);
+
+        & a, & form button { padding: 12px; }
+    }
+
+    .sidebar-foot ::deep a { padding: 11px 14px; }
 }
 
 /* Blazor's built-in error bar — hidden in app.css; these rules style it if

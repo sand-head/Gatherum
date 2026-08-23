@@ -1,0 +1,65 @@
+/* The read view is the article and nothing else: the Edit tab lives in the
+   header beside the title, where a wiki's has always been. */
+
+.reader {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* Nothing in here styles what DocumentHtmlView emits, and that is a rule rather
+   than an oversight. The canvas and the HTML are one document rendered twice —
+   same theme, same measurer, same layout, same metrics, with a parity suite
+   upstream that fails when a feature makes no difference to the HTML — and a
+   host reaching in to restyle the output turns a re-render into a
+   reinterpretation. A page would then read differently from how it edits, which
+   is the one thing the two renderers exist to prevent.
+
+   So this is a box for the view to sit in and nothing more. If the document
+   needs to lay out differently on a narrow screen, that belongs to slopedit,
+   where both renderers get the answer. */
+.reader-doc {
+    min-width: 0;
+}
+
+/* Same as .reader-doc: a box for the view, nothing about what it renders. The
+   listing scrolls sideways on its own when a line will not fit — that is the
+   grid's wrapping decision, not the browser's, and not this file's. */
+.reader-code {
+    min-width: 0;
+}
+
+/* The same offer the editor makes, in the place it is more often wanted: a red
+   link is usually discovered while reading. */
+.dead-link-card {
+    position: fixed;
+    top: 18vh;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 120;
+    width: min(420px, 90vw);
+    background: var(--surface-raised);
+    border-radius: var(--radius-l);
+    box-shadow: var(--shadow-3);
+    padding: 16px 18px;
+
+    & p { margin: 0 0 12px; }
+}
+
+.dead-link-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+@media (max-width: 480px) {
+    .dead-link-card {
+        top: auto;
+        bottom: 0;
+        left: 0;
+        transform: none;
+        width: 100%;
+        border-radius: var(--radius-l) var(--radius-l) 0 0;
+        padding-bottom: calc(16px + env(safe-area-inset-bottom));
+    }
+}

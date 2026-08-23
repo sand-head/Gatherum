@@ -19,6 +19,10 @@
     box-shadow: var(--shadow-3);
     padding: 24px 28px;
     animation: modal-in 0.15s ease-out;
+    /* Content taller than the viewport used to clip: the backdrop centers, and
+       nothing here could scroll. */
+    max-height: 85dvh;
+    overflow-y: auto;
 
     & h3 {
         font: 400 22px/1.3 var(--font-ui);
@@ -28,4 +32,22 @@
 
 @keyframes modal-in {
     from { opacity: 0; transform: translateY(8px) scale(0.98); }
+}
+
+/* On a phone a dialog belongs at the bottom, in reach of a thumb, and there is
+   no width left to round it away from the edges. */
+@media (max-width: 480px) {
+    .modal-backdrop { align-items: flex-end; }
+
+    .modal {
+        width: 100%;
+        max-height: 90dvh;
+        border-radius: 28px 28px 0 0;
+        padding: 20px 20px calc(20px + env(safe-area-inset-bottom));
+        animation: sheet-in 0.18s ease-out;
+    }
+
+    @keyframes sheet-in {
+        from { transform: translateY(12px); }
+    }
 }

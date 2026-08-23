@@ -1,0 +1,13 @@
+{
+  "name": "gatherum-mobile-checks",
+  "private": true,
+  "type": "module",
+  "description": "Responsive and touch checks against a running Gatherum.",
+  "scripts": {
+    "seed": "node seed.mjs",
+    "check": "node check.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.49.1"
+  }
+}

@@ -12,7 +12,7 @@ search, one login, one API, plus an MCP server so agents are first-class users.
 C#/Blazor end to end — static shell with Interactive Auto islands for everything
 interactive: the first visit renders on a server circuit while the WASM runtime
 downloads, every later visit runs fully in WebAssembly over `/api` (the only JS is
-`wwwroot/js/gatherum.js`, ~65 lines) — PostgreSQL, deployed as a single rootless
+`wwwroot/js/gatherum.js`, ~80 lines) — PostgreSQL, deployed as a single rootless
 Podman container behind a TLS-terminating reverse proxy with Authelia for OIDC.
 
 ## Build, run, test

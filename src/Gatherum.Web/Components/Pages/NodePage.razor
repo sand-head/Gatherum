@@ -7,18 +7,30 @@
 @if (notFound)
 {
     <PageTitle>Not found — Gatherum</PageTitle>
-    <div class="node-missing">This node doesn't exist (or is private to someone else).</div>
+    <h1 class="node-missing">This node doesn't exist (or is private to someone else).</h1>
 }
 else if (node is not null)
 {
     <PageTitle>@node.Title — Gatherum</PageTitle>
     <article class="node">
         <NodeHeader @rendermode="InteractiveAuto" NodeId="@node.Id" Title="@node.Title"
-                    IsPrivate="@node.IsPrivate" Categories="@categories.ToArray()" />
+                    IsPrivate="@node.IsPrivate" Categories="@categories.ToArray()"
+                    EditHref="@(editable && !Editing ? $"/nodes/{node.Id}?edit" : null)" />
 
-        @if (editable)
+        @* Which surface a page opens in is a product decision, and this is it: a page
+           reads, and editing is a URL you go to. Reading is the common case by a wide
+           margin, and the read view is real HTML — so the first response carries the
+           article, and a reader gets find-in-page, native selection, reflow and a
+           screen reader instead of a canvas. ?edit is bookmarkable and the back
+           button leaves it, which is what a wiki's Edit tab has always been. *@
+        @if (editable && Editing)
         {
             <NodeEditor @rendermode="InteractiveAuto" NodeId="@node.Id" FileName="@fileName"
+                        MediaType="@node.MediaType" />
+        }
+        else if (editable)
+        {
+            <NodeReader @rendermode="InteractiveAuto" NodeId="@node.Id" FileName="@fileName"
                         MediaType="@node.MediaType" />
         }
         else
@@ -45,6 +57,13 @@ else if (node is not null)
 
 @code {
     [Parameter] public Guid Id { get; set; }
+
+    /// <summary>Presence, not a value: Blazor binds a bool query parameter through
+    /// bool.TryParse, which rejects "1" — and the URL wants to read as ?edit anyway.</summary>
+    [SupplyParameterFromQuery(Name = "edit")]
+    public string? Edit { get; set; }
+
+    private bool Editing => Edit is not null;
 
     private Node? node;
     private List<CategoryRef> categories = [];

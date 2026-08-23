@@ -6,6 +6,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <base href="/" />
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    @* Installable. A self-hosted wiki is reached by typing a hostname, and a
+       home-screen launcher beats doing that — it also means the WebAssembly
+       runtime is warm on a device that would otherwise re-pay the first-visit
+       download. No service worker: caching the payload ourselves would be a
+       cache-invalidation problem on every deploy.
+
+       theme-color duplicates --surface-ground the way EditorThemes duplicates
+       the palette, because a meta tag cannot read a custom property: change a
+       ground token in app.css, change it here. *@
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="icon-192.png" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Gatherum" />
+    <meta name="theme-color" content="#f8fafd" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#131314" media="(prefers-color-scheme: dark)" />
     @* Header chrome bootstrap: apply the saved theme as early as possible and
        wire the static toggle and account menu. The logic lives in gatherum.js
        (the one JS file); this only loads and calls it. *@

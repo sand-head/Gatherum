@@ -116,3 +116,26 @@
     padding: 20px;
     text-align: center;
 }
+
+/* Below the shell breakpoint the pill has no room for a word: it becomes the
+   icon it already leads with, and still opens the same full-screen palette. */
+@media (max-width: 700px) {
+    .search-trigger {
+        display: grid;
+        place-items: center;
+        width: 40px;
+        height: 40px;
+        padding: 0;
+        background: none;
+        color: var(--on-surface-dim);
+
+        &:hover { background: var(--hover); box-shadow: none; }
+
+        & span, & kbd { display: none; }
+    }
+}
+
+@media (pointer: coarse) {
+    .search-trigger { min-height: var(--tap); }
+    .palette-result { padding: 12px; }
+}

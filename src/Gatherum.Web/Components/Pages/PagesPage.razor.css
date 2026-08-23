@@ -1,11 +1,18 @@
 /* The whole tree gets the article measure — wide rows scale where the old
    sidebar tree could not. */
 .pages {
-    max-width: 760px;
+    max-width: min(760px, 100%);
 }
 
 .hint {
     margin: -6px 0 18px;
     font-size: 13.5px;
     color: var(--on-surface-dim);
+}
+
+/* The drop zone is a pointer gesture with no touch equivalent, so a finger is
+   not told about it. Uploading from here is the row menu's "Upload file
+   inside", which works either way. */
+@media (hover: none) {
+    .drag-hint { display: none; }
 }

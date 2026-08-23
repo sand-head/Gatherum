@@ -11,6 +11,9 @@
     & .caret { margin-left: -2px; }
 }
 
+/* The word is its own element only so the narrow layout can drop it. */
+.new-button .label { white-space: nowrap; }
+
 /* Invisible click-away layer under the menu. */
 .scrim {
     position: fixed;
@@ -25,7 +28,7 @@
     z-index: 50;
     display: flex;
     flex-direction: column;
-    min-width: 180px;
+    min-width: min(180px, calc(100vw - 24px));
     padding: 6px;
     background: var(--surface-raised);
     border: 1px solid var(--outline-dim);
@@ -54,4 +57,21 @@
     & svg { color: var(--on-surface-dim); flex-shrink: 0; }
 
     &:hover { background: var(--hover); }
+}
+
+/* Same reasoning as the search pill: below the breakpoint the plus carries it. */
+@media (max-width: 700px) {
+    .new-button {
+        justify-content: center;
+        gap: 0;
+        width: 40px;
+        height: 40px;
+        padding: 0;
+
+        & .label, & .caret { display: none; }
+    }
+}
+
+@media (pointer: coarse) {
+    .menu button, .menu .menu-upload { padding: 12px; }
 }

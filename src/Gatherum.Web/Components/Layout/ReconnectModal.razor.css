@@ -20,14 +20,18 @@
 }
 
 
+/* Blazor ships this dialog styled in absolutes — white, 20rem, a hardcoded
+   blue button — which is wider than a 360px screen and the one surface in the
+   app that ignored the theme entirely. It is dressed like everything else now. */
 #components-reconnect-modal {
-    background-color: white;
-    width: 20rem;
+    background-color: var(--surface-raised);
+    color: var(--on-surface);
+    width: min(20rem, calc(100vw - 2rem));
     margin: 20vh auto;
     padding: 2rem;
     border: 0;
-    border-radius: 0.5rem;
-    box-shadow: 0 3px 6px 2px rgba(0, 0, 0, 0.3);
+    border-radius: var(--radius-l);
+    box-shadow: var(--shadow-3);
     opacity: 0;
     transition: display 0.5s allow-discrete, overlay 0.5s allow-discrete;
     animation: components-reconnect-modal-fadeOutOpacity 0.5s both;
@@ -90,18 +94,15 @@
 
 #components-reconnect-modal button {
     border: 0;
-    background-color: #6b9ed2;
-    color: white;
-    padding: 4px 24px;
-    border-radius: 4px;
+    background-color: var(--primary);
+    color: var(--on-primary);
+    padding: 8px 24px;
+    border-radius: var(--radius-full);
+    min-height: var(--tap);
 }
 
     #components-reconnect-modal button:hover {
-        background-color: #3b6ea2;
-    }
-
-    #components-reconnect-modal button:active {
-        background-color: #6b9ed2;
+        background-color: color-mix(in srgb, var(--on-primary) 10%, var(--primary));
     }
 
 .components-rejoining-animation {
@@ -112,7 +113,7 @@
 
     .components-rejoining-animation div {
         position: absolute;
-        border: 3px solid #0087ff;
+        border: 3px solid var(--primary);
         opacity: 1;
         border-radius: 50%;
         animation: components-rejoining-animation 1.5s cubic-bezier(0, 0.2, 0.8, 1) infinite;

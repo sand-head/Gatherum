@@ -51,6 +51,9 @@
             </button>
         }
         <span class="save-indicator">@saveLabel</span>
+        @* Editing is a URL now, so leaving it is a navigation — and it has to flush
+           what autosave has not written yet before it goes. *@
+        <button class="primary" @onclick="DoneAsync">Done</button>
         <span class="render-home" title="Where the editor is rendering">
             @(RendererInfo.IsInteractive ? RendererInfo.Name : "…")
         </span>
@@ -59,8 +62,11 @@
     @if (richDoc is not null && !sourceMode)
     {
         <div class="document-surface">
+            @* ContentPadding: 0 to match the read view. It sets the column the layout
+               measures, so the two surfaces wrap at the same points only while they
+               agree about it — the pane's own padding is the article's margin. *@
             <DocumentView @ref="docView" Grid="richDoc" OnChange="OnChanged"
-                          Theme="EditorThemes.For(AppTheme.IsDark)"
+                          Theme="EditorThemes.For(AppTheme.IsDark)" ContentPadding="0"
                           ImageSource="Data.GetImageAsync" OnLinkActivated="FollowLinkAsync"
                           AriaLabel="Document editor" />
         </div>
@@ -68,6 +74,8 @@
     else if (sourceDoc is not null)
     {
         <div class="editor-surface">
+            @* No padding parameter here: EditorView does not take one, so CodeHtmlView
+               takes its default too and the pair agrees the way it was built to. *@
             <EditorView @ref="sourceView" Grid="sourceDoc" OnChange="OnChanged"
                         Theme="EditorThemes.For(AppTheme.IsDark)"
                         AriaLabel="Source editor" />
@@ -77,6 +85,14 @@
     @if (picker != Picker.None)
     {
         <div class="mention-dialog">
+            @* Escape was the only way out, which is not a way out on a phone. *@
+            <button class="picker-close" title="Close" aria-label="Close"
+                    @onclick="() => picker = Picker.None">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                    <path d="M6 6l12 12M18 6L6 18" />
+                </svg>
+            </button>
             <input placeholder="@PickerPlaceholder" value="@pickerQuery"
                    @oninput="OnPickerQuery" @onkeydown="OnPickerKey" autofocus />
             @if (picker == Picker.WikiLink && pickerQuery.Trim().Length > 0)
@@ -315,38 +331,39 @@
         _ = ResolveWikiLinksAsync();
     }
 
-    /// <summary>A link the reader clicked (Ctrl+click while editing — a plain click
-    /// still places the caret). Where it goes is the host's call: a wiki link resolves
-    /// by title, a mention or an embedded file by id, and anything with a scheme of its
-    /// own leaves the app. A title nobody has written yet is an offer, not an error.</summary>
+    /// <summary>A link the reader Ctrl+clicked — a plain click still places the caret.
+    /// Where it goes is <see cref="LinkRouter"/>'s answer, shared with the read view;
+    /// what is done with it is the editor's, because there is a save to flush first and
+    /// a title nobody has written yet is an offer rather than an error.</summary>
     private async Task FollowLinkAsync(string url)
     {
-        if (WikiLinkExtension.TargetOf(url) is { Length: > 0 } title)
+        LinkRouter.Target target;
+        try
         {
-            try
-            {
-                var resolved = await Data.ResolveTitlesAsync([title]);
-                if (resolved.TryGetValue(title, out var byTitle))
-                    await GoToAsync($"/nodes/{byTitle}");
-                else
-                    deadLink = title;
-            }
-            catch (Exception)
-            {
-                // A link that can't be resolved right now stays where it is; the click
-                // is not worth taking the editor down for.
-                saveLabel = "Couldn't reach the server";
-            }
+            target = await LinkRouter.ResolveAsync(Data, url);
+        }
+        catch (Exception)
+        {
+            // A link that can't be resolved right now stays where it is; the click
+            // is not worth taking the editor down for.
+            saveLabel = "Couldn't reach the server";
             return;
         }
-        if (NodeUrl.TryParse(url, out var nodeId))
+        switch (target.Kind)
         {
-            await GoToAsync($"/nodes/{nodeId}");
-            return;
+            case LinkRouter.LinkKind.Node:
+                await GoToAsync(target.Url);
+                break;
+            case LinkRouter.LinkKind.External:
+                await GoToAsync(target.Url, external: true);
+                break;
+            case LinkRouter.LinkKind.UnwrittenTitle:
+                deadLink = target.Title;
+                break;
         }
-        if (NodeUrl.IsExternal(url))
-            await GoToAsync(url, external: true);
     }
+
+    private Task DoneAsync() => GoToAsync($"/nodes/{NodeId}");
 
     private async Task GoToAsync(string url, bool external = false)
     {

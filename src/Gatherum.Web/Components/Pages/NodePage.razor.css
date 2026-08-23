@@ -1,6 +1,6 @@
 /* The article column: centered, Wikipedia-comfortable measure. */
 .node {
-    max-width: 840px;
+    max-width: min(840px, 100%);
     margin-inline: auto;
 }
 

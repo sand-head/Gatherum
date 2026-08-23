@@ -16,5 +16,5 @@
         color: var(--on-surface-dim);
     }
 
-    & input { min-width: 200px; }
+    & input { min-width: min(200px, 100%); }
 }

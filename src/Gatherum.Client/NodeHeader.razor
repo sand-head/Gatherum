@@ -2,8 +2,13 @@
 @inject TreeState Tree
 
 <header class="node-header">
-    <input class="node-title-input" value="@title"
-           @onchange="e => RenameAsync(e.Value?.ToString() ?? title)" />
+    @* Every route needs an h1: Routes.razor's FocusOnNavigate looks for one, and a
+       node page had none at all — the title is a field, because editing it in place
+       is the point. So the h1 wraps the field rather than repeating its words. *@
+    <h1 class="node-title">
+        <input class="node-title-input" value="@title" aria-label="Page title"
+               @onchange="e => RenameAsync(e.Value?.ToString() ?? title)" />
+    </h1>
     <div class="node-meta">
         <CategoryEditor NodeId="@NodeId" Categories="@categories"
                         OnChanged="ReloadCategoriesAsync" />
@@ -19,12 +24,34 @@
             </span>
         }
     </div>
+    @* A wiki's page actions: beside the title where there is room for words, and
+       in their own band under the metadata where there is not — which is where
+       Wikipedia's mobile skin keeps them, as an icon, just above the rule that
+       opens the article. *@
+    @if (EditHref is not null)
+    {
+        <nav class="node-tabs" aria-label="Page actions">
+            <a class="button node-tab" href="@EditHref" title="Edit" aria-label="Edit">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 20h9" />
+                    <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
+                </svg>
+                <span class="label">Edit</span>
+            </a>
+        </nav>
+    }
 </header>
 
 @code {
     [Parameter, EditorRequired] public Guid NodeId { get; set; }
     [Parameter, EditorRequired] public string Title { get; set; } = "";
     [Parameter] public bool IsPrivate { get; set; }
+
+    /// <summary>Where the Edit tab goes, or null for a node that has no editable
+    /// body and for the editor itself — the page decides, because only it knows
+    /// which surface is showing.</summary>
+    [Parameter] public string? EditHref { get; set; }
     [Parameter] public CategoryRef[] Categories { get; set; } = [];
 
     private string title = "";

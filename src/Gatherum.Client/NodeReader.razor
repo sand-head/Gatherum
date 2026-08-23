@@ -1,0 +1,244 @@
+@implements IDisposable
+@inject IAppData Data
+@inject OutlineState Outline
+@inject ThemeState AppTheme
+@inject NavigationManager Navigation
+@inject IJSRuntime Js
+@using SlopEdit.Blazor
+@using SlopEdit.Core.Document
+@using SlopEdit.Core.Highlighting
+@using SlopEdit.Core.Rich
+@using SlopEdit.Docx
+
+@* Reading a page is not editing it with the editing switched off. A caret, a
+   selection, proportional hit-testing and an IME are what the canvas is for, and a
+   reader has none of them — while a canvas costs a reader everything the browser
+   does better: find-in-page, native selection, real links with a long-press menu,
+   <img> with its own cache, text that reflows and zooms, and a screen reader that
+   has something to read. Same document, same numbers, no canvas.
+
+   This is also why reading is the page's own URL and editing is ?edit: a static
+   pass through DocumentHtmlView emits the article itself, so the first response
+   already carries the prose — a phone reads the page without waiting for
+   WebAssembly, and never downloads a canvas to do it. *@
+<div class="reader">
+    @if (doc is not null)
+    {
+        <div class="reader-doc" @ref="docHost">
+            @* ContentPadding is slopedit's own parameter, not a style override, and
+               the host is entitled to set it — but it decides the column the layout
+               measures, so it has to be the same number the editor passes or the two
+               wrap in different places. The article's breathing room is .content's
+               padding; the document does not need its own. *@
+            <DocumentHtmlView Grid="doc" Theme="EditorThemes.For(AppTheme.IsDark)"
+                              ContentPadding="0" TopPadding="0"
+                              OnLinkActivated="FollowAsync" AriaLabel="Article" />
+        </div>
+    }
+    else if (sourceDoc is not null)
+    {
+        @* Code reads for the same reasons prose does, and CodeHtmlView is the same
+           grid the canvas paints — same lexer, same colors, same wrapped rows, same
+           gutter — so highlighting survives without a canvas, the line numbers are
+           unselectable, and copying a page of code yields the code. *@
+        <div class="reader-code">
+            <CodeHtmlView Grid="sourceDoc" Theme="EditorThemes.For(AppTheme.IsDark)"
+                          AriaLabel="@FileName" />
+        </div>
+    }
+
+    @if (unwritten is not null)
+    {
+        <div class="dead-link-card">
+            <p>Nothing here is titled &ldquo;@unwritten&rdquo;.</p>
+            <div class="dead-link-actions">
+                <button class="primary" @onclick="WriteUnwrittenAsync">Write it</button>
+                <button class="ghost" @onclick="() => unwritten = null">Not now</button>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Guid NodeId { get; set; }
+    [Parameter, EditorRequired] public string FileName { get; set; } = "";
+    [Parameter, EditorRequired] public string MediaType { get; set; } = "";
+
+    private RichDocument? doc;
+    private EditorDocument? sourceDoc;
+    private string? unwritten;
+    private ElementReference docHost;
+
+    /// <summary>Titles this page wiki-links that resolve. Kept so a theme change can
+    /// re-ink the red ones without asking the server again.</summary>
+    private IReadOnlySet<string> liveTitles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Block index of each heading the outline published, in the order they
+    /// appear — which is also their order among the emitted h1-h6, and so the index a
+    /// jump needs. The block index alone cannot find a heading in the HTML.</summary>
+    private readonly List<int> headingBlocks = [];
+
+    private bool IsMarkdown => MediaType == "text/markdown";
+    private bool IsDocx =>
+        MediaType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (RendererInfo.IsInteractive)
+        {
+            await AppTheme.EnsureWatchingAsync();
+            AppTheme.Changed += OnAppThemeChanged;
+        }
+        if (IsDocx)
+        {
+            var payload = await Data.LoadBytesAsync(NodeId);
+            using var docx = new MemoryStream(payload.Content);
+            doc = DocxConverter.ToRichDocument(docx);
+            GatherumMarkdown.Dress(doc, AppTheme.IsDark);
+        }
+        else
+        {
+            var payload = await Data.LoadAsync(NodeId);
+            if (IsMarkdown)
+                doc = GatherumMarkdown.Parse(payload.Text, AppTheme.IsDark);
+            else
+                sourceDoc = new EditorDocument(payload.Text)
+                {
+                    Lexer = LexerRegistry.ForPath(FileName),
+                    SyntaxTheme = EditorThemes.Syntax(AppTheme.IsDark),
+                };
+        }
+        Outline.JumpRequested += OnJumpRequestedAsync;
+        PublishOutline();
+        await ResolveWikiLinksAsync();
+    }
+
+    private void OnAppThemeChanged() => _ = InvokeAsync(() =>
+    {
+        if (doc is not null)
+        {
+            GatherumMarkdown.Dress(doc, AppTheme.IsDark);
+            InkWikiLinks();
+        }
+        if (sourceDoc is not null)
+            sourceDoc.SyntaxTheme = EditorThemes.Syntax(AppTheme.IsDark);
+        StateHasChanged();
+    });
+
+    /// <summary>Which of this page's wiki links point at something. A reader sees the
+    /// same red links the writer does — that is the whole point of them.</summary>
+    private async Task ResolveWikiLinksAsync()
+    {
+        if (doc is null)
+            return;
+        var targets = WikiLinks.TargetsIn(doc);
+        if (targets.Count == 0)
+            return;
+        try
+        {
+            var resolved = await Data.ResolveTitlesAsync(targets);
+            liveTitles = resolved.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            InkWikiLinks();
+            StateHasChanged();
+        }
+        catch (Exception)
+        {
+            // Unreachable right now: the links stay inked however they were read.
+        }
+    }
+
+    private void InkWikiLinks()
+    {
+        if (doc is not null)
+            WikiLinks.Mark(doc, liveTitles, ChromeInk.For(AppTheme.IsDark));
+    }
+
+    private void PublishOutline()
+    {
+        headingBlocks.Clear();
+        if (doc is null)
+        {
+            Outline.Clear(this);
+            return;
+        }
+        var entries = new List<OutlineEntry>();
+        for (var i = 0; i < doc.Blocks.Count; i++)
+        {
+            // An aside's own headings title the card, not the page.
+            if (doc.Blocks[i] is { Kind: BlockKind.Heading, Tag: null } block)
+            {
+                entries.Add(new OutlineEntry(i, block.HeadingLevel, block.Text));
+                headingBlocks.Add(i);
+            }
+        }
+        Outline.Publish(this, entries);
+    }
+
+    /// <summary>The HTML view emits h1-h6 with no ids, so a heading is found by its
+    /// position among them rather than by name — which also survives two headings
+    /// sharing a title.</summary>
+    private async Task OnJumpRequestedAsync(OutlineEntry entry)
+    {
+        var index = headingBlocks.IndexOf(entry.Block);
+        if (index < 0 || !RendererInfo.IsInteractive)
+            return;
+        try
+        {
+            var module = await Js.InvokeAsync<IJSObjectReference>("import", "./js/gatherum.js");
+            await module.InvokeVoidAsync("scrollToHeading", docHost, index);
+        }
+        catch (Exception)
+        {
+            // A jump is a convenience; failing it is not worth taking the page down.
+        }
+    }
+
+    private async Task FollowAsync(string url)
+    {
+        LinkRouter.Target target;
+        try
+        {
+            target = await LinkRouter.ResolveAsync(Data, url);
+        }
+        catch (Exception)
+        {
+            return;
+        }
+        switch (target.Kind)
+        {
+            case LinkRouter.LinkKind.Node:
+                Navigation.NavigateTo(target.Url);
+                break;
+            case LinkRouter.LinkKind.External:
+                Navigation.NavigateTo(target.Url, forceLoad: true);
+                break;
+            case LinkRouter.LinkKind.UnwrittenTitle:
+                unwritten = target.Title;
+                break;
+        }
+    }
+
+    /// <summary>A red link is an offer, and it is a better offer while reading than
+    /// while editing: this is where you find out the page is missing.</summary>
+    private async Task WriteUnwrittenAsync()
+    {
+        var title = unwritten!;
+        unwritten = null;
+        try
+        {
+            var created = await Data.CreatePageAsync(null, title);
+            Navigation.NavigateTo($"/nodes/{created}?edit");
+        }
+        catch (Exception)
+        {
+            // Leave the reader where it is; the link is still red.
+        }
+    }
+
+    public void Dispose()
+    {
+        AppTheme.Changed -= OnAppThemeChanged;
+        Outline.JumpRequested -= OnJumpRequestedAsync;
+        Outline.Clear(this);
+    }
+}

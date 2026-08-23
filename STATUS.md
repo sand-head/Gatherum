@@ -134,7 +134,6 @@ browser sessions — including against the built container).
 - Public read-only share links.
 - Export endpoints (bodies are already Markdown files on disk; export is a tree walk
   + zip stream).
-- Rich preview for non-edited text files (plain `<pre>`; the editor itself highlights).
 
 ## Known gaps
 

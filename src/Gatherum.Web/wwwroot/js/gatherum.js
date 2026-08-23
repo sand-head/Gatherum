@@ -31,6 +31,16 @@ export function initDropZone(element, dotnet) {
 // Neither MutationObserver (the toggle writes data-theme) nor the OS
 // preference's change event is reachable from Blazor. Returns the current
 // mode; pushes every later change into OnThemeChanged.
+// The read view's Contents panel. DocumentHtmlView emits h1-h6 without ids — the
+// document's own numbering is block indices, which mean nothing to the DOM — so a
+// heading is addressed by its position among the emitted headings. Blazor has no
+// native way to reach the nth descendant of an element and scroll it into view,
+// which is the only reason this is here rather than in C#.
+export function scrollToHeading(container, index) {
+  const headings = container?.querySelectorAll('h1, h2, h3, h4, h5, h6');
+  headings?.[index]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 export function watchTheme(dotnet) {
   const root = document.documentElement;
   const media = matchMedia('(prefers-color-scheme: dark)');
@@ -63,5 +73,9 @@ export function initChrome() {
     // so close an open account menu when one of its items is followed.
     if (e.target.closest('#account-menu a, #account-menu button'))
       document.getElementById('account-menu')?.hidePopover();
+    // The navigation drawer has the same problem and the same cure: a tapped
+    // link routes without a page load, so the drawer would stay open over it.
+    if (e.target.closest('#nav-drawer a'))
+      document.getElementById('nav-drawer')?.hidePopover();
   });
 }

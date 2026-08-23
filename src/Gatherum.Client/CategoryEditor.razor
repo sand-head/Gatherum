@@ -10,8 +10,17 @@
         </span>
     }
     <input class="category-input" placeholder="+ category" list="category-suggestions-@NodeId"
-           value="@draft" @oninput="OnInput"
+           value="@draft" enterkeyhint="done" @oninput="OnInput"
            @onkeydown="OnKeyDown" @onblur="AddDraftAsync" />
+    @* Enter and blur both commit, but neither is visible, and a soft keyboard
+       makes guessing expensive. Preventing mousedown's default keeps focus in
+       the field, so the blur never fires and the caret is ready for the next
+       category rather than gone. *@
+    @if (draft.Trim().Length > 0)
+    {
+        <button class="category-add" title="Add category"
+                @onmousedown:preventDefault @onclick="AddDraftAsync">Add</button>
+    }
     @* A path is typed, not picked: the datalist offers whole paths so nesting an
        existing category under another is a matter of completing it. *@
     <datalist id="category-suggestions-@NodeId">

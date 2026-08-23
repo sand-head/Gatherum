@@ -545,3 +545,256 @@ routed no clicks. Wiring the editor's link routing into the panel would have cop
 And a page still opens in the editor rather than in a Read tab with an Edit button: the
 component upstream suggests for one is now here, but which surface a page opens in is a
 product decision, not a consequence of a package bump.
+
+## Mobile: two measured breakpoints, a popover drawer, and reading before editing
+The app had one width media query in the whole tree, and all it did was narrow the
+sidebar. Measured in Chromium against the real stylesheets, that left a 390px phone
+with a 104px article column — about one word per line — and `/pages` ellipsising tree
+titles down to single letters. This is the pass that fixed it, and four of its calls
+are worth writing down.
+
+**The breakpoints are measured, not conventional.** 700px is where a 236px sidebar
+stops leaving room for a comfortable reading measure (a 45ch line needs about 650px of
+viewport with the sidebar in flow, 50ch about 690px), and 480px is where a five-column
+table stops being a table. They are pixel literals in the `@media` prelude because a
+custom property cannot be read from a media query; the sizes those queries *vary* —
+`--gutter`, `--pane-pad`, `--sidebar-w`, `--tap` — are tokens in `app.css`, so a
+breakpoint redefines a value instead of restating the rule that used it. Every width
+above 700px is unchanged to the pixel, which was the constraint the whole pass was
+written under.
+
+**The drawer is the native `popover` API, not a component.** It gives the top layer,
+light-dismiss, Escape and a backdrop for nothing, the way the account menu already
+does, and it needs no state — which matters, because a stateful shell component would
+have to be an Interactive Auto island in `Gatherum.Client` and any slip to Interactive
+Server would pin the whole app back to the circuit. The cost is that `[popover]` brings
+UA defaults with it and they apply whether or not it is open: without an explicit
+`position: static` reset on the wide layout the sidebar is `position: fixed` at *every*
+width. That reset lives with the wide-layout rule rather than in the drawer query, and
+the drawer closes on navigation through the same delegated click listener in
+`gatherum.js` that already closes the account menu.
+
+**Below 700px the page scrolls, above it the pane does.** An inner scroll container
+means the mobile URL bar can never collapse and the reader pays for it on every screen;
+page scrolling also hands slopedit's page-mode sticky strip the document as its scroll
+container, which is the ancestor it wants. Two scroll models, one breakpoint, and the
+header comment in `MainLayout.razor.css` says which is which — the file's original claim
+that `.content` is always the scroller is now only true above the line.
+
+**Touch is `(hover: none)` and `(pointer: coarse)`, never a width.** A tablet is a coarse
+pointer with a wide viewport. The row menu was `visibility: hidden` until `:hover`, which
+put every per-node action — new page inside, upload inside, move, privacy, delete —
+behind a gesture a phone does not have; it is unconditional under `(hover: none)`. Tap
+targets grow their boxes, not their icons, under `(pointer: coarse)` only, so desktop
+density survives. Fields go to 16px there because iOS Safari zooms into anything smaller
+on focus and never zooms back out.
+
+The one genuinely new JavaScript is `scrollToHeading`, and it is here under protest:
+`DocumentHtmlView` emits `h1`–`h6` without ids while the document numbers blocks, so the
+read view's Contents panel addresses a heading by its position among the emitted
+headings — and Blazor has no native way to reach the nth descendant of an element and
+scroll it into view.
+
+## A page reads; editing is a URL (the Read tab, finally)
+The previous entry left this parked: "which surface a page opens in is a product
+decision, not a consequence of a package bump." The decision is that a page reads.
+
+`/nodes/{id}` renders `DocumentHtmlView` and `/nodes/{id}?edit` renders the canvas. A
+URL rather than a toggle for three reasons, in ascending order of how much they matter:
+`NodePage` is static SSR and cannot hold interactive state anyway; the edit surface
+becomes bookmarkable and the back button leaves it, which is what a wiki's Edit tab has
+always been; and a static pass through the read view emits the article itself, so the
+first response already carries the prose — a reader on a phone gets the page without
+waiting for WebAssembly and never downloads a canvas to read one. `?edit` is a presence
+check on a `string?`, not a `bool`, because Blazor binds a bool query parameter through
+`bool.TryParse` and that rejects `?edit=1`.
+
+Reading also fixes something the canvas could not: following a link while editing needs
+Ctrl+click, since a plain click must place the caret, and a finger cannot Ctrl+click. The
+routing itself moved to `LinkRouter`, shared by both surfaces — the four cases are the
+same either way and only what follows differs, the editor having a save to flush first.
+The offer to write a red link's missing page now lands where you actually discover it.
+
+`OutlineState` needed no change: it was already written to take a publisher and to clear
+only its own entries, so the reader is simply a second publisher. Images needed nothing
+either — Gatherum writes `/api/files/…` into a document, so the read view's plain `<img>`
+fetches them same-origin and gets the browser's own lazy-loading and cache.
+`DocumentHtmlView` has no `ImageSource` parameter and does not need one.
+
+## Layout gets a test net, and it is not in CI
+`dotnet test` has no browser and CI only proves the image builds, so nothing in the tree
+could have caught any of the above — every one of them was found by measuring a real
+page in a real browser. `tests/mobile` is that, kept: a small Playwright harness that
+seeds fixtures through the REST API (dev auto-signin, no key to mint) and then asserts,
+at four widths in both schemes, that nothing overflows horizontally, that no control is
+under 44px and no field under 16px on a coarse pointer, that the row menu is hover-gated
+on a mouse and not on a finger, that the drawer opens and does not survive a navigation,
+that every route has the `h1` `FocusOnNavigate` needs, and that reading a page renders no
+canvas.
+
+Playwright is a real new dependency and it is deliberately **not** wired into `dotnet
+test` or the workflow: it wants a browser, a database and a running server, and a
+screenshot diff that fails on a font hint helps nobody. It writes its screenshots for a
+human to look at and compares none of them. Run it when you touch layout.
+
+## The host does not restyle what slopedit renders
+The read view briefly shipped three CSS overrides against `DocumentHtmlView`'s output —
+`img` sizing, `display: block; overflow-x: auto` on `.se-table`, and an `!important`
+float collapse on the aside so an infobox would stop squeezing prose on a phone. All
+three are now gone, and the rule is that none of their kind come back.
+
+The two renderers are one document rendered twice, and that is enforced rather than
+hoped for: the HTML is derived from the same theme, the same measurer's line height and
+baseline, the same `DocumentMetrics`, and — where a browser could not be asked to reach
+the same answer — the layout's own numbers, with a reflection-driven parity suite
+upstream that fails when any member of the model makes no difference to the emitted
+HTML. A host reaching in to restyle the output turns a re-render into a
+reinterpretation: the page would read differently from how it edits, which is the one
+thing the split exists to prevent. The table override was the clearest case — `display:
+block` on a `<table>` discards the `<col>` widths the emitter hands over under
+`table-layout: fixed`, which *are* the canvas's slack-first column squeeze — and the
+`img` rule was merely redundant, since `.se-img` already carries `max-width: 100%`.
+
+So the mobile float problem is upstream's, and it is a real one: an aside is 280px wide
+against a ~340px column at 390px, in the canvas and in the HTML alike. The fix belongs
+in the layout, where one rule serves both — a float whose remaining measure falls below
+something readable should not float, and the parity suite should cover it. Until then it
+is a known gap (STATUS.md), not a host workaround.
+
+`.reader-doc` is therefore a box for the view to sit in and nothing else, and the
+comment in `NodeReader.razor.css` says so, because the next person to see a squeezed
+heading on a phone will reach for exactly the rule that was just removed.
+
+## Two ways a host breaks that parity without touching a slopedit rule
+Not restyling the output turns out to be necessary and not sufficient. Both renderers
+were still wrapping in different places, and neither cause was a rule aimed at
+slopedit.
+
+**The first was a parameter set on one surface and not the other.** The read view was
+built by copying the version panel's `DocumentHtmlView` call, `ContentPadding="0"`
+included — which is right for that panel, because `.history-preview` supplies its own
+padding — while the editor's `DocumentView` took slopedit's default of 24px. Content
+padding is not decoration: it decides the column the layout measures. 24px a side is 48
+off the measure, which is the difference between "Hard / ware" and "H / a / rdware"
+beside a 280px float. `ContentPadding` is slopedit's own parameter and the host is
+entitled to set it — the value here is 0 on both, because the content pane already
+supplies the article's margin and a phone has no width to spare — but it has to be the
+*same* number on both surfaces or they are not rendering the same document.
+
+**The second was app.css doing what app.css is for.** `DocumentHtmlView` emits bare
+`<code>`, `<pre>`, `<a>` and headings, and this file styles bare elements — so
+Gatherum's inline-code chip landed on slopedit's code with 5px of padding a side that
+the canvas knows nothing about. Two code spans in a paragraph is 20px, enough to move a
+line break. Anything slopedit sets itself wins on specificity and was never at risk;
+what leaked was precisely what slopedit leaves alone. The reset in app.css keyed on
+`.slopedit-html-view` is therefore not styling the document either — it is refusing to,
+and handing each element back to the document's own rules.
+
+The general shape: a host controls the box the view sits in and the parameters it is
+given, and nothing inside. Give both surfaces the same parameters, keep global element
+styles out, and the two renderers agree line for line — verified at 390px across a page
+carrying an infobox, a callout, a table, inline code and wiki links.
+
+## slopedit 2.2.2: the phone fixes landed where they belonged
+The float that would not collapse was written up here as upstream's, and it is fixed
+upstream. 2.2.2 collapses a floated run back into the flow at the page's full measure
+when the page cannot spare `MinBodyWidthPx` (280 by default) beside it and its gutter,
+so the infobox that crushed "Hardware" to "Hard / ware" at 390px now stacks above the
+prose and both surfaces show the same thing. Nothing in Gatherum configures it; the
+default is the behaviour we wanted, and the version bump is the whole change.
+
+The way it is implemented is the reason the CSS override had to come out rather than
+merely be tidied. The decision lives in the layout — `IsFloatCollapsed(i)`, a function
+of the current measure — and both renderers read it: the canvas stacks on it and
+`RichHtmlWriter` emits `float:none;width:100%` for it. A media query in this repo's
+stylesheet would have been a second opinion about where the breakpoint is, and the
+Read/Edit switch would have stopped being a re-render. It also gets something a media
+query could not: turn the phone to landscape and the aside comes back, because the
+measure changed rather than the viewport class.
+
+Two more things arrive with it. A table too wide for any squeeze now keeps its natural
+width and scrolls inside its own band — the canvas clips and translates, the HTML wraps
+the `<table>` in an `overflow-x:auto` container — which is what the removed
+`.se-table { display: block }` override was reaching for and getting wrong, since that
+rule discarded the very `<col>` widths the two renderers share. And the canvas learned
+that a hyphen is a break opportunity, which is a wrap-parity fix that shows up most on
+narrow pages, where every line end is a fresh chance to disagree.
+
+The mobile checks gained an assertion that no aside is still floated on a phone. Gatherum
+does not decide that and must not, but it is the outcome the reading experience depends
+on, so a future package bump cannot quietly take it away.
+
+## slopedit 2.3.0: code reads without a canvas too
+A code file opened in the read view was a plain `<pre>` with the text in it — honest,
+and the one place the Read/Edit split was still a downgrade, because the editor
+highlights and the reader did not. `CodeHtmlView` is `EditorView`'s reading half and it
+is now what `NodeReader` renders for anything that is not Markdown or docx.
+
+It is a stronger guarantee than the document pair's. `RichHtmlWriter` walks blocks and
+`CodeHtmlWriter` walks *cells* — which is all `SkiaTextRenderer` walks either — so both
+consume the same `ICellGrid`: the same lexer output, the same soft-wrapped rows, the
+same line-number labels, the same collapsed folds. Parity there is structural rather
+than maintained. Feeding it the same `EditorDocument` the editor would get, with the
+same `LexerRegistry.ForPath` and the same `EditorThemes.Syntax`, is the whole
+integration — which is why `NodeReader` needed its `FileName` parameter back.
+
+Two things this repo does not do, deliberately. It passes no padding: `EditorView` has
+no `ContentPadding` parameter at all, so `CodeHtmlView` takes its default and the pair
+agrees the way it was built to. And it adds no reset for the code view, because
+`CodeHtmlWriter` already emits `code { background: none; padding: 0 }` and owns the
+`<pre>`'s `overflow-x`, `white-space` and the sticky `.se-ln` gutter — the horizontal
+scroll of a long line is slopedit's, not app.css's. The document view is the one that
+still needs the reset in app.css, because `RichHtmlWriter`'s `code` rule sets only the
+face and leaves background and padding to whatever the host has lying around. That
+asymmetry is worth fixing upstream; if it is, the reset here can go.
+
+A lesson worth writing down, because it cost a red suite: **Razor does not compile-check
+component parameter names.** `ContentPadding` on `EditorView` built clean with zero
+warnings and threw `InvalidOperationException` at render time, on a route nothing had
+visited yet. The mobile checks caught it because they now read a code file in both
+modes; the build never could.
+
+## The Edit tab moved to where a wiki keeps it
+Reading a page put an Edit button at the top of the article body, floating over the
+prose it acts on. Wikipedia has never done that: the title sits at the left of a band,
+the article tools sit at the right of the same band, and a thin rule closes it before
+the prose starts. `NodeHeader` already *was* that band — serif title, categories, the
+classic rule — so Edit is a tab in it now, and `NodeReader` renders nothing but the
+article.
+
+Which surface is showing is the page's business, not the header's, so the header takes
+an `EditHref` and renders the tab only when it is given one: absent while editing,
+because it would offer you where you already are, and absent on a node with no editable
+body. Mobile is a different shape, and Wikipedia's own skin says so: Minerva does not put a
+labelled tab beside the title, it puts a compact icon toolbar — language, watchlist,
+pencil — in its own band under the title's metadata, right-aligned, just above the rule
+that opens the article. Gatherum does the same, with the one action it has. The header is
+a grid for that reason: one DOM in reading order (title, metadata, actions), placed
+beside the title where there are words to fit and in its own row where there are not.
+The label goes with it, because an `<input>` cannot ellipsize — it just clips — and a
+title sharing its line with a button loses its last word.
+
+Not done, and worth naming: Wikipedia's band is *Read | Edit | View history*, and
+Gatherum's history is still a toggle at the foot of the page. Moving it up would mean
+`VersionPanel` giving up its own open/closed state to the header, which is a bigger
+change than this one and not obviously right.
+
+## The checks only ever saw half the app
+Blazor Auto renders on the server circuit while the WebAssembly payload downloads, and
+locally on every visit after. Those are different runtimes running different code, and
+the mobile checks measured only the first visit of a fresh context — so every route was
+tested on the circuit and the WebAssembly path was never exercised at all.
+
+It hid a real one. `CodeHtmlView` was missing from the WebAssembly asset set, so the
+read view threw `TypeLoadException` on every return visit and the infobox stayed floated
+on a phone — while the suite was green, because the suite never returned. The cause was
+a stale `_framework` output: `dotnet build` had happily left the previous package's
+`SlopEdit.Blazor.wasm` in place across a version bump, so the reference resolved to
+2.3.0 and the browser was handed 2.2.x. Deleting `bin` and `obj` and rebuilding fixed
+it, and the fingerprint changing is how you can tell it worked.
+
+Each route is now visited twice, waiting for `dotnet.native.wasm` to finish arriving
+before the second navigation so nothing is cancelled mid-flight, and console errors fail
+the run — with a filter for the download-cancellation noise a navigation always leaves
+behind, narrow enough that the `TypeLoadException` above still fails it.
+
