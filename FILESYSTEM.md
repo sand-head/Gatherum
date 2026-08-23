@@ -2,37 +2,40 @@
 
 **Status**: proposed (owner direction). Nothing below is built yet.
 
+**Session assumptions**: Gatherum is not deployed anywhere. There is no data to preserve,
+no migration to stage, and no compatibility to keep — breaking changes are free. Files are
+expected to be changed through the application; external edits are a case to survive
+gracefully, not a workflow to optimize for.
+
 Today Postgres is the system of record and the file store is an opaque pool of
-SHA-256-named blobs. Lose the database and what survives is a heap of hash-named
-files with no title, no filename, no tree, no categories, no sharing rules, and no
-way to tell which of seven blobs is the current version of anything. The bytes
-survive; the knowledge base does not.
+SHA-256-named blobs. Losing the database leaves a heap of hash-named files with no title,
+no filename, no tree, no categories, no sharing rules, and no way to tell which of seven
+blobs is the current version of anything. The bytes survive; the knowledge base does not.
 
-This inverts that. **The directory tree is the system of record.** A node is a path.
-The database becomes a derived index — a cache of what a scan of the directories
-would tell you anyway — and everything a user would grieve losing lives on disk, in
-formats they could read with `cat` if Gatherum vanished entirely.
+This inverts that. **The directory tree is the system of record.** A node is a path. The
+database becomes a derived index — a cache of what a scan of the directories would say
+anyway — and everything a user would grieve losing lives on disk, in formats they could
+read with `cat` if Gatherum vanished entirely.
 
-It is the same unification the project already committed to in
-"Pages are Markdown files", followed one level further down: pages and files stopped
-being different kinds of *content*, and now nodes and files stop being different kinds
-of *thing*.
+It is the same unification the project already committed to in "Pages are Markdown files",
+followed one level further down: pages and files stopped being different kinds of
+*content*, and now nodes and files stop being different kinds of *thing*.
 
 ## The acceptance test
 
-> Point a fresh Gatherum at a directory of user home directories it has never seen,
-> with no database and no Gatherum-specific files anywhere in them. It comes up, indexes
+> Point a fresh Gatherum at a directory of user home directories it has never seen, with
+> no database and no Gatherum-specific files anywhere in them. It comes up, indexes
 > everything, and every file is titled, searchable, viewable, and editable.
 
-Every decision below is subordinate to that sentence. Where a feature cannot be
-expressed by a plain directory of plain files, it degrades — it never blocks the scan
-and never invents a requirement that a normal directory fails to meet.
+Every decision below is subordinate to that sentence. Where a feature cannot be expressed
+by a plain directory of plain files, it degrades — it never blocks the scan and never
+invents a requirement that a normal directory fails to meet.
 
 Practically this means **progressive enhancement**: a bare directory gets
 filename-as-title, media type by content sniffing, full-text and semantic search,
-previews, and editing. What it does not get — categories, version history, sharing
-beyond "private to the owner" — are precisely the things that only exist because
-Gatherum wrote them down, and they live in a sidecar that travels with the directory.
+previews, and editing. What it does not get — categories, version history, sharing beyond
+private-to-the-owner — are precisely the things that only exist because Gatherum wrote
+them down, and they live in a sidecar that travels with the directory.
 
 ## Layout
 
@@ -50,31 +53,68 @@ Gatherum wrote them down, and they live in a sidecar that travels with the direc
     ...
 ```
 
-`.gatherum/meta.json` is per-directory, keyed by the filename within that directory,
-and is the fallback carrier for everything a path cannot say. It sits *beside* the
-files it describes so that moving, copying, or rsyncing a directory carries its
-metadata along without a central registry to keep in sync.
+`.gatherum/meta.json` is per-directory, keyed by filename within that directory, and is
+the fallback carrier for everything a path cannot say. It sits *beside* the files it
+describes so that moving, copying, or rsyncing a directory carries its metadata along
+without a central registry to keep in sync.
 
-For Markdown specifically, YAML frontmatter in the file itself takes precedence — a
-page should be self-describing when it can be. `meta.json` is for everything with
-nowhere to put a header: PDFs, photos, recordings, archives.
+For Markdown, YAML frontmatter in the file itself takes precedence — a page should be
+self-describing when it can be. `meta.json` is for everything with nowhere to put a
+header: PDFs, photos, recordings, archives.
 
-Both are read through one code path that resolves, per property, in this order:
+Both are read through one code path resolving each property in order:
 
 1. frontmatter (text files only)
 2. `.gatherum/meta.json` in the containing directory
 3. the filesystem itself (name, mtime, sniffed media type)
 4. the default
 
+## Ownership is the directory. Access is not.
+
+These are orthogonal axes and conflating them is the main thing this section exists to
+prevent.
+
+**Ownership comes from the path**, and only from the path. A file under `alice/` is
+Alice's, full stop — there is no owner field to disagree with the directory it sits in,
+and no way for metadata to claim otherwise. That is what makes ownership survive the
+database: it is not recorded anywhere, it is *read off the layout*.
+
+**Access is unconstrained by the path.** Any node may be private, shared with any set of
+users, or public to the internet, regardless of whose directory it lives in. A node's
+location says who is responsible for it; it says nothing about who may read it. This is
+why the tree a user sees is a union of "mine" and "shared with me" rather than a listing
+of one directory — see Union tree below.
+
+The connection between the two axes is authority, and it runs one way:
+
+> **Only the owner may set access, and access rules are honored only where the owner
+> could have written them** — that is, in a `.gatherum/` beneath the owner's own root.
+
+So Alice cannot publish Bob's files by writing about them in her manifest, and a stray
+`meta.json` in the wrong place grants nothing. Ownership determines *who decides*; it does
+not narrow *what can be decided*.
+
+Two consequences worth stating plainly:
+
+- **Moving a file between user directories transfers ownership**, because ownership is the
+  path. That is coherent but surprising, so a cross-root move in the UI should say so.
+- **An editor of someone else's file cannot move it out of their root.** Bob editing
+  Alice's page edits it in place; "moving it into his own tree" would be a transfer of
+  ownership he is not entitled to make. The gesture available to him is a copy.
+
+Nothing is indexed whose real path escapes the root it was found under — every path is
+resolved before use. A symlink from `alice/` into `bob/private/` is not a sharing
+mechanism, and it would otherwise be an ownership-laundering one.
+
 ## Titles
 
 **The filename is the title. An override wins when present.**
 
-The title of `Homelab/Podman.md` is `Podman` — extension stripped, no metadata
-consulted. That is what makes the acceptance test pass on a directory nobody prepared.
+The title of `Homelab/Podman.md` is `Podman` — extension stripped, no metadata consulted.
+That is what makes the acceptance test pass on a directory nobody prepared.
 
-An override exists because filesystems and titles disagree: `AC/DC` has a separator in
-it, `CON` is reserved on Windows, ext4 stops at 255 bytes, and a quadlet named
+An override exists because filesystems and titles disagree: `AC/DC` has a separator in it,
+`CON` is reserved on Windows, ext4 stops at 255 bytes, and a quadlet named
 `gatherum-postgres.container` deserves to be called "Postgres container" without being
 renamed into something Podman no longer loads.
 
@@ -83,67 +123,68 @@ Renaming in-app therefore has two outcomes, tried in order:
 1. **Move the file.** If the new title is a legal, available filename in that directory,
    the file is renamed and no metadata is written. The directory stays clean and
    navigable, which is the entire point of the exercise.
-2. **Write an override.** If it is not — illegal characters, a name collision, or a file
-   whose name is load-bearing — the bytes stay where they are and the title is recorded
-   in frontmatter or `meta.json`.
+2. **Write an override.** If it is not — illegal characters, a collision, or a file whose
+   name is load-bearing — the bytes stay put and the title goes in frontmatter or
+   `meta.json`.
 
-`Node.Title` survives as a column; it stops being authored directly and becomes derived
-at index time. `ResolveTitlesAsync` is unchanged, including its collision rule (exact
-case wins, then oldest) — which now also settles the new case where one file is named
-`Podman.md` and another carries the override title `Podman`.
+`Node.Title` survives as a column; it stops being authored directly and becomes derived at
+index time. `ResolveTitlesAsync` is unchanged, including its collision rule (exact case
+wins, then oldest) — which now also settles the case where one file is *named* `Podman.md`
+and another carries the override title `Podman`.
 
 ## Sharing
 
-**Everything starts private.** A node with no access metadata is visible to its owner
-and to nobody else. This is both the model the owner asked for and the only safe
-default for the acceptance test: a directory Gatherum has never seen before cannot
-accidentally publish anything, because "no `.gatherum/` at all" and "private" are the
-same state.
-
-Three states, per node:
+**Everything starts private.** A node with no access metadata is visible to its owner and
+nobody else. This is both the model the owner asked for and the only safe default for the
+acceptance test: "no `.gatherum/` at all" and "private" are the same state, so a directory
+Gatherum has never seen cannot accidentally publish anything. Given what `public` means
+below, that equivalence is load-bearing rather than merely tidy.
 
 | State | Who can see it |
 |---|---|
 | `private` (default) | owner only |
 | `shared` | owner + named grantees |
-| `public` | everyone (see anonymous access below) |
+| `public` | **anyone on the internet, unauthenticated** |
 
-Grants name a user and a role — `reader` or `editor`. The owner always has full access
-and cannot be locked out of their own directory.
+Grants name a user and a role — `reader` or `editor`. The owner always has full access and
+cannot be locked out of their own directory. Inheritance is downward and additive: a
+directory's access block applies to everything beneath it, and a node's own grants union
+with what it inherits. Since the default is closed, the common gesture is opening
+something up, and additive inheritance makes that the easy one — share `Homelab/` and
+everything in it is shared. An access block may set `inherit: false` to start from nothing
+where a subtree needs to be tighter than its parent.
 
-**Inheritance is downward and additive.** A directory's access block applies to
-everything beneath it, and a node's own grants union with what it inherits. Since the
-default is closed, the common gesture is opening something up, and additive inheritance
-makes that the easy one: share `Homelab/`, and everything in it is shared. An access
-block may set `inherit: false` to start from nothing when a subtree genuinely needs to be
-tighter than its parent.
+### Public means public
 
-Two invariants that keep this from becoming a hole:
+`public` is not "any signed-in user". It is on the internet, for better or worse: no
+session, no OIDC round trip, no API key. Marking a node public is a publishing gesture and
+the UI should treat it as one — a distinct affordance from sharing with a person, with a
+copyable link and unambiguous wording about what just happened.
 
-- **Authority is local to the owner's directory.** A grant is honored only when it appears
-  in a `.gatherum/` beneath the directory of the user who owns the file. Alice cannot
-  publish Bob's files by writing about them in her own manifest, whatever her manifest says.
-- **Nothing is indexed whose real path escapes its owner's root.** Every path is resolved
-  before use and rejected if it leaves the root it was found under. A symlink from
-  `alice/` into `bob/private/` is not a sharing mechanism.
+Gatherum is `RequireAuthorization` end to end today, so this is a genuinely new surface,
+and it should be a narrow one:
 
-Effective access stays denormalized onto `Node` at index time, exactly as
-`PrivateToUserId` is today, so visibility remains an indexed predicate rather than an
-ancestor walk. `INodeAuthorizer.VisibleTo` remains the single seam every query goes
-through; its predicate changes, its shape does not.
+- **Anonymous is read-only, always.** No write path is ever reachable without
+  authentication, whatever a node's access says. `editor` is meaningless for anonymous
+  visitors and public never implies it.
+- **Anonymous reach is exactly the public subtree**: node content, previews, downloads,
+  backlinks and category listings filtered to public nodes, and search restricted the same
+  way. A public wiki that cannot be searched is not much of one.
+- **Rate limiting stops being optional.** Semantic search runs a bounded model call on the
+  request path; exposing that to anonymous callers without a limit is an invitation.
+- **MCP and `/api` writes stay authenticated.** Read endpoints gain an anonymous path;
+  everything else keeps its current posture.
 
-**Anonymous access is a separate switch.** `public` means "every signed-in user of this
-instance" unless `Gatherum__Sharing__AllowAnonymous=true`, in which case public nodes are
-readable without signing in. Gatherum is OIDC-only today and unauthenticated reads are a
-real change in exposure, so it is opt-in per instance rather than implied by the word
-"public".
+The seam makes this cheaper than it sounds. `INodeAuthorizer.VisibleTo(IQueryable<Node>,
+Guid userId)` is the single funnel every visibility-sensitive query already goes through —
+tree, search, categories, similar, backlinks, title resolution, ten call sites in all.
+Widening it to `Guid?`, where `null` means anonymous and matches only public nodes, gets
+correct anonymous behavior across every one of them at once, rather than one audited
+endpoint at a time. That seam is the reason this design is safe to attempt; keep it the
+only door.
 
-**Migration must preserve effective visibility, not re-derive it.** Every existing node
-is visible to both users today. Flipping the default to private cannot silently hide a
-two-person knowledge base, and re-deriving from the new default would do exactly that. The
-migration writes explicit grants: nodes that are not `IsPrivate` become `shared` with the
-other user as `editor`; `IsPrivate` nodes become `private`. Nobody's tree changes shape on
-upgrade.
+An instance-level kill switch (`Gatherum__Sharing__AllowPublic`, default on) lets an
+operator disable public sharing outright without touching per-node metadata.
 
 ## What the database becomes
 
@@ -158,107 +199,114 @@ A cache. Everything in it is either a copy of something on disk or recomputed fr
 | `NodeEmbeddings` | recomputed locally |
 | `Users`, `ApiKeys` | **the exception — genuinely DB-only** |
 
-So `gatherum reindex` (and a scan on startup) becomes the whole disaster-recovery story:
+So `gatherum reindex`, and a scan on startup, become the whole disaster-recovery story:
 drop the database, restart, and everything returns except recomputed vectors and re-run
 model analysis. API keys are the one thing worth a `pg_dump`, and they are cheap to
 reissue.
 
-The existing staleness rule pays for itself here without modification. Because a node is
-stale for embedding exactly when `TextFingerprint` differs from `EmbeddedFingerprint`, and
-because that comparison is the only thing that queues work, a rebuilt index automatically
-re-embeds — and re-embeds *only* what actually changed, rather than the whole corpus. That
-rule was written for category renames; it turns out to be the reindex design too.
+The existing staleness rule pays for itself here unmodified. Because a node is stale for
+embedding exactly when `TextFingerprint` differs from `EmbeddedFingerprint`, and because
+that comparison is the only thing that queues work, a rebuilt index re-embeds
+automatically and re-embeds *only* what actually changed. That rule was written for
+category renames; it turns out to be the reindex design too.
+
+Since nothing is deployed, the four existing migrations should be squashed into a fresh
+`Initial` rather than extended. The schema that comes out of this is different enough that
+carrying its own history would be archaeology of a database nobody ever ran.
 
 ## Versions
 
-The working file is the current version. History is a CAS under
-`.gatherum/versions/`, with the ordering recorded in the directory's manifest.
+The working file is the current version. History is a CAS under `.gatherum/versions/`,
+with ordering recorded in the directory's manifest.
 
 This is the deliberate asymmetry of the whole design: **current state is a plain file,
-history is Gatherum's bookkeeping.** Delete `.gatherum/versions/` and you lose history
-and keep every document. That is the right way round, and it is the opposite of today,
-where the bookkeeping is the only thing that knows what the document *is*.
+history is Gatherum's bookkeeping.** Delete `.gatherum/versions/` and you lose history and
+keep every document. That is the right way round, and the opposite of today, where the
+bookkeeping is the only thing that knows what a document *is*.
 
 Content-addressing keeps earning its place here — dedup across versions, restore as a
-copy, and the analysis-reuse that falls out of identical bytes — it just stops being the
-namespace.
+copy, analysis reuse for identical bytes — it just stops being the namespace.
 
 ## Identity and links
 
-Node GUIDs stay, because `[@Title](node://id)` mentions and backlinks depend on them and
-because path-as-identity breaks every link the first time someone reorganizes a folder in
-their file manager.
+Node GUIDs stay, because `[@Title](node://id)` mentions and backlinks depend on them, and
+because path-as-identity breaks every link the first time someone reorganizes a folder.
 
 The GUID is recorded on disk — frontmatter for Markdown, `meta.json` otherwise — and
-assigned on first index for files that have never been seen. A file that arrives with no
-id gets one; a file that moves keeps the one it has.
+assigned on first index for files never seen before. A file that arrives with no id gets
+one; a file that moves keeps the one it has.
 
-When a path changes behind Gatherum's back, identity is recovered in this order: id in
-frontmatter or manifest, then content hash matched against the last known index, then
-treated as a new node. The content-hash step is what turns an external
-`mv` from "delete plus create" — which would orphan every inbound link — into a move.
-The CAS earning its keep in its new role.
+When a path changes behind Gatherum's back, identity is recovered in order: recorded id,
+then content hash matched against the last known index, then treated as new. Because
+external edits are the exception rather than the workflow, the recorded id carries almost
+every case and the content-hash step is a safety net rather than a load-bearing mechanism.
 
 ## External changes
 
-The point of the design is that people edit these directories outside Gatherum, so
-Gatherum has to notice:
+Files are expected to change through the application. External edits should be survived,
+not courted, which makes this much smaller than it would otherwise be:
 
-- A `FileSystemWatcher` per root, debounced, feeding the same indexing path as upload.
-- A reconciliation scan at startup for everything that changed while the process was down.
-- Rename and move detection per the identity rules above.
-- In-app saves marked so the watcher does not reindex Gatherum's own writes.
-
-This is the largest new subsystem and the one most likely to produce subtle bugs. It is
-also the last stage of the plan, because everything before it is useful without it.
+- **Reconciliation on startup is the primary mechanism.** Scan the roots, compare against
+  the index, apply what changed. This is the same code path as `reindex` and it is needed
+  for cold-start recovery regardless, so it costs nothing extra.
+- **A debounced `FileSystemWatcher` per root is a best-effort convenience** on top, not a
+  correctness requirement. If it misses an event, the next startup scan catches it.
+- **In-app writes are marked** so Gatherum does not reindex its own saves.
+- **Nothing external is ever destroyed to resolve a discrepancy.** Where the index and the
+  disk disagree, the disk wins and the index yields; where that would lose in-app state
+  (a version chain whose head no longer matches the file), the file is taken as a new
+  version rather than a correction, and it is logged.
 
 ## What this costs
 
-Honest ledger of what gets worse:
-
-- **Dedup across nodes disappears.** Two users with the same 2 GB video pay twice, and
-  pay for two transcriptions rather than reusing one by hash. Acceptable for a
-  two-person instance; worth knowing it was a real property being spent.
-- **Writes stop being idempotent.** `SaveAsync` currently makes a duplicate upload a
-  no-op by construction. Path-addressed writes need real conflict handling.
-- **Path traversal becomes a live concern.** `PathFor`'s 64-hex-character validation made
-  escaping the root structurally impossible. User-controlled names and symlinks are a new
-  attack surface that has to be closed deliberately (see the invariants under Sharing).
-- **The tree stops being one directory.** A node shared from Alice to Bob appears in
-  Bob's tree while living in Alice's directory, so the rendered tree is a union of "my
-  root" and "shared with me" — which `Node.ParentId` and `GetTreeAsync` cannot express
-  today.
-- **Filesystem naming rules reach the user**, mitigated but not erased by title overrides.
+- **Dedup across nodes disappears.** Two users with the same 2 GB video pay twice, and pay
+  for two transcriptions rather than reusing one by hash. Acceptable for a two-person
+  instance; worth knowing a real property is being spent.
+- **Writes stop being idempotent.** `SaveAsync` currently makes a duplicate upload a no-op
+  by construction. Path-addressed writes need real conflict handling.
+- **Path traversal becomes a live concern.** `PathFor`'s 64-hex validation made escaping
+  the root structurally impossible. User-controlled names and symlinks are new attack
+  surface, closed deliberately by the realpath rule above.
+- **Anonymous traffic is new.** Public nodes mean unauthenticated readers, which means
+  rate limiting, abuse handling, and a much lower tolerance for a visibility bug.
+- **The tree stops being one directory**, as ownership and access come apart.
+- **Filesystem naming rules reach the user**, mitigated but not erased by overrides.
 
 ## Standing rules this amends
 
-`AGENT.md`'s "Rules that don't bend" describes the current architecture and will need
-updating when this lands:
+`AGENT.md`'s "Rules that don't bend" describes the current architecture and needs updating
+as stages land:
 
 - *"every node's content is a file version in content-addressed storage"* → content is a
   file at a path; the CAS holds history.
-- *"Two trees, and only two"* → still two, but the node tree is now the directory tree,
-  and it is a union view per user rather than a single global tree.
+- *"Two trees, and only two"* → still two, but the node tree is the directory tree, viewed
+  per user as a union of owned and shared-in.
+- *"Auth is OIDC-only"* → still true for identity; anonymous read of public nodes is not
+  identity and grants nothing.
 - *"Don't add interfaces without a stated second implementation"* → `IFileStorage` is
-  replaced rather than joined; the second implementation is the point.
+  replaced rather than joined; the replacement is the point.
 
 ## Plan
 
-Each stage is shippable on its own and ordered so the payoff arrives before the risk.
+Each stage is shippable alone, ordered so the payoff arrives before the risk. No migration
+work anywhere: nothing is deployed, so each stage may rebuild the schema and re-scan from
+disk.
 
 1. **Path-shaped storage.** Replace `IFileStorage` with a path-addressed seam; user roots;
-   the CAS moves to `.gatherum/versions/`. No user-visible change — the test is that the
-   existing suite passes with bytes living at readable paths.
+   CAS moves to `.gatherum/versions/`; migrations squashed to a fresh `Initial`. No
+   user-visible change — the existing suite passing against readable paths is the test.
 2. **Metadata sidecar + reindex.** Frontmatter and `meta.json`, filename-as-title with
-   overrides, ids on disk, and `gatherum reindex` rebuilding the database from a cold scan.
-   **The original motivation is retired here**: at the end of this stage, losing the
-   database costs nothing but recomputation.
-3. **Sharing.** Three states, grants with roles, additive inheritance, the two authority
-   invariants, the anonymous switch, and the visibility-preserving migration.
-4. **Union tree.** "Shared with me" as a first-class part of the tree, in the UI, the API,
-   and MCP.
-5. **External change watching.** Watcher, startup reconciliation, rename detection,
-   self-write suppression.
+   overrides, ids on disk, ownership from path, and `gatherum reindex` rebuilding the
+   database from a cold scan. **The original motivation is retired here**: at the end of
+   this stage, losing the database costs only recomputation.
+3. **Sharing model.** Three states, grants with roles, additive inheritance, the authority
+   rule, and `VisibleTo` widened to `Guid?`.
+4. **Public on the internet.** Anonymous read path, the narrow surface above, rate
+   limiting, and the publishing affordance in the UI.
+5. **Union tree.** "Shared with me" as a first-class part of the tree in UI, API, and MCP.
+6. **External change reconciliation.** Startup scan hardening, the watcher, rename
+   detection, self-write suppression.
 
-Stages 1–2 are the ones that matter most and carry the least risk. Stage 5 is where the
-bugs live.
+Stages 1–2 carry the most value and the least risk. Stage 4 is where a mistake is most
+expensive, which is why it is separated from 3 rather than folded into it: the model
+should be correct and tested before anything is reachable without a login.
