@@ -156,6 +156,143 @@ public class NodeServiceTests(PostgresFixture postgres) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_shared_node_reaches_the_other_users_tree_from_inside_its_owners()
+    {
+        // Ownership is the path, so a shared node stays in jess's subtree and shows up in
+        // sam's listing with a parent sam cannot see. Anything drawing a tree by walking
+        // down from a null parent would never reach it.
+        var mine = await NewPageAsync(jess, null, "Homelab");
+        var shared = await NewPageAsync(jess, mine.Id, "Podman");
+        await harness.Access.GrantAsync(jess, shared.Id, sam, AccessRole.Reader);
+
+        var samsTree = await nodes.GetTreeAsync(sam);
+        var entry = Assert.Single(samsTree);
+        Assert.Equal(shared.Id, entry.Id);
+        Assert.False(entry.Owned);
+        // Its parent is real and invisible, which is what the grouping has to cope with.
+        Assert.Equal(mine.Id, entry.ParentId);
+        Assert.DoesNotContain(samsTree, n => n.Id == mine.Id);
+
+        Assert.All(await nodes.GetTreeAsync(jess), n => Assert.True(n.Owned));
+    }
+
+    [Fact]
+    public async Task The_owner_can_list_take_back_and_change_what_they_granted()
+    {
+        var page = await NewPageAsync(jess, null, "Notes");
+        await harness.Access.GrantAsync(jess, page.Id, sam, AccessRole.Reader);
+
+        var granted = Assert.Single(await harness.Access.ListGrantsAsync(jess, page.Id));
+        Assert.Equal(sam, granted.UserId);
+        Assert.Equal(AccessRole.Reader, granted.Role);
+
+        // A reader cannot write, and granting again is how the role is changed.
+        await Assert.ThrowsAsync<Gatherum.Core.ForbiddenException>(
+            () => files.SaveTextAsync(sam, page.Id, "no"));
+        await harness.Access.GrantAsync(jess, page.Id, sam, AccessRole.Editor);
+        await files.SaveTextAsync(sam, page.Id, "yes");
+
+        // Only the owner may read the list back.
+        await Assert.ThrowsAsync<Gatherum.Core.ForbiddenException>(
+            () => harness.Access.ListGrantsAsync(sam, page.Id));
+
+        await harness.Access.RevokeAsync(jess, page.Id, sam);
+        Assert.Empty(await harness.Access.ListGrantsAsync(jess, page.Id));
+        Assert.Empty(await nodes.GetTreeAsync(sam));
+    }
+
+    [Fact]
+    public async Task An_editor_may_change_the_content_and_not_the_filing()
+    {
+        var page = await NewPageAsync(jess, null, "Notes");
+        await harness.Access.GrantAsync(jess, page.Id, sam, AccessRole.Editor);
+
+        // What an editor was given: the document.
+        await files.SaveTextAsync(sam, page.Id, "rewritten by sam");
+        await categories.AddAsync(sam, page.Id, "Homelab");
+
+        // Not the filing cabinet. Ownership is the path, so these move files around
+        // inside jess's directory.
+        await Assert.ThrowsAsync<Gatherum.Core.ForbiddenException>(
+            () => nodes.RenameAsync(sam, page.Id, "sam's now"));
+        await Assert.ThrowsAsync<Gatherum.Core.ForbiddenException>(
+            () => nodes.DeleteAsync(sam, page.Id));
+        await Assert.ThrowsAsync<Gatherum.Core.ForbiddenException>(
+            () => nodes.MoveAsync(sam, page.Id, null));
+
+        Assert.Equal("Notes", (await nodes.GetWithBodyAsync(jess, page.Id)).Title);
+    }
+
+    [Fact]
+    public async Task A_reader_cannot_write_by_any_door()
+    {
+        var page = await NewPageAsync(jess, null, "Notes");
+        await harness.Access.GrantAsync(jess, page.Id, sam, AccessRole.Reader);
+
+        // Being able to see a node has never been the same as being allowed to change it.
+        await Assert.ThrowsAsync<Gatherum.Core.ForbiddenException>(
+            () => files.SaveTextAsync(sam, page.Id, "no"));
+        await Assert.ThrowsAsync<Gatherum.Core.ForbiddenException>(
+            () => files.SetDescriptionAsync(sam, page.Id, "no"));
+        await Assert.ThrowsAsync<Gatherum.Core.ForbiddenException>(
+            () => files.RestoreVersionAsync(sam, page.Id, 1));
+        await Assert.ThrowsAsync<Gatherum.Core.ForbiddenException>(
+            () => categories.AddAsync(sam, page.Id, "Homelab"));
+
+        // And reading still works, which is the whole of what they were given.
+        Assert.Equal("Notes", (await nodes.GetWithBodyAsync(sam, page.Id)).Title);
+    }
+
+    [Fact]
+    public async Task Unlisted_is_reachable_by_link_and_absent_from_every_listing()
+    {
+        var unlisted = await NewPageAsync(jess, null, "Half-written thoughts");
+        await files.SaveTextAsync(jess, unlisted.Id, "the closet gets hot");
+        var listed = await NewPageAsync(jess, null, "Published");
+        await harness.Access.SetAccessAsync(jess, listed.Id, AccessMode.Public);
+        await harness.Access.SetAccessAsync(jess, unlisted.Id, AccessMode.Unlisted);
+        await harness.EmbedStaleAsync();
+
+        // Reachable by anyone holding the id — signed in as somebody else, or nobody.
+        Assert.Equal("Half-written thoughts", (await nodes.GetWithBodyAsync(sam, unlisted.Id)).Title);
+        Assert.Equal("Half-written thoughts", (await nodes.GetWithBodyAsync(null, unlisted.Id)).Title);
+
+        // And in no listing that would have handed the id out.
+        Assert.Equal([listed.Id], (await nodes.GetTreeAsync(null)).Select(n => n.Id));
+        Assert.DoesNotContain(await nodes.GetTreeAsync(sam), n => n.Id == unlisted.Id);
+        Assert.DoesNotContain(await harness.Search.SearchAsync(null, "closet"),
+            hit => hit.Id == unlisted.Id);
+        Assert.DoesNotContain(await harness.Search.SearchAsync(sam, "closet"),
+            hit => hit.Id == unlisted.Id);
+        Assert.DoesNotContain("Half-written thoughts",
+            (await nodes.ResolveTitlesAsync(null, ["Half-written thoughts"])).Keys);
+
+        // Its owner still sees it everywhere, which is the point of the distinction:
+        // unlisted hides it from people who do not already have access another way.
+        Assert.Contains(await nodes.GetTreeAsync(jess), n => n.Id == unlisted.Id);
+        Assert.Contains(await harness.Search.SearchAsync(jess, "closet"),
+            hit => hit.Id == unlisted.Id);
+    }
+
+    [Fact]
+    public async Task An_unlisted_child_of_a_published_directory_is_still_published()
+    {
+        // Reach is additive downward like grants are, so declaring a child *less* open
+        // than what contains it does nothing on its own — inherit:false is that gesture.
+        var directory = await NewPageAsync(jess, null, "Published");
+        var inside = await NewPageAsync(jess, directory.Id, "Inside");
+        await harness.Access.SetAccessAsync(jess, directory.Id, AccessMode.Public);
+        await harness.Access.SetAccessAsync(jess, inside.Id, AccessMode.Unlisted);
+
+        Assert.Contains(await nodes.GetTreeAsync(null), n => n.Id == inside.Id);
+
+        await harness.Access.SetAccessAsync(jess, inside.Id, AccessMode.Unlisted, inherit: false);
+
+        Assert.DoesNotContain(await nodes.GetTreeAsync(null), n => n.Id == inside.Id);
+        Assert.Equal("Inside", (await nodes.GetWithBodyAsync(null, inside.Id)).Title);
+    }
+
+    [Fact]
     public async Task Turning_public_sharing_off_hides_public_nodes_at_once()
     {
         var page = await NewPageAsync(jess, null, "published");
@@ -163,6 +300,7 @@ public class NodeServiceTests(PostgresFixture postgres) : IAsyncLifetime
         Assert.Single(await nodes.GetTreeAsync(null));
 
         harness.Settings.Value.Sharing.AllowPublic = false;
+
 
         // Immediate, and without rewriting anything the owner recorded: the node still
         // says it is public, and nothing anonymous can reach it.

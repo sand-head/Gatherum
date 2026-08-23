@@ -16,3 +16,14 @@
 
 label { font-size: 13px; font-weight: 500; color: var(--on-surface-dim); }
 select { width: 100%; }
+
+/* Somebody else's, kept apart from your own tree rather than mixed into it. */
+.tree-group {
+    margin: 1rem 0 0.35rem;
+    padding: 0 0.5rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--on-surface-dim);
+}

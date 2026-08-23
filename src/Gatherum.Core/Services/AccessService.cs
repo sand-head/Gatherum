@@ -77,6 +77,19 @@ public class AccessService(GatherumDbContext db, TimeProvider clock, NodeMetadat
         await sidecar.WriteAsync(nodeId, ct);
     }
 
+    /// <summary>Who this node is shared with by name — the owner's own declarations, not
+    /// the inherited closure, because these are what the owner can take back here.</summary>
+    public async Task<List<NodeGrant>> ListGrantsAsync(Guid userId, Guid nodeId,
+        CancellationToken ct = default)
+    {
+        await RequireOwnedAsync(userId, nodeId, ct);
+        return await db.NodeGrants
+            .Include(g => g.User)
+            .Where(g => g.NodeId == nodeId)
+            .OrderBy(g => g.User!.DisplayName)
+            .ToListAsync(ct);
+    }
+
     /// <summary>Rebuilds the closure for the whole tree. Called after anything that can
     /// move access around — a declaration, a grant, a move, a reindex. Whole-tree because
     /// Gatherum is a knowledge base for two people and a correct answer beats a clever
@@ -89,16 +102,20 @@ public class AccessService(GatherumDbContext db, TimeProvider clock, NodeMetadat
         var children = nodes.ToLookup(n => n.ParentId);
 
         var wanted = new Dictionary<(Guid Node, Guid User), AccessRole>();
-        var pending = new Stack<(Node Node, bool Public, Dictionary<Guid, AccessRole> Inherited)>(
-            children[null].Select(n => (n, false, new Dictionary<Guid, AccessRole>())));
+        var pending = new Stack<(Node Node, NodeReach Inherited, Dictionary<Guid, AccessRole> Grants)>(
+            children[null].Select(n => (n, NodeReach.None, new Dictionary<Guid, AccessRole>())));
 
         while (pending.Count > 0)
         {
-            var (node, inheritedPublic, inherited) = pending.Pop();
+            var (node, inheritedReach, inherited) = pending.Pop();
             var carried = node.InheritAccess ? inherited : [];
 
-            node.EffectivePublic = node.Access == AccessMode.Public
-                || (node.InheritAccess && inheritedPublic);
+            // Reach is additive downward like the grants are, so it is a maximum: a page
+            // inside a published directory is published, and inherit:false is how a
+            // subtree stays tighter than what contains it.
+            node.Reach = node.InheritAccess
+                ? (NodeReach)Math.Max((int)node.Access.Reach(), (int)inheritedReach)
+                : node.Access.Reach();
 
             var effective = new Dictionary<Guid, AccessRole>(carried);
             foreach (var grant in grants[node.Id])
@@ -115,7 +132,7 @@ public class AccessService(GatherumDbContext db, TimeProvider clock, NodeMetadat
                 wanted[(node.Id, user)] = role;
 
             foreach (var child in children[node.Id])
-                pending.Push((child, node.EffectivePublic, effective));
+                pending.Push((child, node.Reach, effective));
         }
 
         foreach (var entry in existing)

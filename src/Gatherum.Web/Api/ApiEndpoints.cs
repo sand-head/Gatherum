@@ -132,6 +132,15 @@ public static class ApiEndpoints
             return Results.NoContent();
         });
 
+        api.MapGet("/nodes/{id:guid}/grants", async (AccessService access, HttpContext http,
+            Guid id) => Results.Ok((await access.ListGrantsAsync(http.User.GetUserId(), id))
+                .Select(GrantDto.From)));
+
+        // Who there is to share with. Names and ids only, and only for somebody already
+        // signed in — a list of the people on an instance is not public.
+        api.MapGet("/users", async (UserService users) =>
+            Results.Ok((await users.ListAsync()).Select(UserDto.From)));
+
         api.MapPost("/nodes/{id:guid}/grants", async (AccessService access, HttpContext http,
             Guid id, GrantRequest request) =>
         {

@@ -103,11 +103,11 @@ public record SimilarDto(Guid Id, string Kind, string Title)
 }
 
 public record TreeNodeDto(Guid Id, Guid? ParentId, string Title, string MediaType, string Kind,
-    int Position, string Access, bool IsPublic, bool Owned)
+    int Position, string Access, string Reach, bool Owned)
 {
     public static TreeNodeDto From(TreeNode node) => new(node.Id, node.ParentId, node.Title,
         node.MediaType, node.Kind.ToString(), node.Position, node.Access.ToString(),
-        node.IsPublic, node.Owned);
+        node.Reach.ToString(), node.Owned);
 }
 
 public record VersionDto(int Number, string FileName, string MediaType, long SizeBytes,
@@ -150,5 +150,16 @@ public record CreateKeyRequest(string Name);
 public record SetAccessRequest(string Access, bool Inherit = true);
 
 public record GrantRequest(Guid UserId, string Role);
+
+public record GrantDto(Guid UserId, string DisplayName, string Username, string Role)
+{
+    public static GrantDto From(NodeGrant grant) => new(grant.UserId,
+        grant.User?.DisplayName ?? "", grant.User?.Username ?? "", grant.Role.ToString());
+}
+
+public record UserDto(Guid Id, string DisplayName, string Username)
+{
+    public static UserDto From(User user) => new(user.Id, user.DisplayName, user.Username);
+}
 public record DescriptionRequest(string Description);
 public record PresenceDto(IReadOnlyList<string> Editors, int HeadVersion);

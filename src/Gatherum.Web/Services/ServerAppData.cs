@@ -16,7 +16,7 @@ public sealed class ServerAppData(
 {
     public async Task<EditorPayload> LoadAsync(Guid nodeId)
     {
-        var userId = await UserIdAsync();
+        var userId = await ViewerIdAsync();
         var head = await ops.Files(s => s.GetHeadVersionAsync(userId, nodeId));
         var text = await ops.Files(s => s.GetTextAsync(userId, nodeId));
         return new EditorPayload(text, head);
@@ -31,7 +31,7 @@ public sealed class ServerAppData(
 
     public async Task<BytesPayload> LoadBytesAsync(Guid nodeId)
     {
-        var userId = await UserIdAsync();
+        var userId = await ViewerIdAsync();
         var head = await ops.Files(s => s.GetHeadVersionAsync(userId, nodeId));
         var content = await ops.Files(s => s.OpenContentAsync(userId, nodeId));
         await using (content.Stream)
@@ -63,7 +63,7 @@ public sealed class ServerAppData(
 
     public async Task<IReadOnlyList<SearchHit>> SearchAsync(string query, int limit)
     {
-        var userId = await UserIdAsync();
+        var userId = await ViewerIdAsync();
         var results = await ops.Search(s => s.SearchAsync(userId, query, limit: limit));
         return results
             .Select(r => new SearchHit(r.Id, r.Kind.ToString(), r.Title, r.Snippet))
@@ -73,7 +73,7 @@ public sealed class ServerAppData(
     public async Task<IReadOnlyDictionary<string, Guid>> ResolveTitlesAsync(
         IReadOnlyList<string> titles)
     {
-        var userId = await UserIdAsync();
+        var userId = await ViewerIdAsync();
         return await ops.Nodes(s => s.ResolveTitlesAsync(userId, titles));
     }
 
@@ -100,11 +100,11 @@ public sealed class ServerAppData(
 
     public async Task<IReadOnlyList<TreeNodeInfo>> GetTreeAsync()
     {
-        var userId = await UserIdAsync();
+        var userId = await ViewerIdAsync();
         var tree = await ops.Nodes(s => s.GetTreeAsync(userId));
         return tree
             .Select(n => new TreeNodeInfo(n.Id, n.ParentId, n.Title, n.MediaType,
-                n.Kind.ToString(), n.Position, n.Access.ToString(), n.IsPublic, n.Owned))
+                n.Kind.ToString(), n.Position, n.Access.ToString(), n.Reach.ToString(), n.Owned))
             .ToList();
     }
 
@@ -149,6 +149,22 @@ public sealed class ServerAppData(
         await ops.Access(s => s.SetAccessAsync(userId, nodeId, mode));
     }
 
+    public async Task<IReadOnlyList<GrantInfo>> ListGrantsAsync(Guid nodeId)
+    {
+        var actor = await UserIdAsync();
+        var grants = await ops.Access(s => s.ListGrantsAsync(actor, nodeId));
+        return grants
+            .Select(g => new GrantInfo(g.UserId, g.User?.DisplayName ?? "",
+                g.User?.Username ?? "", g.Role.ToString()))
+            .ToList();
+    }
+
+    public async Task<IReadOnlyList<PersonInfo>> ListPeopleAsync()
+    {
+        var people = await ops.Users(s => s.ListAsync());
+        return people.Select(u => new PersonInfo(u.Id, u.DisplayName, u.Username)).ToList();
+    }
+
     public async Task ShareAsync(Guid nodeId, Guid userId, string role)
     {
         var actor = await UserIdAsync();
@@ -164,7 +180,7 @@ public sealed class ServerAppData(
 
     public async Task<NodeInfo> GetNodeAsync(Guid nodeId)
     {
-        var userId = await UserIdAsync();
+        var userId = await ViewerIdAsync();
         var node = await ops.Nodes(s => s.GetWithBodyAsync(userId, nodeId));
         var file = node.File is { Versions.Count: > 0 } body
             ? new FileFacts(body.Current.FileName, body.Current.MediaType,
@@ -183,14 +199,14 @@ public sealed class ServerAppData(
 
     public async Task<IReadOnlyList<RelatedInfo>> GetSimilarAsync(Guid nodeId, int limit)
     {
-        var userId = await UserIdAsync();
+        var userId = await ViewerIdAsync();
         var similar = await ops.Nodes(s => s.GetSimilarAsync(userId, nodeId, limit));
         return similar.Select(s => new RelatedInfo(s.Id, s.Kind.ToString(), s.Title)).ToList();
     }
 
     public async Task<IReadOnlyList<CategoryInfo>> ListCategoriesAsync(string? matching = null)
     {
-        var userId = await UserIdAsync();
+        var userId = await ViewerIdAsync();
         var categories = await ops.Categories(s => s.ListAsync(userId, matching));
         return categories
             .Select(c => new CategoryInfo(c.Path, c.Name, c.ParentPath, c.Members,
@@ -221,7 +237,7 @@ public sealed class ServerAppData(
 
     public async Task<IReadOnlyList<VersionInfo>> GetVersionsAsync(Guid nodeId)
     {
-        var userId = await UserIdAsync();
+        var userId = await ViewerIdAsync();
         var node = await ops.Nodes(s => s.GetWithBodyAsync(userId, nodeId));
         return (node.File?.Versions ?? [])
             .OrderByDescending(v => v.Number)
@@ -232,7 +248,7 @@ public sealed class ServerAppData(
 
     public async Task<string> GetVersionTextAsync(Guid nodeId, int number)
     {
-        var userId = await UserIdAsync();
+        var userId = await ViewerIdAsync();
         var content = await ops.Files(s => s.OpenContentAsync(userId, nodeId, number));
         await using (content.Stream)
         {
@@ -282,6 +298,14 @@ public sealed class ServerAppData(
         await ops.Keys(s => s.RevokeAsync(userId, keyId));
     }
 
+    /// <summary>The signed-in user, for anything that writes. Anonymous callers have no
+    /// business here and get an exception rather than a silent no-op.</summary>
     private async Task<Guid> UserIdAsync() =>
         (await authentication.GetAuthenticationStateAsync()).User.GetUserId();
+
+    /// <summary>Who is looking, or null for somebody who has not signed in. Reads take
+    /// this so a public page renders for a stranger, and the authorizer decides the rest —
+    /// the same nullable that already runs through every service beneath here.</summary>
+    private async Task<Guid?> ViewerIdAsync() =>
+        (await authentication.GetAuthenticationStateAsync()).User.GetUserIdOrNull();
 }

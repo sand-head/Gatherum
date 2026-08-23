@@ -319,6 +319,70 @@ public class AppIntegrationTests(PostgresFixture postgres) : IAsyncLifetime
             && response.Headers.Location?.OriginalString.Contains("/auth/login") == true;
 
     [Fact]
+    public async Task A_stranger_can_read_a_published_page_in_a_browser()
+    {
+        // The half that was missing: publishing worked for curl against /api and not for
+        // a person following a link, which is close to the opposite of the point.
+        var page = (await (await client.PostAsJsonAsync("/api/pages",
+            new { title = "Published", markdown = "the closet gets hot" }))
+            .Content.ReadFromJsonAsync<NodeDto>())!;
+        var draft = (await (await client.PostAsJsonAsync("/api/pages",
+            new { title = "Draft", markdown = "not yet" })).Content.ReadFromJsonAsync<NodeDto>())!;
+        await client.PostAsJsonAsync($"/api/nodes/{page.Id}/access", new { access = "Public" });
+
+        using var anonymous = factory.CreateClient(
+            new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        var read = await anonymous.GetAsync($"/nodes/{page.Id}");
+        Assert.Equal(HttpStatusCode.OK, read.StatusCode);
+        var html = await read.Content.ReadAsStringAsync();
+        Assert.Contains("Published", html);
+        // Signed out means read-only, whatever the node says.
+        Assert.DoesNotContain($"/nodes/{page.Id}?edit", html);
+        Assert.Contains("/auth/login", html);
+
+        // The front door lists it, and lists nothing else.
+        var home = await anonymous.GetAsync("/");
+        Assert.Equal(HttpStatusCode.OK, home.StatusCode);
+        var index = await home.Content.ReadAsStringAsync();
+        Assert.Contains($"/nodes/{page.Id}", index);
+        Assert.DoesNotContain($"/nodes/{draft.Id}", index);
+
+        // And the unpublished one stays shut.
+        var refused = await anonymous.GetAsync($"/nodes/{draft.Id}");
+        Assert.Equal(HttpStatusCode.OK, refused.StatusCode);
+        Assert.Contains("doesn\u0027t exist", await refused.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task An_unlisted_page_opens_from_its_link_and_appears_in_no_index()
+    {
+        var unlisted = (await (await client.PostAsJsonAsync("/api/pages",
+            new { title = "Half-written", markdown = "not ready to announce" }))
+            .Content.ReadFromJsonAsync<NodeDto>())!;
+        await client.PostAsJsonAsync($"/api/nodes/{unlisted.Id}/access", new { access = "Unlisted" });
+
+        using var anonymous = factory.CreateClient(
+            new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        // The link is the permission.
+        var read = await anonymous.GetAsync($"/nodes/{unlisted.Id}");
+        Assert.Equal(HttpStatusCode.OK, read.StatusCode);
+        var html = await read.Content.ReadAsStringAsync();
+        Assert.Contains("Half-written", html);
+        // A crawler arriving by a leaked referrer must not publish what a link shared.
+        Assert.Contains("noindex", html);
+
+        // And nothing hands that link out.
+        Assert.DoesNotContain($"/nodes/{unlisted.Id}",
+            await (await anonymous.GetAsync("/")).Content.ReadAsStringAsync());
+        Assert.DoesNotContain(unlisted.Id.ToString(),
+            await anonymous.GetStringAsync("/api/nodes/tree"));
+        Assert.Empty((await anonymous.GetFromJsonAsync<List<SearchResultDto>>(
+            "/api/search?query=announce"))!);
+    }
+
+    [Fact]
     public void Without_an_identity_provider_the_app_refuses_to_start_outside_development()
     {
         // The development auto-login signs in whoever asks, without authenticating them.

@@ -71,12 +71,30 @@ public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeP
         authorizer.VisibleTo(db.Nodes, userId)
             .OrderBy(n => n.ParentId).ThenBy(n => n.Position)
             .Select(n => new TreeNode(n.Id, n.ParentId, n.Title, n.MediaType, n.Position,
-                n.Access, n.EffectivePublic, userId != null && n.OwnerId == userId))
+                n.Access, n.Reach, userId != null && n.OwnerId == userId))
             .ToListAsync(ct);
+
+    /// <summary>Content writes: the owner, or somebody granted Editor. Seeing a node has
+    /// never been the same as being allowed to change it, and Reader means Reader.</summary>
+    public void EnsureEditable(Node node, Guid? userId)
+    {
+        if (!authorizer.CanEdit(node, userId))
+            throw new ForbiddenException($"Node {node.Id} is not yours to change.");
+    }
+
+    /// <summary>Structural changes — renaming, moving, deleting — are the owner's alone.
+    /// Ownership is the path, so these move files around inside somebody's directory, and
+    /// an editor was given a document rather than a filing cabinet.</summary>
+    public static void EnsureOwner(Node node, Guid? userId)
+    {
+        if (userId is not { } id || node.OwnerId != id)
+            throw new ForbiddenException($"Only the owner can restructure node {node.Id}.");
+    }
 
     public async Task RenameAsync(Guid? userId, Guid nodeId, string title, CancellationToken ct = default)
     {
         var node = await GetVisibleAsync(userId, nodeId, ct);
+        EnsureOwner(node, userId);
         node.Title = title;
         node.UpdatedAt = clock.GetUtcNow();
         await db.SaveChangesAsync(ct);
@@ -86,6 +104,7 @@ public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeP
         CancellationToken ct = default)
     {
         var node = await GetVisibleAsync(userId, nodeId, ct);
+        EnsureOwner(node, userId);
         if (newParentId is { } parentId)
         {
             var parent = await GetVisibleAsync(userId, parentId, ct);
@@ -113,6 +132,7 @@ public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeP
     public async Task DeleteAsync(Guid? userId, Guid nodeId, CancellationToken ct = default)
     {
         var node = await GetVisibleAsync(userId, nodeId, ct);
+        EnsureOwner(node, userId);
         db.Nodes.Remove(node);
         var siblings = await SiblingsAsync(node.ParentId, ct);
         siblings.Remove(node);
@@ -315,7 +335,7 @@ public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeP
 }
 
 public record TreeNode(Guid Id, Guid? ParentId, string Title, string MediaType, int Position,
-    AccessMode Access, bool IsPublic, bool Owned)
+    AccessMode Access, NodeReach Reach, bool Owned)
 {
     public NodeKind Kind => MediaType == MediaTypes.Markdown ? NodeKind.Page : NodeKind.File;
 }

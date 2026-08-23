@@ -45,8 +45,8 @@ public class GatherumDbContext(DbContextOptions<GatherumDbContext> options)
             node.Property(n => n.RelativePath).HasMaxLength(1024);
             // Ownership is the path, so a path is unique within the root that owns it.
             node.HasIndex(n => new { n.OwnerId, n.RelativePath });
-            // The anonymous predicate: public nodes and nothing else.
-            node.HasIndex(n => n.EffectivePublic);
+            // What every visibility query filters on, for both of its questions.
+            node.HasIndex(n => n.Reach);
             node.Property(n => n.SearchVector)
                 .HasComputedColumnSql(
                     """

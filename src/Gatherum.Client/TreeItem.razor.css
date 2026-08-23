@@ -55,7 +55,7 @@
 }
 
 ::deep .tree-link.active .node-icon,
-::deep .tree-link.active .node-private { color: var(--on-selected); }
+::deep .tree-link.active .node-badge { color: var(--on-selected); }
 
 .node-icon {
     display: grid;
@@ -70,11 +70,42 @@
     white-space: nowrap;
 }
 
-.node-private {
+/* Private wears no badge — it is the default. These three are the exceptions:
+   shared with somebody, reachable by link, or out on the internet. */
+.node-public,
+.node-unlisted,
+.node-shared,
+.node-foreign {
     display: grid;
     place-items: center;
     color: var(--on-surface-dim);
     flex-shrink: 0;
+}
+
+.node-public { color: var(--accent, currentColor); }
+
+.node-foreign {
+    font-size: 0.75rem;
+    line-height: 1;
+}
+
+/* The three reach states, named rather than cycled, with the current one marked. */
+.menu-group {
+    display: flex;
+    flex-direction: column;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    margin: 0.25rem 0;
+}
+
+.menu-group button.chosen {
+    font-weight: 600;
+}
+
+.menu-group button.chosen::after {
+    content: "✓";
+    margin-left: auto;
+    padding-left: 0.75rem;
 }
 
 .row-menu {

@@ -71,7 +71,7 @@ public class FileService(
         await gate.WaitAsync(ct);
         try
         {
-            var node = await RequireFileNodeAsync(userId, nodeId, ct);
+            var node = await RequireEditableFileNodeAsync(userId, nodeId, ct);
             var mediaType = MediaTypes.Resolve(declaredMediaType, fileName);
             var version = await AddUploadedVersionAsync(node, userId, fileName, mediaType, content, ct);
             node.MediaType = mediaType;
@@ -95,7 +95,7 @@ public class FileService(
         await gate.WaitAsync(ct);
         try
         {
-            var node = await RequireFileNodeAsync(userId, nodeId, ct);
+            var node = await RequireEditableFileNodeAsync(userId, nodeId, ct);
             if (!MediaTypes.IsText(node.MediaType, node.File!.Current.FileName))
                 throw new ForbiddenException($"Node {nodeId} is not editable text.");
 
@@ -151,7 +151,7 @@ public class FileService(
         await gate.WaitAsync(ct);
         try
         {
-            var node = await RequireFileNodeAsync(userId, nodeId, ct);
+            var node = await RequireEditableFileNodeAsync(userId, nodeId, ct);
             if (node.MediaType != MediaTypes.Docx)
                 throw new ForbiddenException($"Node {nodeId} is not an editable document.");
 
@@ -208,7 +208,7 @@ public class FileService(
         await gate.WaitAsync(ct);
         try
         {
-            var node = await RequireFileNodeAsync(userId, nodeId, ct);
+            var node = await RequireEditableFileNodeAsync(userId, nodeId, ct);
             var version = node.File!.Versions.FirstOrDefault(v => v.Number == versionNumber)
                 ?? throw new NotFoundException($"Version {versionNumber} of node {nodeId} not found.");
 
@@ -351,7 +351,7 @@ public class FileService(
     public async Task SetDescriptionAsync(Guid userId, Guid nodeId, string description,
         CancellationToken ct = default)
     {
-        var node = await RequireFileNodeAsync(userId, nodeId, ct);
+        var node = await RequireEditableFileNodeAsync(userId, nodeId, ct);
         node.File!.Description = description;
         node.UpdatedAt = clock.GetUtcNow();
         nodes.RefreshSearchText(node);
@@ -391,6 +391,16 @@ public class FileService(
         {
             return await reader.ReadToEndAsync(ct);
         }
+    }
+
+    /// <summary>The write path's door. Same lookup, plus the question reads never ask:
+    /// may this person change it. Reader means Reader.</summary>
+    private async Task<Node> RequireEditableFileNodeAsync(Guid? userId, Guid nodeId,
+        CancellationToken ct)
+    {
+        var node = await RequireFileNodeAsync(userId, nodeId, ct);
+        nodes.EnsureEditable(node, userId);
+        return node;
     }
 
     private async Task<Node> RequireFileNodeAsync(Guid? userId, Guid nodeId, CancellationToken ct)

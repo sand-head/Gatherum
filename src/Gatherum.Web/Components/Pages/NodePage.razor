@@ -1,5 +1,9 @@
 @page "/nodes/{Id:guid}"
 @inherits GatherumComponent
+@using Microsoft.AspNetCore.Authorization
+@* A node can be public or unlisted, so this page has to answer somebody with no session.
+   What they are allowed to see is the authorizer's decision, not this page's. *@
+@attribute [AllowAnonymous]
 @inject AppOperations Ops
 @using Gatherum.Core.Domain
 @using Gatherum.Client
@@ -12,9 +16,19 @@
 else if (node is not null)
 {
     <PageTitle>@node.Title — Gatherum</PageTitle>
+    @if (node.Reach == NodeReach.WithLink)
+    {
+        @* Unlisted means the link is the permission, and a search engine that finds the
+           link would hand it to everybody. Nothing here links to it, but a crawler can
+           arrive by way of somebody else's page or a leaked referrer. *@
+        <HeadContent>
+            <meta name="robots" content="noindex, nofollow" />
+        </HeadContent>
+    }
     <article class="node">
         <NodeHeader @rendermode="InteractiveAuto" NodeId="@node.Id" Title="@node.Title"
-                    Access="@node.Access.ToString()" Categories="@categories.ToArray()"
+                    Access="@node.Access.ToString()" Owned="@(node.OwnerId == ViewerId)"
+                    OnAccessChanged="OnParametersSetAsync" Categories="@categories.ToArray()"
                     EditHref="@(editable && !Editing ? $"/nodes/{node.Id}?edit" : null)" />
 
         @* Which surface a page opens in is a product decision, and this is it: a page
@@ -76,15 +90,18 @@ else if (node is not null)
     {
         try
         {
-            node = await Ops.Nodes(s => s.GetWithBodyAsync(UserId, Id));
+            node = await Ops.Nodes(s => s.GetWithBodyAsync(ViewerId, Id));
             categories = node.Categories
                 .Select(c => new CategoryRef(c.Category!.Path, c.Category.Name))
                 .OrderBy(c => c.Path)
                 .ToList();
-            backlinks = await Ops.Nodes(s => s.GetBacklinksAsync(UserId, Id));
+            backlinks = await Ops.Nodes(s => s.GetBacklinksAsync(ViewerId, Id));
             fileName = node.File is { Versions.Count: > 0 } file ? file.Current.FileName : "";
-            editable = fileName.Length > 0 && node.File!.Current.SizeBytes <= 4 * 1024 * 1024 &&
-                (MediaTypes.IsText(node.MediaType, fileName) || node.MediaType == MediaTypes.Docx);
+            // Editing is never offered to somebody who is not signed in, whatever the
+            // node says — public is a publishing gesture, not an invitation.
+            editable = SignedIn && fileName.Length > 0
+                && node.File!.Current.SizeBytes <= 4 * 1024 * 1024
+                && (MediaTypes.IsText(node.MediaType, fileName) || node.MediaType == MediaTypes.Docx);
             notFound = false;
         }
         catch (Gatherum.Core.NotFoundException)
