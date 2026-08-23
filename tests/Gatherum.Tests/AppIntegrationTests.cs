@@ -3,8 +3,11 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Gatherum.Core.Abstractions;
+using Gatherum.Core.Data;
 using Gatherum.Core.Services;
 using Gatherum.Web.Api;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -254,6 +257,36 @@ public class AppIntegrationTests(PostgresFixture postgres) : IAsyncLifetime
             Assert.Equal(HttpStatusCode.OK, (await author.GetAsync($"/api/nodes/{page.Id}")).StatusCode);
         for (var i = 0; i < 12; i++)
             Assert.Equal(HttpStatusCode.OK, (await author.GetAsync("/api/search?query=closet")).StatusCode);
+    }
+
+    [Fact]
+    public async Task A_restart_does_not_sign_everybody_out()
+    {
+        // Sign-in cookies are protected by Data Protection keys. Left to itself ASP.NET
+        // keeps them under the runtime user's home directory, which is inside the image —
+        // and unwritable when the container runs as a uid the image has no entry for, at
+        // which point the keys die with the process. Keeping them in the database is what
+        // makes a cookie issued before a restart still valid after one, so this protects
+        // a payload in one instance and unprotects it in another over the same database.
+        const string cookie = "a session that should outlive the container";
+
+        var issued = factory.Services.GetRequiredService<IDataProtectionProvider>()
+            .CreateProtector("cookies").Protect(cookie);
+
+        using var afterRestart = CreateFactory();
+        // Touch it so the host is built and the keys are read back rather than made.
+        _ = afterRestart.CreateClient();
+
+        var recovered = afterRestart.Services.GetRequiredService<IDataProtectionProvider>()
+            .CreateProtector("cookies").Unprotect(issued);
+
+        Assert.Equal(cookie, recovered);
+
+        // And they are in the database, not on a disk somebody has to give the container
+        // permission to write.
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<GatherumDbContext>();
+        Assert.NotEmpty(await db.DataProtectionKeys.ToListAsync());
     }
 
     [Fact]

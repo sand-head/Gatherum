@@ -99,12 +99,10 @@ anything: point `GATHERUM_DATA` at your dataset and set `GATHERUM_UID`/`GATHERUM
 the user that owns it — `568` for TrueNAS's `apps`. `stat -c %u:%g /path/to/dataset` if
 you are unsure. A mismatch here is a container that cannot write its own knowledge base.
 
-That user needs to own the whole of `${GATHERUM_DATA}`, not just `files/`. Alongside it
-sits `keys/`, which holds what protects sign-in cookies. It is outside `files/` on purpose
-— the reindex walks `files/`, and key material is not a node — and it lives on the host
-rather than in the container because otherwise every restart would sign everyone out.
-Gatherum refuses to start if it cannot write there, rather than discovering it at the
-first login.
+That user needs to own `${GATHERUM_DATA}` and everything under it. Nothing else on the
+host needs to be writable: the keys protecting sign-in cookies live in the database, so a
+restart does not sign anybody out and there is no second directory to get the permissions
+right on.
 
 Then point your reverse proxy at `127.0.0.1:8080`. The port is bound to loopback on
 purpose — see the note under Configuration about forwarded headers.
@@ -253,8 +251,9 @@ file at a readable path, with titles, categories, sharing and history in a
 
 The database is an index over it. Lose it, corrupt it, botch a migration: start the
 container and the startup scan rebuilds it from the directories — tree, categories,
-links, version history, and who each node is shared with. Only users and API keys
-live in the database alone, and they come back when people sign in.
+links, version history, and who each node is shared with. Only users, API keys and the
+keys protecting sign-in cookies live in the database alone, and all three cost the same
+thing to lose: signing in again.
 
 So `pg_dump gatherum > gatherum.sql` is worth having to save re-embedding and
 re-running media analysis, but it is a convenience. The directory is the backup.

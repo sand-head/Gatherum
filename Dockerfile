@@ -35,12 +35,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /app .
-RUN mkdir -p /data/files /data/keys && chown -R $APP_UID /data
+RUN mkdir -p /data/files && chown -R $APP_UID /data
 USER $APP_UID
 ENV ASPNETCORE_HTTP_PORTS=8080 \
     ASPNETCORE_FORWARDEDHEADERS_ENABLED=true \
-    Gatherum__Storage__Root=/data/files \
-    Gatherum__Storage__KeyRing=/data/keys
+    Gatherum__Storage__Root=/data/files
 EXPOSE 8080
 VOLUME /data
 ENTRYPOINT ["dotnet", "Gatherum.Web.dll"]

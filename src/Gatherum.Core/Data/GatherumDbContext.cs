@@ -1,9 +1,11 @@
 using Gatherum.Core.Domain;
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
 namespace Gatherum.Core.Data;
 
-public class GatherumDbContext(DbContextOptions<GatherumDbContext> options) : DbContext(options)
+public class GatherumDbContext(DbContextOptions<GatherumDbContext> options)
+    : DbContext(options), IDataProtectionKeyContext
 {
     public DbSet<Node> Nodes => Set<Node>();
     public DbSet<FileBody> FileBodies => Set<FileBody>();
@@ -16,6 +18,16 @@ public class GatherumDbContext(DbContextOptions<GatherumDbContext> options) : Db
     public DbSet<NodeEmbedding> NodeEmbeddings => Set<NodeEmbedding>();
     public DbSet<User> Users => Set<User>();
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
+
+    /// <summary>The keys protecting sign-in cookies. They belong here rather than on disk
+    /// for the same reason <see cref="Users"/> and <see cref="ApiKeys"/> do: they are not
+    /// derived from the directories, and losing them costs exactly one thing — signing in
+    /// again — which is what losing the users costs anyway.
+    ///
+    /// Keeping them out of the storage root also keeps them out of the backup somebody is
+    /// encouraged to take of it. That directory is meant to be browsed, rsynced and
+    /// copied around; cookie-signing key material should not ride along.</summary>
+    public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 
     protected override void OnModelCreating(ModelBuilder model)
     {

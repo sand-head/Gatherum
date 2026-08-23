@@ -26,7 +26,13 @@ public sealed class PostgresFixture : IAsyncLifetime
             adminConnectionString = external;
             return;
         }
-        container = new PostgreSqlBuilder("pgvector/pgvector:pg16").Build();
+        // Well above Postgres's default 100. One test run stands up a host per test that
+        // needs a second instance of the app, each with its own pool, and they add up
+        // faster than the default allows — the symptom is unrelated tests failing to
+        // connect at all.
+        container = new PostgreSqlBuilder("pgvector/pgvector:pg16")
+            .WithCommand("-c", "max_connections=500")
+            .Build();
         await container.StartAsync();
         adminConnectionString = container.GetConnectionString();
     }
@@ -40,7 +46,15 @@ public sealed class PostgresFixture : IAsyncLifetime
             await using var create = new NpgsqlCommand($"CREATE DATABASE \"{name}\"", connection);
             await create.ExecuteNonQueryAsync();
         }
-        var builder = new NpgsqlConnectionStringBuilder(adminConnectionString) { Database = name };
+        var builder = new NpgsqlConnectionStringBuilder(adminConnectionString)
+        {
+            Database = name,
+            // A test class can stand up several hosts at once — one for the app, others
+            // for "the same database after a restart" — and each brings a pool. At
+            // Npgsql's default of 100 apiece they exhaust Postgres between them, which
+            // surfaces as unrelated tests failing to connect.
+            MaxPoolSize = 5,
+        };
         await using var db = CreateContext(builder.ConnectionString);
         await db.Database.MigrateAsync();
         // The app does this at startup once a model is configured; the tests configure a

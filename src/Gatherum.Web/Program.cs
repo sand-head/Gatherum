@@ -107,17 +107,14 @@ if (oidc.IsConfigured)
     });
 }
 
-// Sign-in cookies are protected by keys that have to outlive the container. Left to
-// itself ASP.NET keeps them under the runtime user's home directory — which lives inside
-// the image, and which a container running as an arbitrary uid (TrueNAS hands its apps
-// 568) may not even be able to write. Either way the keys are regenerated on restart and
-// everyone is silently signed out; unwritable, they are never persisted at all.
-var keyRing = new DirectoryInfo(Path.GetFullPath(
-    builder.Configuration[$"{GatherumOptions.Section}:Storage:KeyRing"]
-        ?? new StorageOptions().KeyRing));
-EnsureWritable(keyRing);
+// Sign-in cookies are protected by keys that have to outlive the container. ASP.NET
+// keeps them under the runtime user's home directory by default, which is inside the
+// image on a good day and — when the container runs as a uid the image has never heard
+// of, as TrueNAS's 568 is — unwritable, leaving keys that die with the process and sign
+// everyone out on every restart. The database has none of those problems, and is already
+// where the other two things a rebuild cannot recover live.
 builder.Services.AddDataProtection()
-    .PersistKeysToFileSystem(keyRing)
+    .PersistKeysToDbContext<GatherumDbContext>()
     // Pinned so the keys stay readable across renames of the app or its directory.
     .SetApplicationName("Gatherum");
 
@@ -212,29 +209,6 @@ if (!oidc.IsConfigured)
 }
 
 app.Run();
-
-/// <summary>Fails at startup rather than at the first sign-in. An unwritable key ring
-/// does not throw when it is configured — it throws, or silently falls back to keys that
-/// die with the process, once somebody tries to log in.</summary>
-static void EnsureWritable(DirectoryInfo directory)
-{
-    try
-    {
-        directory.Create();
-        var probe = Path.Combine(directory.FullName, $".probe-{Guid.NewGuid():N}");
-        File.WriteAllBytes(probe, []);
-        File.Delete(probe);
-    }
-    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-    {
-        throw new InvalidOperationException(
-            $"The key ring at '{directory.FullName}' is not writable by this process " +
-            $"(uid {Environment.UserName}). Sign-in cookies are protected by keys kept " +
-            "there, so without it every restart would sign everyone out. Give the " +
-            "directory to the user the container runs as, or point " +
-            "Gatherum__Storage__KeyRing somewhere writable.", ex);
-    }
-}
 
 static async Task MigrateAsync(WebApplication app)
 {

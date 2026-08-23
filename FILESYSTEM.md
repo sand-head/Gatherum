@@ -208,7 +208,7 @@ A cache. Everything in it is either a copy of something on disk or recomputed fr
 | `Categories`, `NodeCategories` | derived from frontmatter / `meta.json` |
 | `NodeLinks` | reparsed from body content |
 | `NodeEmbeddings` | recomputed locally |
-| `Users`, `ApiKeys` | **the exception — genuinely DB-only** |
+| `Users`, `ApiKeys`, `DataProtectionKeys` | **the exceptions — genuinely DB-only** |
 
 So `gatherum reindex`, and a scan on startup, become the whole disaster-recovery story:
 drop the database, restart, and everything returns except recomputed vectors and re-run
