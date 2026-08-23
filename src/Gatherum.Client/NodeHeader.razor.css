@@ -2,34 +2,39 @@
    classic thin rule below. The title is an input — editing in place is the
    whole point — so it must not look like a form field until touched. */
 
+/* Title, metadata and page actions in one band. The grid is what lets the
+   actions sit beside the title on a wide screen and in their own row under
+   everything on a narrow one, from a single DOM in reading order. */
 .node-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+        "title tabs"
+        "meta  meta";
+    align-items: center;
+    column-gap: 12px;
+    row-gap: 10px;
     padding-bottom: 14px;
     border-bottom: 1px solid var(--outline-dim);
     margin-bottom: 22px;
 }
 
-/* Title and tabs share a line, the way an article's do. The title takes the
-   slack and the tabs keep their width, so a long title shrinks rather than
-   pushing Edit off the end. */
-.node-title-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-
 .node-title {
-    flex: 1;
+    grid-area: title;
     min-width: 0;
     margin: 0;
     font: inherit;
 }
 
 .node-tabs {
-    flex-shrink: 0;
+    grid-area: tabs;
+    justify-self: end;
     display: flex;
     align-items: center;
     gap: 4px;
 }
+
+.node-tab { gap: 7px; }
 
 .node-title-input {
     width: 100%;
@@ -51,10 +56,10 @@
 }
 
 .node-meta {
+    grid-area: meta;
     display: flex;
     align-items: center;
     gap: 10px;
-    margin-top: 10px;
     flex-wrap: wrap;
 }
 
@@ -69,10 +74,34 @@
     padding: 3px 10px;
 }
 
-/* An <input> cannot ellipsize, it just clips — so on a narrow screen the tab
-   moves under the title rather than eating the words off the end of it. */
+/* On a phone the actions get their own row under the metadata, and the label
+   goes: an <input> cannot ellipsize — it just clips — so a title sharing its
+   line with a button loses its last word, and Wikipedia's mobile skin reaches
+   the same conclusion with the same pencil. */
 @media (max-width: 700px) {
-    .node-title-row { flex-wrap: wrap; }
-    .node-title { flex-basis: 100%; }
-    .node-tabs { margin-left: auto; }
+    .node-header {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-areas:
+            "title"
+            "meta"
+            "tabs";
+        row-gap: 8px;
+    }
+
+    .node-tabs { justify-self: end; }
+
+    .node-tab {
+        display: grid;
+        place-items: center;
+        width: var(--tap);
+        height: var(--tap);
+        padding: 0;
+        border: none;
+        border-radius: var(--radius-full);
+        color: var(--on-surface-dim);
+
+        &:hover { background: var(--hover); color: var(--on-surface); }
+
+        & .label { display: none; }
+    }
 }

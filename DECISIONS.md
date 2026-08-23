@@ -765,9 +765,14 @@ article.
 Which surface is showing is the page's business, not the header's, so the header takes
 an `EditHref` and renders the tab only when it is given one: absent while editing,
 because it would offer you where you already are, and absent on a node with no editable
-body. On a narrow screen the tab wraps under the title instead of squeezing it — an
-`<input>` cannot ellipsize, it just clips, and a title losing its last word to a button
-is worse than a button on its own line.
+body. Mobile is a different shape, and Wikipedia's own skin says so: Minerva does not put a
+labelled tab beside the title, it puts a compact icon toolbar — language, watchlist,
+pencil — in its own band under the title's metadata, right-aligned, just above the rule
+that opens the article. Gatherum does the same, with the one action it has. The header is
+a grid for that reason: one DOM in reading order (title, metadata, actions), placed
+beside the title where there are words to fit and in its own row where there are not.
+The label goes with it, because an `<input>` cannot ellipsize — it just clips — and a
+title sharing its line with a button loses its last word.
 
 Not done, and worth naming: Wikipedia's band is *Read | Edit | View history*, and
 Gatherum's history is still a toggle at the foot of the page. Moving it up would mean
