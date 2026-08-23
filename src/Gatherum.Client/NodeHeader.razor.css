@@ -8,14 +8,32 @@
     margin-bottom: 22px;
 }
 
+/* Title and tabs share a line, the way an article's do. The title takes the
+   slack and the tabs keep their width, so a long title shrinks rather than
+   pushing Edit off the end. */
+.node-title-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
 .node-title {
+    flex: 1;
+    min-width: 0;
     margin: 0;
     font: inherit;
 }
 
+.node-tabs {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
 .node-title-input {
     width: 100%;
-    font: 400 34px/1.2 var(--font-serif);
+    font: 400 clamp(26px, 6.5vw, 34px)/1.2 var(--font-serif);
     letter-spacing: 0.1px;
     color: var(--on-surface);
     background: none;
@@ -49,4 +67,12 @@
     background: var(--surface-dim);
     border-radius: var(--radius-full);
     padding: 3px 10px;
+}
+
+/* An <input> cannot ellipsize, it just clips — so on a narrow screen the tab
+   moves under the title rather than eating the words off the end of it. */
+@media (max-width: 700px) {
+    .node-title-row { flex-wrap: wrap; }
+    .node-title { flex-basis: 100%; }
+    .node-tabs { margin-left: auto; }
 }

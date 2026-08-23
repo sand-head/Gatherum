@@ -22,9 +22,6 @@
    already carries the prose — a phone reads the page without waiting for
    WebAssembly, and never downloads a canvas to do it. *@
 <div class="reader">
-    <div class="reader-bar">
-        <a class="button primary" href="@($"/nodes/{NodeId}?edit")">Edit</a>
-    </div>
     @if (doc is not null)
     {
         <div class="reader-doc" @ref="docHost">

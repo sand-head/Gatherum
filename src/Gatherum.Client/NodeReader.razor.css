@@ -1,16 +1,9 @@
-/* The read view is the article, so it wears as little as possible: one action
-   above it and then the prose, at the measure the content pane already sets. */
+/* The read view is the article and nothing else: the Edit tab lives in the
+   header beside the title, where a wiki's has always been. */
 
 .reader {
     display: flex;
     flex-direction: column;
-    gap: 10px;
-}
-
-.reader-bar {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
     gap: 10px;
 }
 

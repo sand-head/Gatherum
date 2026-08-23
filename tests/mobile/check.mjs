@@ -108,9 +108,38 @@ async function main() {
       colorScheme: scheme,
     });
     const page = await ctx.newPage();
+    const errors = [];
+    page.on("console", (m) => { if (m.type() === "error") errors.push(m.text().split("\n")[0].slice(0, 200)); });
+    page.on("pageerror", (e) => errors.push(e.message.split("\n")[0].slice(0, 200)));
     await page.goto("/auth/login");
-    return { ctx, page };
+    return { ctx, page, errors };
   };
+
+  // Blazor Auto renders on the server circuit while the WebAssembly payload
+  // downloads and locally on every visit after, and those are different runtimes
+  // running different code. Measuring only the first visit left the whole
+  // WebAssembly path untested — which is how a read view that threw
+  // TypeLoadException on every return visit passed a green suite. Go there
+  // twice: the second navigation is the one a reader actually gets.
+  const visit = async (page, url) => {
+    await page.goto(url, { waitUntil: "networkidle" });
+    // Let the runtime finish arriving before navigating again: leaving while
+    // dotnet.native.wasm is still in flight cancels it, and a cancelled download
+    // is a console error that means nothing.
+    await page
+      .waitForFunction(
+        () => performance.getEntriesByType("resource")
+          .some((r) => /dotnet\.native\..*\.wasm$/.test(r.name) && r.responseEnd > 0),
+        null, { timeout: 60_000 })
+      .catch(() => {});
+    await page.waitForTimeout(500);
+    await page.goto(url, { waitUntil: "networkidle" });
+    await page.waitForTimeout(1200);
+  };
+
+  // Navigating away always leaves something half-fetched; those are not the
+  // errors worth failing on. A component that threw is.
+  const NOISE = /Failed to fetch|negotiation|instantiate_wasm_module|ERR_ABORTED|Failed to load resource|Fetch API cannot load|dotnet\.native|_framework\//i;
 
   for (const vp of VIEWPORTS) {
     for (const scheme of ["light", "dark"]) {
@@ -120,9 +149,11 @@ async function main() {
 
       for (const [name, url] of found) {
         const where = `${name} ${vp.width}/${scheme}`;
-        const { ctx, page } = await open(vp, scheme);
-        await page.goto(url, { waitUntil: "networkidle" });
+        const { ctx, page, errors } = await open(vp, scheme);
+        await visit(page, url);
         const m = await measure(page);
+        const real = errors.filter((e) => !NOISE.test(e));
+        if (real.length) note(where, `console error: ${real[0]}`);
         await page.screenshot({ path: `${shots}/${name}-${vp.width}-${scheme}.png`, fullPage: true });
 
         if (vp.touch && !m.coarse)

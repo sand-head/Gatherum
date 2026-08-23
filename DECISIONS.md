@@ -754,3 +754,42 @@ warnings and threw `InvalidOperationException` at render time, on a route nothin
 visited yet. The mobile checks caught it because they now read a code file in both
 modes; the build never could.
 
+## The Edit tab moved to where a wiki keeps it
+Reading a page put an Edit button at the top of the article body, floating over the
+prose it acts on. Wikipedia has never done that: the title sits at the left of a band,
+the article tools sit at the right of the same band, and a thin rule closes it before
+the prose starts. `NodeHeader` already *was* that band — serif title, categories, the
+classic rule — so Edit is a tab in it now, and `NodeReader` renders nothing but the
+article.
+
+Which surface is showing is the page's business, not the header's, so the header takes
+an `EditHref` and renders the tab only when it is given one: absent while editing,
+because it would offer you where you already are, and absent on a node with no editable
+body. On a narrow screen the tab wraps under the title instead of squeezing it — an
+`<input>` cannot ellipsize, it just clips, and a title losing its last word to a button
+is worse than a button on its own line.
+
+Not done, and worth naming: Wikipedia's band is *Read | Edit | View history*, and
+Gatherum's history is still a toggle at the foot of the page. Moving it up would mean
+`VersionPanel` giving up its own open/closed state to the header, which is a bigger
+change than this one and not obviously right.
+
+## The checks only ever saw half the app
+Blazor Auto renders on the server circuit while the WebAssembly payload downloads, and
+locally on every visit after. Those are different runtimes running different code, and
+the mobile checks measured only the first visit of a fresh context — so every route was
+tested on the circuit and the WebAssembly path was never exercised at all.
+
+It hid a real one. `CodeHtmlView` was missing from the WebAssembly asset set, so the
+read view threw `TypeLoadException` on every return visit and the infobox stayed floated
+on a phone — while the suite was green, because the suite never returned. The cause was
+a stale `_framework` output: `dotnet build` had happily left the previous package's
+`SlopEdit.Blazor.wasm` in place across a version bump, so the reference resolved to
+2.3.0 and the browser was handed 2.2.x. Deleting `bin` and `obj` and rebuilding fixed
+it, and the fingerprint changing is how you can tell it worked.
+
+Each route is now visited twice, waiting for `dotnet.native.wasm` to finish arriving
+before the second navigation so nothing is cancelled mid-flight, and console errors fail
+the run — with a filter for the download-cancellation noise a navigation always leaves
+behind, narrow enough that the `TypeLoadException` above still fails it.
+

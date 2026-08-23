@@ -5,10 +5,21 @@
     @* Every route needs an h1: Routes.razor's FocusOnNavigate looks for one, and a
        node page had none at all — the title is a field, because editing it in place
        is the point. So the h1 wraps the field rather than repeating its words. *@
-    <h1 class="node-title">
-        <input class="node-title-input" value="@title" aria-label="Page title"
-               @onchange="e => RenameAsync(e.Value?.ToString() ?? title)" />
-    </h1>
+    <div class="node-title-row">
+        <h1 class="node-title">
+            <input class="node-title-input" value="@title" aria-label="Page title"
+                   @onchange="e => RenameAsync(e.Value?.ToString() ?? title)" />
+        </h1>
+        @* Where a wiki has always put it: beside the title, above the rule, rather
+           than floating over the article it acts on. Absent when there is nothing
+           to edit and while editing, so it never offers you where you already are. *@
+        @if (EditHref is not null)
+        {
+            <nav class="node-tabs">
+                <a class="button" href="@EditHref">Edit</a>
+            </nav>
+        }
+    </div>
     <div class="node-meta">
         <CategoryEditor NodeId="@NodeId" Categories="@categories"
                         OnChanged="ReloadCategoriesAsync" />
@@ -30,6 +41,11 @@
     [Parameter, EditorRequired] public Guid NodeId { get; set; }
     [Parameter, EditorRequired] public string Title { get; set; } = "";
     [Parameter] public bool IsPrivate { get; set; }
+
+    /// <summary>Where the Edit tab goes, or null for a node that has no editable
+    /// body and for the editor itself — the page decides, because only it knows
+    /// which surface is showing.</summary>
+    [Parameter] public string? EditHref { get; set; }
     [Parameter] public CategoryRef[] Categories { get; set; } = [];
 
     private string title = "";
