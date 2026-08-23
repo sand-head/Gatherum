@@ -724,3 +724,33 @@ The mobile checks gained an assertion that no aside is still floated on a phone.
 does not decide that and must not, but it is the outcome the reading experience depends
 on, so a future package bump cannot quietly take it away.
 
+## slopedit 2.3.0: code reads without a canvas too
+A code file opened in the read view was a plain `<pre>` with the text in it — honest,
+and the one place the Read/Edit split was still a downgrade, because the editor
+highlights and the reader did not. `CodeHtmlView` is `EditorView`'s reading half and it
+is now what `NodeReader` renders for anything that is not Markdown or docx.
+
+It is a stronger guarantee than the document pair's. `RichHtmlWriter` walks blocks and
+`CodeHtmlWriter` walks *cells* — which is all `SkiaTextRenderer` walks either — so both
+consume the same `ICellGrid`: the same lexer output, the same soft-wrapped rows, the
+same line-number labels, the same collapsed folds. Parity there is structural rather
+than maintained. Feeding it the same `EditorDocument` the editor would get, with the
+same `LexerRegistry.ForPath` and the same `EditorThemes.Syntax`, is the whole
+integration — which is why `NodeReader` needed its `FileName` parameter back.
+
+Two things this repo does not do, deliberately. It passes no padding: `EditorView` has
+no `ContentPadding` parameter at all, so `CodeHtmlView` takes its default and the pair
+agrees the way it was built to. And it adds no reset for the code view, because
+`CodeHtmlWriter` already emits `code { background: none; padding: 0 }` and owns the
+`<pre>`'s `overflow-x`, `white-space` and the sticky `.se-ln` gutter — the horizontal
+scroll of a long line is slopedit's, not app.css's. The document view is the one that
+still needs the reset in app.css, because `RichHtmlWriter`'s `code` rule sets only the
+face and leaves background and padding to whatever the host has lying around. That
+asymmetry is worth fixing upstream; if it is, the reset here can go.
+
+A lesson worth writing down, because it cost a red suite: **Razor does not compile-check
+component parameter names.** `ContentPadding` on `EditorView` built clean with zero
+warnings and threw `InvalidOperationException` at render time, on a route nothing had
+visited yet. The mobile checks caught it because they now read a code file in both
+modes; the build never could.
+

@@ -36,6 +36,7 @@ async function routes(page) {
   const tree = await (await page.request.get("/api/nodes/tree")).json();
   const page1 = tree.find((n) => n.title.startsWith("Homelab"))?.id;
   const file = tree.find((n) => n.title.endsWith(".png"))?.id;
+  const code = tree.find((n) => n.title.endsWith(".cs"))?.id;
   return [
     ["home", "/"],
     ["pages", "/pages"],
@@ -45,6 +46,7 @@ async function routes(page) {
     ["not-found", "/not-found"],
     ...(page1 ? [["node-read", `/nodes/${page1}`], ["node-edit", `/nodes/${page1}?edit`]] : []),
     ...(file ? [["node-file", `/nodes/${file}`]] : []),
+    ...(code ? [["node-code", `/nodes/${code}`], ["node-code-edit", `/nodes/${code}?edit`]] : []),
   ];
 }
 
@@ -137,7 +139,7 @@ async function main() {
           else if (vp.touch && !m.rowMenuVisible) note(where, "row menu still hover-gated on touch");
           else if (!vp.touch && m.rowMenuVisible) note(where, "row menu no longer hover-gated");
         }
-        if (name === "node-read" && m.canvasInRead > 0)
+        if ((name === "node-read" || name === "node-code") && m.canvasInRead > 0)
           note(where, "a canvas is being rendered to read a page");
         if (name === "node-read" && vp.touch && m.floatedAsides > 0)
           note(where, `${m.floatedAsides} aside(s) still floated on a phone`);

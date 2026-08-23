@@ -29,9 +29,11 @@
     min-width: 0;
 }
 
-.reader-source {
-    margin: 0;
-    max-width: 100%;
+/* Same as .reader-doc: a box for the view, nothing about what it renders. The
+   listing scrolls sideways on its own when a line will not fit — that is the
+   grid's wrapping decision, not the browser's, and not this file's. */
+.reader-code {
+    min-width: 0;
 }
 
 /* The same offer the editor makes, in the place it is more often wanted: a red

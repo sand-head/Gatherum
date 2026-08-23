@@ -93,10 +93,26 @@ const DEEP_CATEGORY = [
   "Homelab/Networking/VLANs/Tagged trunks and where they terminate/Deeper still",
 ];
 
+// A real extension, so the lexer has something to say and the read view has
+// colours to prove it kept. The long line is deliberate: a code listing wraps
+// the grid's way or scrolls, never the browser's.
 const CODE_FILE = {
-  name: "caddyfile.conf",
+  name: "Thermals.cs",
   type: "text/plain",
-  body: "example.test {\n\treverse_proxy 127.0.0.1:8080\n}\n",
+  body: `using System;
+
+namespace Homelab.Closet;
+
+/// <summary>What the rack does to the air around it.</summary>
+public sealed record Reading(DateTimeOffset At, double IntakeC, double ExhaustC)
+{
+    public double Delta => ExhaustC - IntakeC;
+
+    public static Reading Parse(string line) => line.Split(',') is [var at, var i, var e]
+        ? new Reading(DateTimeOffset.Parse(at), double.Parse(i), double.Parse(e))
+        : throw new FormatException($"A reading is three fields, and this one was not: {line}");
+}
+`,
 };
 
 // A 1x1 PNG is enough to prove <img> resolves; the layout does not care what it is.

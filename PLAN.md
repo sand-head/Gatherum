@@ -77,8 +77,9 @@ Two directions landed after the MVP shipped, both at the owner's request:
 - Public share links: still TODO.
 - Export Markdown/zip: closer than ever — bodies *are* Markdown files on disk; an
   export endpoint is a tree walk plus a zip stream. Still TODO.
-- Syntax highlighting: shipped for the editor (slopedit lexers); file *previews* of
-  non-edited text render plain.
+- Syntax highlighting: shipped for the editor and, since slopedit 2.3.0, for reading
+  too — `CodeHtmlView` renders the same grid the canvas paints, so a code file read
+  without a canvas keeps its colours, its gutter and its folds.
 
 ### Post-revision: the editor joined the server circuit
 

@@ -74,6 +74,8 @@
     else if (sourceDoc is not null)
     {
         <div class="editor-surface">
+            @* No padding parameter here: EditorView does not take one, so CodeHtmlView
+               takes its default too and the pair agrees the way it was built to. *@
             <EditorView @ref="sourceView" Grid="sourceDoc" OnChange="OnChanged"
                         Theme="EditorThemes.For(AppTheme.IsDark)"
                         AriaLabel="Source editor" />

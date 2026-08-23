@@ -5,6 +5,8 @@
 @inject NavigationManager Navigation
 @inject IJSRuntime Js
 @using SlopEdit.Blazor
+@using SlopEdit.Core.Document
+@using SlopEdit.Core.Highlighting
 @using SlopEdit.Core.Rich
 @using SlopEdit.Docx
 
@@ -36,12 +38,16 @@
                               OnLinkActivated="FollowAsync" AriaLabel="Article" />
         </div>
     }
-    else if (text is not null)
+    else if (sourceDoc is not null)
     {
-        @* Code and other plain text: no rich document to render, and a <pre> that
-           wraps nothing and scrolls is closer to the file than a canvas would be.
-           Highlighting is the editor's; this is the page. *@
-        <pre class="reader-source"><code>@text</code></pre>
+        @* Code reads for the same reasons prose does, and CodeHtmlView is the same
+           grid the canvas paints — same lexer, same colors, same wrapped rows, same
+           gutter — so highlighting survives without a canvas, the line numbers are
+           unselectable, and copying a page of code yields the code. *@
+        <div class="reader-code">
+            <CodeHtmlView Grid="sourceDoc" Theme="EditorThemes.For(AppTheme.IsDark)"
+                          AriaLabel="@FileName" />
+        </div>
     }
 
     @if (unwritten is not null)
@@ -58,10 +64,11 @@
 
 @code {
     [Parameter, EditorRequired] public Guid NodeId { get; set; }
+    [Parameter, EditorRequired] public string FileName { get; set; } = "";
     [Parameter, EditorRequired] public string MediaType { get; set; } = "";
 
     private RichDocument? doc;
-    private string? text;
+    private EditorDocument? sourceDoc;
     private string? unwritten;
     private ElementReference docHost;
 
@@ -98,7 +105,11 @@
             if (IsMarkdown)
                 doc = GatherumMarkdown.Parse(payload.Text, AppTheme.IsDark);
             else
-                text = payload.Text;
+                sourceDoc = new EditorDocument(payload.Text)
+                {
+                    Lexer = LexerRegistry.ForPath(FileName),
+                    SyntaxTheme = EditorThemes.Syntax(AppTheme.IsDark),
+                };
         }
         Outline.JumpRequested += OnJumpRequestedAsync;
         PublishOutline();
@@ -112,6 +123,8 @@
             GatherumMarkdown.Dress(doc, AppTheme.IsDark);
             InkWikiLinks();
         }
+        if (sourceDoc is not null)
+            sourceDoc.SyntaxTheme = EditorThemes.Syntax(AppTheme.IsDark);
         StateHasChanged();
     });
 
