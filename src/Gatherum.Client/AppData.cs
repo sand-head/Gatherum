@@ -39,6 +39,8 @@ public interface IAppData
     Task RenameAsync(Guid nodeId, string title);
     Task DeleteAsync(Guid nodeId);
     Task SetAccessAsync(Guid nodeId, string access);
+    Task<IReadOnlyList<GrantInfo>> ListGrantsAsync(Guid nodeId);
+    Task<IReadOnlyList<PersonInfo>> ListPeopleAsync();
     Task ShareAsync(Guid nodeId, Guid userId, string role);
     Task UnshareAsync(Guid nodeId, Guid userId);
 
@@ -75,6 +77,12 @@ public record SearchHit(Guid Id, string Kind, string Title, string Snippet);
 public record TitleMatch(string Title, Guid Id);
 public record TreeNodeInfo(Guid Id, Guid? ParentId, string Title, string MediaType,
     string Kind, int Position, string Access, string Reach, bool Owned);
+/// <summary>Somebody this node is shared with, and what they may do.</summary>
+public record GrantInfo(Guid UserId, string DisplayName, string Username, string Role);
+
+/// <summary>Somebody who could be shared with.</summary>
+public record PersonInfo(Guid Id, string DisplayName, string Username);
+
 public record NodeInfo(Guid Id, string Title, string Access,
     IReadOnlyList<CategoryRef> Categories, FileFacts? File);
 public record FileFacts(string FileName, string MediaType, long SizeBytes, int Version,
@@ -188,6 +196,12 @@ public sealed class HttpAppData(HttpClient http) : IAppData
 
     public async Task SetAccessAsync(Guid nodeId, string access) =>
         Ensure(await http.PostAsJsonAsync($"/api/nodes/{nodeId}/access", new { access }));
+
+    public async Task<IReadOnlyList<GrantInfo>> ListGrantsAsync(Guid nodeId) =>
+        (await http.GetFromJsonAsync<List<GrantInfo>>($"/api/nodes/{nodeId}/grants"))!;
+
+    public async Task<IReadOnlyList<PersonInfo>> ListPeopleAsync() =>
+        (await http.GetFromJsonAsync<List<PersonInfo>>("/api/users"))!;
 
     public async Task ShareAsync(Guid nodeId, Guid userId, string role) =>
         Ensure(await http.PostAsJsonAsync($"/api/nodes/{nodeId}/grants", new { userId, role }));

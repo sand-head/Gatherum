@@ -5,9 +5,21 @@
 @inject IJSRuntime Js
 
 <div class="tree" @ref="dropZone">
-    @foreach (var root in Tree.ByParent[null])
+    @foreach (var root in Tree.OwnedRoots)
     {
         <TreeItem Node="root" Depth="0" Tree="this" />
+    }
+
+    @* Shared-in nodes live under a parent in somebody else's tree, which the viewer
+       usually cannot see. They need their own heading or they would have nowhere to
+       hang — and grouping them says plainly that they are somebody else's. *@
+    @if (Tree.SharedRoots.Any())
+    {
+        <h3 class="tree-group">Shared with you</h3>
+        @foreach (var root in Tree.SharedRoots)
+        {
+            <TreeItem Node="root" Depth="0" Tree="this" />
+        }
     }
 </div>
 
@@ -126,9 +138,14 @@
         await Tree.RefreshAsync();
     }
 
+    /// <summary>The move dialog's candidate list. Starts from what the viewer owns:
+    /// moving a node into somebody else's root would hand it to them, because ownership
+    /// is the path.</summary>
     private IEnumerable<(TreeNodeInfo Node, int Depth)> Flatten(Guid? parentId = null, int depth = 0)
     {
-        foreach (var node in Tree.ByParent[parentId])
+        foreach (var node in parentId is null
+            ? Tree.OwnedRoots
+            : Tree.ByParent[parentId].Where(n => n.Owned))
         {
             yield return (node, depth);
             foreach (var child in Flatten(node.Id, depth + 1))

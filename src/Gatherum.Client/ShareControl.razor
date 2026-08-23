@@ -1,0 +1,156 @@
+@inject IAppData Data
+
+@* Sharing with a person needs a name, which is why it never fitted in the tree's menu
+   beside the three reach states. It lives here, next to the node it is about. *@
+<button type="button" class="share-open" @onclick="OpenAsync" title="Share this">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="18" cy="5" r="3" />
+        <circle cx="6" cy="12" r="3" />
+        <circle cx="18" cy="19" r="3" />
+        <path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" />
+    </svg>
+    Share
+</button>
+
+@if (open)
+{
+    <Modal Title="@($"Share “{Title}”")" OnClose="() => open = false">
+        @if (grants.Count > 0)
+        {
+            <ul class="share-list">
+                @foreach (var grant in grants)
+                {
+                    <li>
+                        <span class="who">
+                            @(grant.DisplayName.Length > 0 ? grant.DisplayName : grant.Username)
+                        </span>
+                        <select value="@grant.Role"
+                                @onchange="e => ChangeRoleAsync(grant, e.Value?.ToString())">
+                            <option value="Reader">can read</option>
+                            <option value="Editor">can edit</option>
+                        </select>
+                        <button class="danger" title="Stop sharing with this person"
+                                @onclick="() => RevokeAsync(grant)">Remove</button>
+                    </li>
+                }
+            </ul>
+        }
+        else
+        {
+            <p class="share-empty">Not shared with anyone yet.</p>
+        }
+
+        @if (candidates.Count > 0)
+        {
+            <div class="share-add">
+                <select @bind="addUserId">
+                    <option value="">Choose someone…</option>
+                    @foreach (var person in candidates)
+                    {
+                        <option value="@person.Id">
+                            @(person.DisplayName.Length > 0 ? person.DisplayName : person.Username)
+                        </option>
+                    }
+                </select>
+                <select @bind="addRole">
+                    <option value="Reader">can read</option>
+                    <option value="Editor">can edit</option>
+                </select>
+                <button class="primary" disabled="@(addUserId.Length == 0)"
+                        @onclick="AddAsync">Share</button>
+            </div>
+        }
+        else
+        {
+            <p class="share-empty">Everybody else already has access.</p>
+        }
+
+        @if (error is not null)
+        {
+            <p class="share-error">@error</p>
+        }
+
+        <p class="share-note">
+            Sharing names a person. To put this on the internet, or hand out a link
+            instead, use the access options in the tree's menu.
+        </p>
+    </Modal>
+}
+
+@code {
+    [Parameter, EditorRequired] public Guid NodeId { get; set; }
+    [Parameter] public string Title { get; set; } = "";
+
+    /// <summary>Raised after any change, so the page's access badge can catch up —
+    /// naming the first person moves a node from Private to Shared.</summary>
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private bool open;
+    private string? error;
+    private List<GrantInfo> grants = [];
+    private List<PersonInfo> people = [];
+    private string addUserId = "";
+    private string addRole = "Reader";
+
+    /// <summary>Everyone not already named. The owner is never in the list: they cannot
+    /// be granted access to their own node, and the service refuses it.</summary>
+    private List<PersonInfo> candidates => people
+        .Where(p => grants.All(g => g.UserId != p.Id))
+        .ToList();
+
+    private async Task OpenAsync()
+    {
+        open = true;
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        try
+        {
+            error = null;
+            grants = [.. await Data.ListGrantsAsync(NodeId)];
+            people = [.. await Data.ListPeopleAsync()];
+            // The owner shows up in the people list and cannot be a grantee, so drop
+            // anybody the service would refuse rather than offering a failure.
+            var owner = grants.Select(g => g.UserId).ToHashSet();
+            people = people.Where(p => !owner.Contains(p.Id) || grants.Any(g => g.UserId == p.Id))
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+    }
+
+    private async Task AddAsync()
+    {
+        if (!Guid.TryParse(addUserId, out var userId))
+            return;
+        await ApplyAsync(() => Data.ShareAsync(NodeId, userId, addRole));
+        addUserId = "";
+    }
+
+    private Task ChangeRoleAsync(GrantInfo grant, string? role) =>
+        role is null ? Task.CompletedTask
+            : ApplyAsync(() => Data.ShareAsync(NodeId, grant.UserId, role));
+
+    private Task RevokeAsync(GrantInfo grant) =>
+        ApplyAsync(() => Data.UnshareAsync(NodeId, grant.UserId));
+
+    private async Task ApplyAsync(Func<Task> change)
+    {
+        try
+        {
+            error = null;
+            await change();
+            await ReloadAsync();
+            await OnChanged.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+    }
+}

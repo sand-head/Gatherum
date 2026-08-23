@@ -17,6 +17,7 @@ public sealed class AppOperations(IServiceScopeFactory scopes)
     public Task Keys(Func<ApiKeyService, Task> action) => Run(action);
     public Task<T> Users<T>(Func<UserService, Task<T>> action) => Run(action);
     public Task Access(Func<AccessService, Task> action) => Run(action);
+    public Task<T> Access<T>(Func<AccessService, Task<T>> action) => Run(action);
 
     private async Task<T> Run<TService, T>(Func<TService, Task<T>> action) where TService : notnull
     {

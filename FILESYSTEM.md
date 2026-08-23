@@ -155,7 +155,10 @@ below, that equivalence is load-bearing rather than merely tidy.
 | `unlisted` | **anyone holding the link** — reachable, and in no listing |
 | `public` | **anyone on the internet, unauthenticated** — reachable and listed |
 
-Grants name a user and a role — `reader` or `editor`. The owner always has full access and
+Grants name a user and a role — `reader` or `editor`. An editor was given the document,
+not the filing cabinet: content changes and categories are theirs, while renaming, moving
+and deleting stay with the owner, because ownership is the path and those move files
+around inside somebody's directory. The owner always has full access and
 cannot be locked out of their own directory. Inheritance is downward and additive: a
 directory's access block applies to everything beneath it, and a node's own grants union
 with what it inherits. Since the default is closed, the common gesture is opening

@@ -23,6 +23,9 @@ public class CategoryService(GatherumDbContext db, NodeService nodes, INodeAutho
     {
         var segments = ValidSegments(path);
         var node = await nodes.GetWithBodyAsync(userId, nodeId, ct);
+        // Filing somebody's node under a subject changes what their node says it is
+        // about, and it is written to their sidecar. That is a content change.
+        nodes.EnsureEditable(node, userId);
         var category = await EnsureAsync(segments, ct);
         if (node.Categories.All(c => c.CategoryId != category.Id))
         {
@@ -47,6 +50,7 @@ public class CategoryService(GatherumDbContext db, NodeService nodes, INodeAutho
     {
         var normalized = CategoryPath.Normalize(path);
         var node = await nodes.GetWithBodyAsync(userId, nodeId, ct);
+        nodes.EnsureEditable(node, userId);
         var membership = node.Categories.FirstOrDefault(c => c.Category!.Path == normalized);
         if (membership is null)
             return;

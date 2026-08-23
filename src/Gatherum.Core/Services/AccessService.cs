@@ -77,6 +77,19 @@ public class AccessService(GatherumDbContext db, TimeProvider clock, NodeMetadat
         await sidecar.WriteAsync(nodeId, ct);
     }
 
+    /// <summary>Who this node is shared with by name — the owner's own declarations, not
+    /// the inherited closure, because these are what the owner can take back here.</summary>
+    public async Task<List<NodeGrant>> ListGrantsAsync(Guid userId, Guid nodeId,
+        CancellationToken ct = default)
+    {
+        await RequireOwnedAsync(userId, nodeId, ct);
+        return await db.NodeGrants
+            .Include(g => g.User)
+            .Where(g => g.NodeId == nodeId)
+            .OrderBy(g => g.User!.DisplayName)
+            .ToListAsync(ct);
+    }
+
     /// <summary>Rebuilds the closure for the whole tree. Called after anything that can
     /// move access around — a declaration, a grant, a move, a reindex. Whole-tree because
     /// Gatherum is a knowledge base for two people and a correct answer beats a clever

@@ -12,6 +12,13 @@
     <div class="node-meta">
         <CategoryEditor NodeId="@NodeId" Categories="@categories"
                         OnChanged="ReloadCategoriesAsync" />
+        @* Only the owner can change who reaches a node, so only the owner is offered the
+           control — the service would refuse anybody else, and a button that always fails
+           is worse than no button. *@
+        @if (Owned)
+        {
+            <ShareControl NodeId="@NodeId" Title="@Title" OnChanged="OnAccessChanged" />
+        }
         @if (Access == "Public")
         {
             <span class="badge badge-public" title="Anyone on the internet can read this">
@@ -61,6 +68,14 @@
     /// <summary>"Private", "Shared" or "Public". Private is the default and wears no
     /// badge; the two exceptions do.</summary>
     [Parameter] public string Access { get; set; } = "Private";
+
+    /// <summary>Whether the viewer owns this node. Ownership is the path, so it is the
+    /// server's answer rather than anything this component can work out.</summary>
+    [Parameter] public bool Owned { get; set; }
+
+    /// <summary>Naming the first person moves a node from Private to Shared, so the page
+    /// re-reads it rather than leaving a stale badge.</summary>
+    [Parameter] public EventCallback OnAccessChanged { get; set; }
 
     /// <summary>Where the Edit tab goes, or null for a node that has no editable
     /// body and for the editor itself — the page decides, because only it knows

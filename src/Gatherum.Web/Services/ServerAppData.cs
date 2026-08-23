@@ -149,6 +149,22 @@ public sealed class ServerAppData(
         await ops.Access(s => s.SetAccessAsync(userId, nodeId, mode));
     }
 
+    public async Task<IReadOnlyList<GrantInfo>> ListGrantsAsync(Guid nodeId)
+    {
+        var actor = await UserIdAsync();
+        var grants = await ops.Access(s => s.ListGrantsAsync(actor, nodeId));
+        return grants
+            .Select(g => new GrantInfo(g.UserId, g.User?.DisplayName ?? "",
+                g.User?.Username ?? "", g.Role.ToString()))
+            .ToList();
+    }
+
+    public async Task<IReadOnlyList<PersonInfo>> ListPeopleAsync()
+    {
+        var people = await ops.Users(s => s.ListAsync());
+        return people.Select(u => new PersonInfo(u.Id, u.DisplayName, u.Username)).ToList();
+    }
+
     public async Task ShareAsync(Guid nodeId, Guid userId, string role)
     {
         var actor = await UserIdAsync();
