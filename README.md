@@ -83,11 +83,41 @@ never fetches again. To build with no network, put those two files there yoursel
 `-p:FetchEmbeddingModel=false` and point `Gatherum__Embedding__ModelPath` at a copy. The
 running app never downloads anything.
 
-Or run the whole stack in containers:
+### Deploying it
+
+`compose.yaml` is a deployment rather than a demo, so it asks for the two things a
+deployment needs and refuses to start without them:
 
 ```sh
+cp .env.example .env          # fill in the password and your OIDC client
+mkdir -p data && sudo chown -R 1654:1654 data   # the container runs as uid 1654
 docker compose up --build     # or: podman compose up --build
 ```
+
+Then point your reverse proxy at `127.0.0.1:8080`. The port is bound to loopback on
+purpose — see the note under Configuration about forwarded headers.
+
+Two things it does not do, deliberately:
+
+- **It will not run without an identity provider.** Auth is OIDC-only, and the
+  development fallback signs in whoever asks without authenticating them. Outside
+  `ASPNETCORE_ENVIRONMENT=Development` the app refuses to start rather than be an open
+  door, so a half-filled `.env` fails loudly instead of quietly.
+- **It does not put your knowledge base in a named volume.** `${GATHERUM_DATA}` is a bind
+  mount because that directory *is* the knowledge base: one directory per user, every page
+  and file readable, greppable and rsyncable with Gatherum switched off. Point your backup
+  at it.
+
+### Running it locally without an identity provider
+
+For a look at it on a machine only you can reach, set the environment explicitly:
+
+```sh
+GATHERUM_OIDC_AUTHORITY=none GATHERUM_OIDC_CLIENT_SECRET=none POSTGRES_PASSWORD=local \
+  docker compose run --rm -e ASPNETCORE_ENVIRONMENT=Development -p 8080:8080 gatherum
+```
+
+which turns the auto-login back on. Never do this anywhere reachable by anyone else.
 
 ## Configuration
 

@@ -1,23 +1,42 @@
+# A deployment, not a demo. Gatherum is meant to sit behind a reverse proxy that
+# terminates TLS and in front of an identity provider that decides who you are —
+# and with public sharing it can serve the internet, so both matter.
+#
+# To try it locally without an identity provider, see "Running it locally" in
+# README.md. Do not reach for that here by commenting things out.
+
 services:
   gatherum:
     build: .
     image: gatherum:latest
     ports:
-      - "8080:8080"
+      # Loopback on purpose. The reverse proxy in front of this is the only thing that
+      # should reach the port: the app trusts X-Forwarded-For from whoever connects
+      # (ASPNETCORE_FORWARDEDHEADERS_ENABLED in the Dockerfile), so a client that can
+      # talk to it directly can spoof its address and mint itself unlimited
+      # anonymous rate-limit budget. Widen this only with known proxies configured.
+      - "127.0.0.1:8080:8080"
     environment:
-      Gatherum__Database__ConnectionString: Host=postgres;Database=gatherum;Username=gatherum;Password=gatherum
-      # Uncomment and fill in to enable real sign-in; without these the app uses a
-      # development auto-login and says so in its logs.
-      # Gatherum__Oidc__Authority: https://auth.example.org
-      # Gatherum__Oidc__ClientId: gatherum
-      # Gatherum__Oidc__ClientSecret: change-me
-      # Point these at a model you run to have uploaded images read and recordings
-      # transcribed. host.docker.internal reaches a llama.cpp server on the host;
-      # without an endpoint nothing is sent anywhere.
+      Gatherum__Database__ConnectionString: Host=postgres;Database=gatherum;Username=gatherum;Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+
+      # Required. Auth is OIDC-only, and the app refuses to start without these
+      # outside Development rather than fall back to a login that asks nobody
+      # anything. Built for Authelia; any discovery-capable provider works.
+      Gatherum__Oidc__Authority: ${GATHERUM_OIDC_AUTHORITY:?set GATHERUM_OIDC_AUTHORITY in .env}
+      Gatherum__Oidc__ClientId: ${GATHERUM_OIDC_CLIENT_ID:-gatherum}
+      Gatherum__Oidc__ClientSecret: ${GATHERUM_OIDC_CLIENT_SECRET:?set GATHERUM_OIDC_CLIENT_SECRET in .env}
+
+      # Uncomment to have uploaded images read and recordings transcribed by a model
+      # you run. host.docker.internal reaches a llama.cpp server on the host; with no
+      # endpoint set, nothing is ever sent anywhere.
       # Gatherum__Analysis__Endpoint: http://host.docker.internal:8080/v1
       # Gatherum__Analysis__Model: your-any-to-any-model
     volumes:
-      - gatherum-files:/data
+      # A bind mount rather than a named volume, because this directory *is* the
+      # knowledge base now: one directory per user, every page and file a plain file
+      # you can read, grep, rsync and restore without Gatherum running. Keeping it
+      # somewhere you can point a backup at is the whole point of the design.
+      - ${GATHERUM_DATA:-./data}:/data
     depends_on:
       postgres:
         condition: service_healthy
@@ -25,10 +44,11 @@ services:
 
   postgres:
     image: docker.io/pgvector/pgvector:pg16
+    # Deliberately no ports: the database is reachable from the app and nothing else.
     environment:
       POSTGRES_DB: gatherum
       POSTGRES_USER: gatherum
-      POSTGRES_PASSWORD: gatherum
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
     volumes:
       - gatherum-db:/var/lib/postgresql/data
     healthcheck:
@@ -39,5 +59,6 @@ services:
     restart: unless-stopped
 
 volumes:
-  gatherum-files:
+  # Only the index lives here. Losing it costs a reindex, not a knowledge base —
+  # the files above are the system of record.
   gatherum-db:

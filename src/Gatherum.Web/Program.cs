@@ -165,7 +165,7 @@ app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode()
     .AddInteractiveWebAssemblyRenderMode()
     .AddAdditionalAssemblies(typeof(Gatherum.Client.NodeEditor).Assembly);
-app.MapAuthEndpoints(oidc);
+app.MapAuthEndpoints(oidc, app.Environment.IsDevelopment());
 app.MapGatherumApi();
 app.MapMcp("/mcp").RequireAuthorization("Mcp");
 
@@ -178,8 +178,23 @@ app.MapGet("/healthz", async (GatherumDbContext db) =>
 await MigrateAsync(app);
 
 if (!oidc.IsConfigured)
+{
+    // Auth is OIDC-only, so the development auto-login is the one local account that
+    // exists — and it signs anybody in without asking them anything. Outside
+    // Development that is not a warning, it is an open door, and the app refuses to be
+    // one. Loud at startup beats a line in a log nobody reads until afterwards.
+    if (!app.Environment.IsDevelopment())
+    {
+        throw new InvalidOperationException(
+            "No identity provider is configured (Gatherum__Oidc__Authority, __ClientId, " +
+            "__ClientSecret), and the development auto-login signs in anyone who asks. " +
+            "Configure OIDC, or set ASPNETCORE_ENVIRONMENT=Development if this really is " +
+            "a machine only you can reach.");
+    }
     app.Logger.LogWarning(
-        "No OIDC authority configured (Gatherum__Oidc__Authority); using development auto-login.");
+        "No OIDC authority configured (Gatherum__Oidc__Authority); using development " +
+        "auto-login. Anyone who can reach this app can sign in as the development user.");
+}
 
 app.Run();
 

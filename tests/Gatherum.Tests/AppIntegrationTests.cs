@@ -5,6 +5,7 @@ using System.Text.Json;
 using Gatherum.Core.Abstractions;
 using Gatherum.Core.Services;
 using Gatherum.Web.Api;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
@@ -36,10 +37,15 @@ public class AppIntegrationTests(PostgresFixture postgres) : IAsyncLifetime
     /// shared across every client of one instance, so a test that means to exhaust a
     /// budget gets an instance of its own rather than spending everybody else's.</summary>
     private WebApplicationFactory<Program> CreateFactory(
+        params (string Key, string Value)[] overrides) => CreateFactory(null, overrides);
+
+    private WebApplicationFactory<Program> CreateFactory(string? environment,
         params (string Key, string Value)[] overrides)
     {
         return new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
+            if (environment is not null)
+                builder.UseSetting(WebHostDefaults.EnvironmentKey, environment);
             builder.UseSetting("Gatherum:Database:ConnectionString", connectionString);
             builder.UseSetting("Gatherum:Storage:Root", storageRoot);
             // Generous here so the other anonymous tests are never metered; the budget
@@ -248,6 +254,21 @@ public class AppIntegrationTests(PostgresFixture postgres) : IAsyncLifetime
             Assert.Equal(HttpStatusCode.OK, (await author.GetAsync($"/api/nodes/{page.Id}")).StatusCode);
         for (var i = 0; i < 12; i++)
             Assert.Equal(HttpStatusCode.OK, (await author.GetAsync("/api/search?query=closet")).StatusCode);
+    }
+
+    [Fact]
+    public void Without_an_identity_provider_the_app_refuses_to_start_outside_development()
+    {
+        // The development auto-login signs in whoever asks, without authenticating them.
+        // Deployed, that is not a warning in a log — it is an open door, and the app is
+        // not allowed to be one.
+        using var misconfigured = CreateFactory("Production");
+
+        var refused = Assert.Throws<InvalidOperationException>(
+            () => misconfigured.CreateClient());
+
+        Assert.Contains("No identity provider is configured", refused.Message);
+        Assert.Contains("signs in anyone who asks", refused.Message);
     }
 
     [Fact]
