@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Gatherum.Core.Abstractions;
 using Gatherum.Core.Services;
+using Gatherum.Web.Api;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
@@ -164,13 +165,67 @@ public class AppIntegrationTests(PostgresFixture postgres) : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Api_and_mcp_reject_missing_keys()
+    public async Task Api_writes_and_mcp_reject_missing_keys()
     {
         using var anonymous = factory.CreateClient();
-        Assert.Equal(HttpStatusCode.Unauthorized,
-            (await anonymous.GetAsync("/api/nodes/tree")).StatusCode);
+
+        // Reads are reachable without a key now that a node can be public — they simply
+        // show the caller nothing but public nodes, which is none of these.
+        var tree = await anonymous.GetAsync("/api/nodes/tree");
+        Assert.Equal(HttpStatusCode.OK, tree.StatusCode);
+        Assert.Empty((await tree.Content.ReadFromJsonAsync<List<TreeNodeDto>>())!);
+
+        // Everything that writes still refuses, whatever any node's access says.
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.PostAsJsonAsync(
+            "/api/pages", new { title = "smuggled" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync("/api/keys")).StatusCode);
+
         var mcp = await anonymous.PostAsJsonAsync("/mcp", new { jsonrpc = "2.0", id = 1, method = "ping" });
         Assert.Equal(HttpStatusCode.Unauthorized, mcp.StatusCode);
+    }
+
+    [Fact]
+    public async Task A_published_page_is_readable_from_the_internet_and_nothing_else_is()
+    {
+        var published = await client.PostAsJsonAsync("/api/pages",
+            new { title = "Published", markdown = "the closet gets hot" });
+        var page = (await published.Content.ReadFromJsonAsync<NodeDto>())!;
+        var draft = (await (await client.PostAsJsonAsync("/api/pages",
+            new { title = "Draft", markdown = "not yet" })).Content.ReadFromJsonAsync<NodeDto>())!;
+
+        using var anonymous = factory.CreateClient();
+
+        // Private by default: an unpublished page is not there at all.
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await anonymous.GetAsync($"/api/nodes/{page.Id}")).StatusCode);
+
+        Assert.Equal(HttpStatusCode.NoContent, (await client.PostAsJsonAsync(
+            $"/api/nodes/{page.Id}/access", new { access = "Public" })).StatusCode);
+
+        // Public means the internet: no session, no key.
+        var read = await anonymous.GetAsync($"/api/nodes/{page.Id}");
+        Assert.Equal(HttpStatusCode.OK, read.StatusCode);
+        Assert.Equal("Published", (await read.Content.ReadFromJsonAsync<NodeDto>())!.Title);
+
+        // Its content and its searchability come with it.
+        var content = await anonymous.GetAsync($"/api/files/{page.Id}/content");
+        Assert.Equal(HttpStatusCode.OK, content.StatusCode);
+        Assert.Contains("closet", await content.Content.ReadAsStringAsync());
+
+        var hits = await anonymous.GetFromJsonAsync<List<SearchResultDto>>(
+            "/api/search?query=closet");
+        Assert.Equal([page.Id], hits!.Select(h => h.Id));
+
+        // And nothing else does.
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await anonymous.GetAsync($"/api/nodes/{draft.Id}")).StatusCode);
+        Assert.Equal([page.Id],
+            (await anonymous.GetFromJsonAsync<List<TreeNodeDto>>("/api/nodes/tree"))!
+                .Select(n => n.Id));
+
+        // A reader from the internet is still only a reader.
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.PostAsJsonAsync(
+            $"/api/nodes/{page.Id}/rename", new { title = "defaced" })).StatusCode);
     }
 
     private async Task<JsonElement> CallMcpToolAsync(string tool, object arguments)

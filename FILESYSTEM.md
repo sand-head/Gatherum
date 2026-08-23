@@ -1,6 +1,7 @@
 # Filesystem of record — design
 
-**Status**: proposed (owner direction). Nothing below is built yet.
+**Status**: stages 1–4 built and green; 5 and 6 partly. See Plan at the end for what
+is and is not done.
 
 **Session assumptions**: Gatherum is not deployed anywhere. There is no data to preserve,
 no migration to stage, and no compatibility to keep — breaking changes are free. Files are
@@ -292,21 +293,24 @@ Each stage is shippable alone, ordered so the payoff arrives before the risk. No
 work anywhere: nothing is deployed, so each stage may rebuild the schema and re-scan from
 disk.
 
-1. **Path-shaped storage.** Replace `IFileStorage` with a path-addressed seam; user roots;
-   CAS moves to `.gatherum/versions/`; migrations squashed to a fresh `Initial`. No
-   user-visible change — the existing suite passing against readable paths is the test.
-2. **Metadata sidecar + reindex.** Frontmatter and `meta.json`, filename-as-title with
-   overrides, ids on disk, ownership from path, and `gatherum reindex` rebuilding the
-   database from a cold scan. **The original motivation is retired here**: at the end of
-   this stage, losing the database costs only recomputation.
-3. **Sharing model.** Three states, grants with roles, additive inheritance, the authority
-   rule, and `VisibleTo` widened to `Guid?`.
-4. **Public on the internet.** Anonymous read path, the narrow surface above, rate
-   limiting, and the publishing affordance in the UI.
-5. **Union tree.** "Shared with me" as a first-class part of the tree in UI, API, and MCP.
-6. **External change reconciliation.** Startup scan hardening, the watcher, rename
-   detection, self-write suppression.
-
-Stages 1–2 carry the most value and the least risk. Stage 4 is where a mistake is most
-expensive, which is why it is separated from 3 rather than folded into it: the model
-should be correct and tested before anything is reachable without a login.
+1. **Path-shaped storage** — *done*. `IFileStorage` is path-addressed, user roots exist,
+   the CAS is `.gatherum/versions/`, migrations squashed to a fresh `Initial`.
+2. **Metadata sidecar + reindex** — *done, minus frontmatter*. `meta.json` carries titles,
+   descriptions, categories, access, grants and history; `Reindexer` rebuilds from a cold
+   scan and runs at startup. **The original motivation is retired here.** Markdown does
+   not yet carry its own frontmatter — `meta.json` is the only carrier — so a page is not
+   yet self-describing on its own.
+3. **Sharing model** — *done*. Three states, grants with roles, additive inheritance,
+   `inherit: false`, the authority rule, `VisibleTo(…, Guid?)`.
+4. **Public on the internet** — *done, minus rate limiting*. Anonymous reads reach public
+   nodes through the same seam; every write refuses anonymous. **Rate limiting is not
+   implemented**, and semantic search makes a bounded model call on the request path, so
+   an instance should not be exposed publicly until it is.
+5. **Union tree** — *partly*. The data is right: `GetTreeAsync` returns owned plus
+   shared-in, and `TreeNode.Owned` distinguishes them. The UI shows badges and disables
+   publishing on somebody else's node, but there is no share-with-a-person control and no
+   grouping of shared-in items.
+6. **External change reconciliation** — *partly*. The startup scan is the mechanism and it
+   works, including identity-by-recorded-id and new-version-on-external-edit. There is no
+   `FileSystemWatcher`, no content-hash rename detection, and no self-write suppression,
+   so an external change is picked up at next startup rather than immediately.

@@ -80,8 +80,18 @@ fresh DI scope via `Services/AppOperations`.
 
 ## Rules that don't bend
 
-- One `Node` entity, one body model: every node's content is a file version in
-  content-addressed storage; `Kind` is derived from the media type, never stored.
+- One `Node` entity, one body model: a node's current content is a plain file at
+  `{storage root}/{owner root}/{path}`, and superseded content is content-addressed under
+  `{owner root}/.gatherum/versions`. `Kind` is derived from the media type, never stored.
+- The filesystem is the system of record; the database is an index over it. Everything
+  except `Users` and `ApiKeys` is rebuildable by `Reindexer` from a cold scan, so nothing
+  may live only in a table — see `FILESYSTEM.md`. The disk always wins a disagreement, and
+  nothing outside `.gatherum` is written or deleted to resolve one.
+- Ownership is the path: whoever owns the root directory owns what is under it, and no
+  column may disagree. Access is orthogonal to location — only an owner sets it, and only
+  where an owner could have written it.
+- Private by default. A node with no declaration is its owner's alone, which is also what
+  an unprepared directory means. `AccessMode.Public` is the internet, unauthenticated.
 - Two trees, and only two: nodes have one place in the node tree, and categories nest
   in their own. A category is identified by its path — `CategoryPath` is the only place
   that decides how one is spelled — and nothing else names a subject. No tags.
@@ -107,7 +117,11 @@ fresh DI scope via `Services/AppOperations`.
   from `EmbeddedFingerprint`. That comparison is the only thing that queues work. Never
   add an enqueue call beside it: a second source of truth can only ever be the one that
   gets forgotten.
-- Auth is OIDC-only (plus API keys). No local accounts, ever.
+- Auth is OIDC-only (plus API keys). No local accounts, ever. Anonymous is not identity:
+  it reaches public nodes read-only, through `VisibleTo(nodes, null)` and nothing else. An
+  API endpoint is authenticated unless it says `.AllowAnonymous()`, and no write ever does.
+- `INodeAuthorizer.VisibleTo` is the only door for visibility. Never spell the rule again
+  in a query — widening the seam is what makes a change correct everywhere at once.
 - No JavaScript beyond `wwwroot/js/gatherum.js`, and nothing goes in there that
   Blazor can do natively.
 - Every Markdown ⇄ document conversion goes through `GatherumMarkdown` — never
@@ -204,10 +218,10 @@ touch the server only through `IAppData`.
 Deviations and judgment calls go in [DECISIONS.md](DECISIONS.md) when they happen —
 commit messages alone don't count.
 
-[FILESYSTEM.md](FILESYSTEM.md) is a *proposed* architecture, not a description of the
-code: the directory tree becomes the system of record and the database demotes to a
-derived index. Nothing in it is built. Read it before changing storage, node identity,
-or the privacy model, and update the rules above when a stage of it lands.
+[FILESYSTEM.md](FILESYSTEM.md) is the architecture: the directory tree is the system of
+record and the database is a derived index. Stages 1–4 are built; frontmatter, the
+union-tree UI and the filesystem watcher are not. Read it before changing storage, node
+identity, or the access model.
 
 ## What not to do
 

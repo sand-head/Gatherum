@@ -188,6 +188,17 @@ static async Task MigrateAsync(WebApplication app)
     if (GatherumServiceCollectionExtensions.EmbeddingEnabled(app.Configuration))
         await Gatherum.Infrastructure.Data.EmbeddingSchema.EnsureAsync(
             db, options.Embedding.Dimensions, app.Logger);
+
+    // Make the index agree with the directories. This is startup reconciliation and
+    // disaster recovery at once: an empty database simply reports everything as added.
+    if (options.Storage.ReindexOnStartup)
+    {
+        var report = await scope.ServiceProvider
+            .GetRequiredService<Gatherum.Core.Services.Reindexer>().RunAsync();
+        app.Logger.LogInformation(
+            "Storage reconciled: {Added} added, {Updated} updated, {Moved} moved, {Removed} removed.",
+            report.Added, report.Updated, report.Moved, report.Removed);
+    }
 }
 
 public partial class Program;

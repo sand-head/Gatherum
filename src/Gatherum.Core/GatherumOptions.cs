@@ -20,7 +20,14 @@ public class DatabaseOptions
 
 public class StorageOptions
 {
+    /// <summary>The directory holding one directory per user. This is the system of
+    /// record: everything else Gatherum keeps is an index over what is in here.</summary>
     public string Root { get; set; } = "data/files";
+
+    /// <summary>Reconcile the index against the directories at startup. On by default
+    /// because it is also how a lost database recovers — the same scan, and the reason
+    /// there is nothing else to do about one.</summary>
+    public bool ReindexOnStartup { get; set; } = true;
 }
 
 public class OidcOptions

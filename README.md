@@ -192,15 +192,18 @@ Then set `Gatherum__Oidc__Authority=https://auth.example.org`, the client id, an
 
 ## Backups
 
-Two things hold all state:
+**One thing holds your knowledge base**: the directory behind
+`Gatherum__Storage__Root` — one subdirectory per user, every page and file a plain
+file at a readable path, with titles, categories, sharing and history in a
+`.gatherum/meta.json` beside them. Back that up and you have everything.
 
-1. **The database** — `pg_dump gatherum > gatherum.sql` (or snapshot the
-   `gatherum-db` volume). Metadata, categories, links, versions, search text.
-2. **The file store** — the directory behind `Gatherum__Storage__Root` (the
-   `gatherum-files` volume). Every body — pages included — is a content-addressed
-   blob here, so this rsyncs cheaply.
+The database is an index over it. Lose it, corrupt it, botch a migration: start the
+container and the startup scan rebuilds it from the directories — tree, categories,
+links, version history, and who each node is shared with. Only users and API keys
+live in the database alone, and they come back when people sign in.
 
-Restore = restore both, start the container.
+So `pg_dump gatherum > gatherum.sql` is worth having to save re-embedding and
+re-running media analysis, but it is a convenience. The directory is the backup.
 
 ## Extending
 

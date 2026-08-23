@@ -359,7 +359,7 @@ public class FileService(
         await db.SaveChangesAsync(ct);
     }
 
-    public async Task<FileContent> OpenContentAsync(Guid userId, Guid nodeId, int? versionNumber = null,
+    public async Task<FileContent> OpenContentAsync(Guid? userId, Guid nodeId, int? versionNumber = null,
         CancellationToken ct = default)
     {
         var node = await RequireFileNodeAsync(userId, nodeId, ct);
@@ -373,7 +373,7 @@ public class FileService(
 
     /// <summary>The latest version number, cheaply — the editor polls this to notice
     /// someone else's save.</summary>
-    public async Task<int> GetHeadVersionAsync(Guid userId, Guid nodeId, CancellationToken ct = default)
+    public async Task<int> GetHeadVersionAsync(Guid? userId, Guid nodeId, CancellationToken ct = default)
     {
         await nodes.GetVisibleAsync(userId, nodeId, ct);
         return await db.FileVersions
@@ -383,7 +383,7 @@ public class FileService(
 
     /// <summary>The editable text of a text node — read from storage, so it is exact
     /// even where extraction truncates.</summary>
-    public async Task<string> GetTextAsync(Guid userId, Guid nodeId, CancellationToken ct = default)
+    public async Task<string> GetTextAsync(Guid? userId, Guid nodeId, CancellationToken ct = default)
     {
         var content = await OpenContentAsync(userId, nodeId, null, ct);
         await using (content.Stream)
@@ -393,7 +393,7 @@ public class FileService(
         }
     }
 
-    private async Task<Node> RequireFileNodeAsync(Guid userId, Guid nodeId, CancellationToken ct)
+    private async Task<Node> RequireFileNodeAsync(Guid? userId, Guid nodeId, CancellationToken ct)
     {
         var node = await nodes.GetWithBodyAsync(userId, nodeId, ct);
         if (node.File is null || node.File.Versions.Count == 0)
