@@ -84,6 +84,7 @@ public class DocxEditingTests(PostgresFixture postgres) : IAsyncLifetime
     public async Task Another_authors_document_save_gets_its_own_version()
     {
         var id = await UploadDocxAsync("by jess");
+        await harness.Access.GrantAsync(jess, id, sam, AccessRole.Editor);
 
         await harness.Files.SaveBinaryAsync(sam, id, Docx("by sam"));
 

@@ -9,7 +9,7 @@ public record NodeDto(
     string Title,
     Guid? ParentId,
     int Position,
-    bool IsPrivate,
+    string Access,
     IReadOnlyList<CategoryRefDto> Categories,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
@@ -25,7 +25,7 @@ public record NodeDto(
         node.Title,
         node.ParentId,
         node.Position,
-        node.IsPrivate,
+        node.Access.ToString(),
         node.Categories.Select(c => CategoryRefDto.From(c.Category!)).OrderBy(c => c.Path).ToList(),
         node.CreatedAt,
         node.UpdatedAt,
@@ -103,10 +103,11 @@ public record SimilarDto(Guid Id, string Kind, string Title)
 }
 
 public record TreeNodeDto(Guid Id, Guid? ParentId, string Title, string MediaType, string Kind,
-    int Position, bool IsPrivate)
+    int Position, string Access, bool IsPublic, bool Owned)
 {
     public static TreeNodeDto From(TreeNode node) => new(node.Id, node.ParentId, node.Title,
-        node.MediaType, node.Kind.ToString(), node.Position, node.IsPrivate);
+        node.MediaType, node.Kind.ToString(), node.Position, node.Access.ToString(),
+        node.IsPublic, node.Owned);
 }
 
 public record VersionDto(int Number, string FileName, string MediaType, long SizeBytes,
@@ -145,6 +146,9 @@ public record CategoryRequest(string Path);
 public record RenameCategoryRequest(string Path, string Name);
 public record MoveCategoryRequest(string Path, string? NewParentPath);
 public record CreateKeyRequest(string Name);
-public record SetPrivateRequest(bool IsPrivate);
+/// <summary>Private, Shared, or Public — and Public means the internet.</summary>
+public record SetAccessRequest(string Access, bool Inherit = true);
+
+public record GrantRequest(Guid UserId, string Role);
 public record DescriptionRequest(string Description);
 public record PresenceDto(IReadOnlyList<string> Editors, int HeadVersion);

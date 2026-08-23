@@ -14,8 +14,8 @@ using Pgvector;
 namespace Gatherum.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(GatherumDbContext))]
-    [Migration("20260820132059_Embeddings")]
-    partial class Embeddings
+    [Migration("20260823162945_Initial")]
+    partial class Initial
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -185,15 +185,21 @@ namespace Gatherum.Infrastructure.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<int>("Access")
+                        .HasColumnType("integer");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("EffectivePublic")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("EmbeddedFingerprint")
                         .IsRequired()
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
-                    b.Property<bool>("IsPrivate")
+                    b.Property<bool>("InheritAccess")
                         .HasColumnType("boolean");
 
                     b.Property<string>("MediaType")
@@ -210,8 +216,10 @@ namespace Gatherum.Infrastructure.Data.Migrations
                     b.Property<int>("Position")
                         .HasColumnType("integer");
 
-                    b.Property<Guid?>("PrivateToUserId")
-                        .HasColumnType("uuid");
+                    b.Property<string>("RelativePath")
+                        .IsRequired()
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
 
                     b.Property<string>("SearchText")
                         .IsRequired()
@@ -240,7 +248,7 @@ namespace Gatherum.Infrastructure.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("OwnerId");
+                    b.HasIndex("EffectivePublic");
 
                     b.HasIndex("SearchVector");
 
@@ -248,9 +256,29 @@ namespace Gatherum.Infrastructure.Data.Migrations
 
                     b.HasIndex("EmbeddedFingerprint", "TextFingerprint");
 
+                    b.HasIndex("OwnerId", "RelativePath");
+
                     b.HasIndex("ParentId", "Position");
 
                     b.ToTable("Nodes");
+                });
+
+            modelBuilder.Entity("Gatherum.Core.Domain.NodeAccessEntry", b =>
+                {
+                    b.Property<Guid>("NodeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Role")
+                        .HasColumnType("integer");
+
+                    b.HasKey("NodeId", "UserId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("NodeAccessEntries");
                 });
 
             modelBuilder.Entity("Gatherum.Core.Domain.NodeCategory", b =>
@@ -305,6 +333,24 @@ namespace Gatherum.Infrastructure.Data.Migrations
                     b.HasIndex("NodeId", "Ordinal");
 
                     b.ToTable("NodeEmbeddings");
+                });
+
+            modelBuilder.Entity("Gatherum.Core.Domain.NodeGrant", b =>
+                {
+                    b.Property<Guid>("NodeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Role")
+                        .HasColumnType("integer");
+
+                    b.HasKey("NodeId", "UserId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("NodeGrants");
                 });
 
             modelBuilder.Entity("Gatherum.Core.Domain.NodeLink", b =>
@@ -424,6 +470,17 @@ namespace Gatherum.Infrastructure.Data.Migrations
                     b.Navigation("Parent");
                 });
 
+            modelBuilder.Entity("Gatherum.Core.Domain.NodeAccessEntry", b =>
+                {
+                    b.HasOne("Gatherum.Core.Domain.Node", "Node")
+                        .WithMany("AccessEntries")
+                        .HasForeignKey("NodeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Node");
+                });
+
             modelBuilder.Entity("Gatherum.Core.Domain.NodeCategory", b =>
                 {
                     b.HasOne("Gatherum.Core.Domain.Category", "Category")
@@ -452,6 +509,25 @@ namespace Gatherum.Infrastructure.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Node");
+                });
+
+            modelBuilder.Entity("Gatherum.Core.Domain.NodeGrant", b =>
+                {
+                    b.HasOne("Gatherum.Core.Domain.Node", "Node")
+                        .WithMany("Grants")
+                        .HasForeignKey("NodeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Gatherum.Core.Domain.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Node");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Gatherum.Core.Domain.NodeLink", b =>
@@ -487,6 +563,8 @@ namespace Gatherum.Infrastructure.Data.Migrations
 
             modelBuilder.Entity("Gatherum.Core.Domain.Node", b =>
                 {
+                    b.Navigation("AccessEntries");
+
                     b.Navigation("Categories");
 
                     b.Navigation("Children");
@@ -494,6 +572,8 @@ namespace Gatherum.Infrastructure.Data.Migrations
                     b.Navigation("Embeddings");
 
                     b.Navigation("File");
+
+                    b.Navigation("Grants");
 
                     b.Navigation("InboundLinks");
 

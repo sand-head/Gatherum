@@ -122,10 +122,28 @@ public static class ApiEndpoints
             return Results.NoContent();
         });
 
-        api.MapPost("/nodes/{id:guid}/private", async (NodeService nodes, HttpContext http, Guid id,
-            SetPrivateRequest request) =>
+        api.MapPost("/nodes/{id:guid}/access", async (AccessService access, HttpContext http,
+            Guid id, SetAccessRequest request) =>
         {
-            await nodes.SetPrivateAsync(http.User.GetUserId(), id, request.IsPrivate);
+            if (!Enum.TryParse<AccessMode>(request.Access, ignoreCase: true, out var mode))
+                return Results.BadRequest(new { error = $"Unknown access '{request.Access}'." });
+            await access.SetAccessAsync(http.User.GetUserId(), id, mode, request.Inherit);
+            return Results.NoContent();
+        });
+
+        api.MapPost("/nodes/{id:guid}/grants", async (AccessService access, HttpContext http,
+            Guid id, GrantRequest request) =>
+        {
+            if (!Enum.TryParse<AccessRole>(request.Role, ignoreCase: true, out var role))
+                return Results.BadRequest(new { error = $"Unknown role '{request.Role}'." });
+            await access.GrantAsync(http.User.GetUserId(), id, request.UserId, role);
+            return Results.NoContent();
+        });
+
+        api.MapDelete("/nodes/{id:guid}/grants/{userId:guid}", async (AccessService access,
+            HttpContext http, Guid id, Guid userId) =>
+        {
+            await access.RevokeAsync(http.User.GetUserId(), id, userId);
             return Results.NoContent();
         });
 

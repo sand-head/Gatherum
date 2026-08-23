@@ -17,6 +17,7 @@ public sealed class ServiceHarness : IAsyncDisposable
 {
     public GatherumDbContext Db { get; }
     public NodeService Nodes { get; }
+    public AccessService Access { get; }
     public CategoryService Categories { get; }
     public FileService Files { get; }
     public SearchService Search { get; }
@@ -64,7 +65,8 @@ public sealed class ServiceHarness : IAsyncDisposable
         storage = new FileSystemStorage(settings);
         Embeddings = new EmbeddingService(Db, [Embedder], new QueryEmbeddingCache(), settings,
             NullLogger<EmbeddingService>.Instance);
-        Nodes = new NodeService(Db, authorizer, Clock, Embeddings);
+        Access = new AccessService(Db, Clock);
+        Nodes = new NodeService(Db, authorizer, Clock, Embeddings, Access);
         Categories = new CategoryService(Db, Nodes, authorizer);
         Files = new FileService(Db, Nodes, storage,
             [new PlainTextExtractor(), new PdfTextExtractor(), new DocxTextExtractor(),

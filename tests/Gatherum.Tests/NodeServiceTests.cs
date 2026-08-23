@@ -93,43 +93,77 @@ public class NodeServiceTests(PostgresFixture postgres) : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Private_subtrees_hide_from_everyone_but_the_owner()
+    public async Task Nodes_are_private_until_somebody_is_named_and_then_the_subtree_follows()
     {
         var secret = await NewPageAsync(jess, null, "secret");
         var inside = await NewPageAsync(jess, secret.Id, "inside");
-        await nodes.SetPrivateAsync(jess, secret.Id, true);
 
+        // Nothing was declared, so nothing is shared: the default is closed.
         Assert.Equal(2, (await nodes.GetTreeAsync(jess)).Count);
         Assert.Empty(await nodes.GetTreeAsync(sam));
         await Assert.ThrowsAsync<Gatherum.Core.NotFoundException>(
             () => nodes.GetWithBodyAsync(sam, inside.Id));
 
-        await nodes.SetPrivateAsync(jess, secret.Id, false);
+        // Access is additive downward: naming Sam on the parent carries to the child.
+        await harness.Access.GrantAsync(jess, secret.Id, sam, AccessRole.Reader);
         Assert.Equal(2, (await nodes.GetTreeAsync(sam)).Count);
+
+        await harness.Access.RevokeAsync(jess, secret.Id, sam);
+        Assert.Empty(await nodes.GetTreeAsync(sam));
     }
 
     [Fact]
-    public async Task Moving_into_a_private_subtree_inherits_privacy()
+    public async Task Moving_into_a_shared_subtree_inherits_the_share_and_leaving_it_ends()
     {
-        var secret = await NewPageAsync(jess, null, "secret");
-        await nodes.SetPrivateAsync(jess, secret.Id, true);
-        var wanderer = await NewPageAsync(sam, null, "wanderer");
-
-        // Sam can't see jess's private node, so jess performs the move.
-        await nodes.MoveAsync(jess, wanderer.Id, secret.Id);
+        var shared = await NewPageAsync(jess, null, "shared");
+        await harness.Access.GrantAsync(jess, shared.Id, sam, AccessRole.Reader);
+        var wanderer = await NewPageAsync(jess, null, "wanderer");
         Assert.DoesNotContain(await nodes.GetTreeAsync(sam), n => n.Id == wanderer.Id);
 
-        await nodes.MoveAsync(jess, wanderer.Id, null);
+        await nodes.MoveAsync(jess, wanderer.Id, shared.Id);
         Assert.Contains(await nodes.GetTreeAsync(sam), n => n.Id == wanderer.Id);
+
+        await nodes.MoveAsync(jess, wanderer.Id, null);
+        Assert.DoesNotContain(await nodes.GetTreeAsync(sam), n => n.Id == wanderer.Id);
     }
 
     [Fact]
-    public async Task Only_the_owner_can_toggle_privacy()
+    public async Task A_subtree_can_refuse_what_the_directory_above_it_shared()
+    {
+        var shared = await NewPageAsync(jess, null, "shared");
+        var tighter = await NewPageAsync(jess, shared.Id, "tighter");
+        await harness.Access.GrantAsync(jess, shared.Id, sam, AccessRole.Reader);
+        Assert.Equal(2, (await nodes.GetTreeAsync(sam)).Count);
+
+        await harness.Access.SetAccessAsync(jess, tighter.Id, AccessMode.Private, inherit: false);
+
+        Assert.Equal([shared.Id], (await nodes.GetTreeAsync(sam)).Select(n => n.Id));
+    }
+
+    [Fact]
+    public async Task Public_is_the_internet_and_needs_no_user_at_all()
+    {
+        var page = await NewPageAsync(jess, null, "published");
+        var draft = await NewPageAsync(jess, null, "draft");
+
+        Assert.Empty(await nodes.GetTreeAsync(null));
+
+        await harness.Access.SetAccessAsync(jess, page.Id, AccessMode.Public);
+
+        Assert.Equal([page.Id], (await nodes.GetTreeAsync(null)).Select(n => n.Id));
+        await Assert.ThrowsAsync<Gatherum.Core.NotFoundException>(
+            () => nodes.GetWithBodyAsync(null, draft.Id));
+    }
+
+    [Fact]
+    public async Task Only_the_owner_can_change_who_may_reach_a_node()
     {
         var page = await NewPageAsync(jess, null, "mine");
 
         await Assert.ThrowsAsync<Gatherum.Core.ForbiddenException>(
-            () => nodes.SetPrivateAsync(sam, page.Id, true));
+            () => harness.Access.SetAccessAsync(sam, page.Id, AccessMode.Public));
+        await Assert.ThrowsAsync<Gatherum.Core.ForbiddenException>(
+            () => harness.Access.GrantAsync(sam, page.Id, sam, AccessRole.Editor));
     }
 
     [Fact]
@@ -166,7 +200,6 @@ public class NodeServiceTests(PostgresFixture postgres) : IAsyncLifetime
     public async Task A_wiki_link_only_resolves_to_what_its_writer_can_see()
     {
         var hidden = await NewPageAsync(sam, null, "Sam's notes");
-        await nodes.SetPrivateAsync(sam, hidden.Id, true);
         var page = await NewPageAsync(jess, null, "page");
 
         await files.SaveTextAsync(jess, page.Id, "See [[Sam's notes]].");
@@ -179,7 +212,6 @@ public class NodeServiceTests(PostgresFixture postgres) : IAsyncLifetime
     {
         var homelab = await NewPageAsync(jess, null, "Homelab");
         var mine = await NewPageAsync(sam, null, "Sam's notes");
-        await nodes.SetPrivateAsync(sam, mine.Id, true);
 
         var resolved = await nodes.ResolveTitlesAsync(jess,
             ["  homelab  ", "Sam's notes", "nothing by this name"]);
@@ -218,7 +250,6 @@ public class NodeServiceTests(PostgresFixture postgres) : IAsyncLifetime
         await categories.AddAsync(jess, subject.Id, "Beta");
         await categories.AddAsync(jess, twoCategories.Id, "Beta");
         await files.SaveTextAsync(jess, subject.Id, $"See [@x](node://{linkedAndFiled.Id})");
-        await nodes.SetPrivateAsync(sam, hidden.Id, true);
 
         var similar = await nodes.GetSimilarAsync(jess, subject.Id);
 

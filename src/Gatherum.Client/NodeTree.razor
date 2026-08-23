@@ -120,9 +120,9 @@
         Navigation.NavigateTo("/");
     }
 
-    public async Task TogglePrivateAsync(TreeNodeInfo node)
+    public async Task TogglePublicAsync(TreeNodeInfo node)
     {
-        await Data.SetPrivateAsync(node.Id, !node.IsPrivate);
+        await Data.SetAccessAsync(node.Id, node.IsPublic ? "Private" : "Public");
         await Tree.RefreshAsync();
     }
 
