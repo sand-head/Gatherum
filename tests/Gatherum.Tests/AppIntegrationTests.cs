@@ -251,6 +251,48 @@ public class AppIntegrationTests(PostgresFixture postgres) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Behind_a_proxy_the_budget_follows_the_forwarded_client_address()
+    {
+        // The rate limiter partitions on RemoteIpAddress, and behind a TLS-terminating
+        // reverse proxy that is the proxy for everybody — one bucket for the whole
+        // internet — unless X-Forwarded-For is honoured. The container turns that on with
+        // ASPNETCORE_FORWARDEDHEADERS_ENABLED, which is a setting in the Dockerfile rather
+        // than a line of code here, so this pins the behaviour the limiter depends on.
+        var before = Environment.GetEnvironmentVariable("ASPNETCORE_FORWARDEDHEADERS_ENABLED");
+        Environment.SetEnvironmentVariable("ASPNETCORE_FORWARDEDHEADERS_ENABLED", "true");
+        try
+        {
+            using var proxied = CreateFactory(
+                ("Gatherum:Sharing:AnonymousReadsPerMinute", "2"),
+                ("Gatherum:Sharing:AnonymousQueueDepth", "0"));
+            using var anonymous = proxied.CreateClient();
+
+            // Four requests against a budget of two, each from a different client as a
+            // proxy would report it. Every one is served: they are four callers, not one.
+            for (var i = 1; i <= 4; i++)
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Get, "/api/nodes/tree");
+                request.Headers.Add("X-Forwarded-For", $"203.0.113.{i}");
+                Assert.Equal(HttpStatusCode.OK, (await anonymous.SendAsync(request)).StatusCode);
+            }
+
+            // And one caller is still one caller.
+            var codes = new List<HttpStatusCode>();
+            for (var i = 0; i < 3; i++)
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Get, "/api/nodes/tree");
+                request.Headers.Add("X-Forwarded-For", "198.51.100.9");
+                codes.Add((await anonymous.SendAsync(request)).StatusCode);
+            }
+            Assert.Equal(HttpStatusCode.TooManyRequests, codes[^1]);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("ASPNETCORE_FORWARDEDHEADERS_ENABLED", before);
+        }
+    }
+
+    [Fact]
     public async Task A_published_page_is_readable_from_the_internet_and_nothing_else_is()
     {
         var published = await client.PostAsJsonAsync("/api/pages",

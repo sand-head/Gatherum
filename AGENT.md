@@ -119,6 +119,10 @@ fresh DI scope via `Services/AppOperations`.
   gets forgotten.
 - A user's root directory is named after their OIDC `preferred_username`, assigned once
   and never renamed — moving it would mean moving every file they own.
+- The anonymous rate limiter partitions on the client address, which behind a proxy means
+  `X-Forwarded-For` — enabled by `ASPNETCORE_FORWARDEDHEADERS_ENABLED` in the Dockerfile,
+  and trusted from any peer, so the loopback bind is what stops header spoofing. Don't
+  publish the port wider without revisiting both.
 - Auth is OIDC-only (plus API keys). No local accounts, ever. Anonymous is not identity:
   it reaches public nodes read-only, through `VisibleTo(nodes, null)` and nothing else. An
   API endpoint is authenticated unless it says `.AllowAnonymous()`, and no write ever does.

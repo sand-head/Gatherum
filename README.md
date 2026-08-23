@@ -102,6 +102,14 @@ Everything configures through environment variables (`Gatherum__Section__Key` fo
 | `Gatherum__Sharing__AllowPublic` | `true` | Serve nodes marked public. Off hides them all at once, without editing what an owner recorded |
 | `Gatherum__Sharing__AnonymousReadsPerMinute` | `120` | Read budget per client address, for callers with no session |
 | `Gatherum__Sharing__AnonymousSearchesPerMinute` | `10` | Search budget per client address. Tighter, because the semantic half runs a model on the request path |
+
+**Behind a reverse proxy**, the anonymous budgets are per client address, so they depend on
+`X-Forwarded-For` reaching the app. The container image sets
+`ASPNETCORE_FORWARDEDHEADERS_ENABLED=true`, which honours it from *any* peer — so the thing
+keeping a client from spoofing the header and minting itself unlimited budgets is that
+nothing but the proxy can reach the port. The quadlet binds `127.0.0.1:8080` for exactly
+that reason. If you publish the port more widely than that, set
+`ASPNETCORE_FORWARDEDHEADERS_ENABLED=false` or put known proxies in front of it.
 | `Gatherum__Oidc__Authority` | *(empty)* | OIDC issuer URL; empty enables the dev auto-login |
 | `Gatherum__Oidc__ClientId` | *(empty)* | OIDC client id |
 | `Gatherum__Oidc__ClientSecret` | *(empty)* | OIDC client secret |
