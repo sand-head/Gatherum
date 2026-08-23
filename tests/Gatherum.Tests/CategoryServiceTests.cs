@@ -156,7 +156,6 @@ public class CategoryServiceTests(PostgresFixture postgres) : IAsyncLifetime
     {
         var secret = await files.CreateTextNodeAsync(sam, null, "Surprise party");
         await categories.AddAsync(sam, secret.Id, "Plans/Birthday");
-        await nodes.SetPrivateAsync(sam, secret.Id, true);
 
         Assert.Empty(await categories.ListAsync(jess));
         await Assert.ThrowsAsync<NotFoundException>(() => categories.GetAsync(jess, "plans"));
@@ -185,7 +184,6 @@ public class CategoryServiceTests(PostgresFixture postgres) : IAsyncLifetime
     public async Task Filing_a_node_nobody_can_see_is_a_not_found()
     {
         var secret = await files.CreateTextNodeAsync(sam, null, "Surprise party");
-        await nodes.SetPrivateAsync(sam, secret.Id, true);
 
         await Assert.ThrowsAsync<NotFoundException>(() =>
             categories.AddAsync(jess, secret.Id, "Plans"));

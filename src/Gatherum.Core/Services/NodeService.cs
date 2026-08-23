@@ -8,7 +8,7 @@ namespace Gatherum.Core.Services;
 /// <summary>The tree rules: positions, moves, privacy, and links. Bodies — bytes,
 /// versions, text — belong to FileService; the taxonomy to CategoryService.</summary>
 public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeProvider clock,
-    EmbeddingService embeddings)
+    EmbeddingService embeddings, AccessService access)
 {
     /// <summary>Creates the tree half of a node; FileService attaches the body before
     /// saving. Position and inherited privacy are decided here so every node obeys the
@@ -29,7 +29,6 @@ public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeP
             ParentId = parent?.Id,
             Position = await db.Nodes.CountAsync(n => n.ParentId == parentId, ct),
             OwnerId = userId,
-            PrivateToUserId = parent?.PrivateToUserId,
             CreatedAt = now,
             UpdatedAt = now,
         };
@@ -37,17 +36,19 @@ public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeP
         return node;
     }
 
-    public async Task<Node> GetVisibleAsync(Guid userId, Guid nodeId, CancellationToken ct = default)
+    public async Task<Node> GetVisibleAsync(Guid? userId, Guid nodeId, CancellationToken ct = default)
     {
-        var node = await db.Nodes.FirstOrDefaultAsync(n => n.Id == nodeId, ct);
+        var node = await db.Nodes.Include(n => n.AccessEntries)
+            .FirstOrDefaultAsync(n => n.Id == nodeId, ct);
         if (node is null || !authorizer.CanSee(node, userId))
             throw new NotFoundException($"Node {nodeId} not found.");
         return node;
     }
 
-    public async Task<Node> GetWithBodyAsync(Guid userId, Guid nodeId, CancellationToken ct = default)
+    public async Task<Node> GetWithBodyAsync(Guid? userId, Guid nodeId, CancellationToken ct = default)
     {
         var node = await db.Nodes
+            .Include(n => n.AccessEntries)
             .Include(n => n.File!).ThenInclude(f => f.Versions)
             .Include(n => n.Categories).ThenInclude(c => c.Category)
             .FirstOrDefaultAsync(n => n.Id == nodeId, ct);
@@ -56,21 +57,24 @@ public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeP
         return node;
     }
 
-    public Task<List<Node>> GetChildrenAsync(Guid userId, Guid? parentId, CancellationToken ct = default) =>
+    public Task<List<Node>> GetChildrenAsync(Guid? userId, Guid? parentId, CancellationToken ct = default) =>
         authorizer.VisibleTo(db.Nodes, userId)
             .Where(n => n.ParentId == parentId)
             .OrderBy(n => n.Position)
             .ToListAsync(ct);
 
-    /// <summary>The whole visible tree as a flat, ordered list; callers nest it.</summary>
-    public Task<List<TreeNode>> GetTreeAsync(Guid userId, CancellationToken ct = default) =>
+    /// <summary>The whole visible tree as a flat, ordered list; callers nest it. Because
+    /// ownership is the path and access is not, this is a union rather than a listing:
+    /// what the caller owns, plus what has been shared with them from somebody else's
+    /// root. <see cref="TreeNode.Owned"/> is how the UI tells the two apart.</summary>
+    public Task<List<TreeNode>> GetTreeAsync(Guid? userId, CancellationToken ct = default) =>
         authorizer.VisibleTo(db.Nodes, userId)
             .OrderBy(n => n.ParentId).ThenBy(n => n.Position)
             .Select(n => new TreeNode(n.Id, n.ParentId, n.Title, n.MediaType, n.Position,
-                n.PrivateToUserId != null))
+                n.Access, n.EffectivePublic, userId != null && n.OwnerId == userId))
             .ToListAsync(ct);
 
-    public async Task RenameAsync(Guid userId, Guid nodeId, string title, CancellationToken ct = default)
+    public async Task RenameAsync(Guid? userId, Guid nodeId, string title, CancellationToken ct = default)
     {
         var node = await GetVisibleAsync(userId, nodeId, ct);
         node.Title = title;
@@ -78,7 +82,7 @@ public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeP
         await db.SaveChangesAsync(ct);
     }
 
-    public async Task MoveAsync(Guid userId, Guid nodeId, Guid? newParentId, int? position = null,
+    public async Task MoveAsync(Guid? userId, Guid nodeId, Guid? newParentId, int? position = null,
         CancellationToken ct = default)
     {
         var node = await GetVisibleAsync(userId, nodeId, ct);
@@ -102,11 +106,11 @@ public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeP
 
         node.ParentId = newParentId;
         node.UpdatedAt = clock.GetUtcNow();
-        await RecomputePrivacyAsync(ct);
+        await access.RecomputeAsync(ct);
         await db.SaveChangesAsync(ct);
     }
 
-    public async Task DeleteAsync(Guid userId, Guid nodeId, CancellationToken ct = default)
+    public async Task DeleteAsync(Guid? userId, Guid nodeId, CancellationToken ct = default)
     {
         var node = await GetVisibleAsync(userId, nodeId, ct);
         db.Nodes.Remove(node);
@@ -116,23 +120,12 @@ public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeP
         await db.SaveChangesAsync(ct);
     }
 
-    public async Task SetPrivateAsync(Guid userId, Guid nodeId, bool isPrivate,
-        CancellationToken ct = default)
-    {
-        var node = await GetVisibleAsync(userId, nodeId, ct);
-        if (node.OwnerId != userId)
-            throw new ForbiddenException("Only the owner can change a node's privacy.");
-        node.IsPrivate = isPrivate;
-        await RecomputePrivacyAsync(ct);
-        await db.SaveChangesAsync(ct);
-    }
-
     /// <summary>Which of these titles name a node the user can see — what a
     /// <c>[[wiki link]]</c> needs, since it addresses a page by name rather than by id.
     /// Matching ignores case, because that is how people type a title they remember.
     /// Titles are not unique, so a tie goes to the exact-case match and then to the
     /// oldest node: the same name resolves to the same node for everyone, every time.</summary>
-    public async Task<IReadOnlyDictionary<string, Guid>> ResolveTitlesAsync(Guid userId,
+    public async Task<IReadOnlyDictionary<string, Guid>> ResolveTitlesAsync(Guid? userId,
         IReadOnlyCollection<string> titles, CancellationToken ct = default)
     {
         var resolved = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
@@ -162,7 +155,7 @@ public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeP
         return resolved;
     }
 
-    public Task<List<Node>> GetBacklinksAsync(Guid userId, Guid nodeId, CancellationToken ct = default) =>
+    public Task<List<Node>> GetBacklinksAsync(Guid? userId, Guid nodeId, CancellationToken ct = default) =>
         authorizer.VisibleTo(db.Nodes, userId)
             .Where(n => n.OutboundLinks.Any(l => l.TargetId == nodeId))
             .OrderBy(n => n.Title)
@@ -173,7 +166,7 @@ public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeP
     /// sit in scores two; a category one shares with the other's ancestry scores one,
     /// because "somewhere under Homelab" is a weaker kinship than "in Homelab/Podman".
     /// Ties go to the most recently updated.</summary>
-    public async Task<List<SimilarNode>> GetSimilarAsync(Guid userId, Guid nodeId, int limit = 5,
+    public async Task<List<SimilarNode>> GetSimilarAsync(Guid? userId, Guid nodeId, int limit = 5,
         CancellationToken ct = default)
     {
         // Resolve visibility first so a private node's categories and links never leak
@@ -241,7 +234,7 @@ public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeP
     /// worth about what a link is worth at its strongest: writing about the same subject
     /// is real evidence of kinship, but somebody deliberately linking two pages, or
     /// filing them under one subject, is a statement and this is an inference.</summary>
-    private async Task<Dictionary<Guid, double>> LikenessAsync(Guid userId, Guid nodeId, int limit,
+    private async Task<Dictionary<Guid, double>> LikenessAsync(Guid? userId, Guid nodeId, int limit,
         CancellationToken ct)
     {
         var centroid = await embeddings.CentroidAsync(nodeId, ct);
@@ -319,25 +312,10 @@ public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeP
     /// <summary>Recomputes the denormalized privacy owner for every node. The whole tree
     /// fits in memory for a two-person knowledge base, so a full pass beats a recursive
     /// SQL walk in both clarity and correctness.</summary>
-    private async Task RecomputePrivacyAsync(CancellationToken ct)
-    {
-        var nodes = await db.Nodes.ToListAsync(ct);
-        var children = nodes.ToLookup(n => n.ParentId);
-        var pending = new Stack<(Node Node, Guid? Inherited)>(
-            children[null].Select(n => (n, (Guid?)null)));
-        while (pending.Count > 0)
-        {
-            var (node, inherited) = pending.Pop();
-            node.PrivateToUserId = node.IsPrivate ? node.OwnerId : inherited;
-            foreach (var child in children[node.Id])
-                pending.Push((child, node.PrivateToUserId));
-        }
-    }
-
 }
 
 public record TreeNode(Guid Id, Guid? ParentId, string Title, string MediaType, int Position,
-    bool IsPrivate)
+    AccessMode Access, bool IsPublic, bool Owned)
 {
     public NodeKind Kind => MediaType == MediaTypes.Markdown ? NodeKind.Page : NodeKind.File;
 }

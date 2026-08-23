@@ -16,6 +16,8 @@ public class FileService(
     GatherumDbContext db,
     NodeService nodes,
     IFileStorage storage,
+    UserRoots roots,
+    NodeMetadataWriter sidecar,
     IEnumerable<ITextExtractor> extractors,
     IEnumerable<IMediaAnalyzer> analyzers,
     MediaAnalysisQueue analysisQueue,
@@ -36,8 +38,14 @@ public class FileService(
     {
         var node = await nodes.CreateNodeAsync(userId, parentId, title, mediaType, ct);
         node.File = new FileBody { NodeId = node.Id };
+        // A page is a file, so it gets a real name on disk. When the title cannot be one,
+        // the bytes still land somewhere sane and the title lives on in the node.
+        var extension = MediaTypes.ExtensionFor(mediaType);
+        node.RelativePath = await AllocatePathAsync(userId, parentId,
+            NodePaths.FileNameFor(title, extension) ?? $"{node.Id:N}{extension}", ct);
         await AddTextVersionAsync(node, userId, content, ct);
         await db.SaveChangesAsync(ct);
+        await sidecar.WriteAsync(node.Id, ct);
         return node;
     }
 
@@ -47,8 +55,11 @@ public class FileService(
         var mediaType = MediaTypes.Resolve(declaredMediaType, fileName);
         var node = await nodes.CreateNodeAsync(userId, parentId, fileName, mediaType, ct);
         node.File = new FileBody { NodeId = node.Id };
+        node.RelativePath = await AllocatePathAsync(userId, parentId,
+            NodePaths.IsLegalSegment(fileName) ? fileName : $"{node.Id:N}", ct);
         var version = await AddUploadedVersionAsync(node, userId, fileName, mediaType, content, ct);
         await db.SaveChangesAsync(ct);
+        await sidecar.WriteAsync(node.Id, ct);
         QueueAnalysis(version);
         return node;
     }
@@ -65,6 +76,7 @@ public class FileService(
             var version = await AddUploadedVersionAsync(node, userId, fileName, mediaType, content, ct);
             node.MediaType = mediaType;
             await db.SaveChangesAsync(ct);
+            await sidecar.WriteAsync(node.Id, ct);
             QueueAnalysis(version);
             return node;
         }
@@ -88,8 +100,9 @@ public class FileService(
                 throw new ForbiddenException($"Node {nodeId} is not editable text.");
 
             var bytes = Encoding.UTF8.GetBytes(content);
-            var blob = await storage.SaveAsync(new MemoryStream(bytes), ct);
             var current = node.File.Current;
+            await ArchiveCurrentAsync(node, ct);
+            var blob = await WriteWorkingAsync(node, new MemoryStream(bytes), ct);
             var now = clock.GetUtcNow();
 
             if (current.UploadedById == userId && now - current.UploadedAt < VersionCollapseWindow)
@@ -119,6 +132,7 @@ public class FileService(
             nodes.RefreshSearchText(node);
             await RefreshLinksAsync(node, userId, ct);
             await db.SaveChangesAsync(ct);
+            await sidecar.WriteAsync(node.Id, ct);
             return node.File.Current;
         }
         finally
@@ -141,9 +155,10 @@ public class FileService(
             if (node.MediaType != MediaTypes.Docx)
                 throw new ForbiddenException($"Node {nodeId} is not an editable document.");
 
-            var blob = await storage.SaveAsync(new MemoryStream(content), ct);
             var current = node.File!.Current;
-            var text = await ExtractTextAsync(blob.Hash, node.MediaType, current.FileName, ct);
+            await ArchiveCurrentAsync(node, ct);
+            var blob = await WriteWorkingAsync(node, new MemoryStream(content), ct);
+            var text = await ExtractTextAsync(node, node.MediaType, current.FileName, ct);
             var now = clock.GetUtcNow();
 
             if (current.UploadedById == userId && now - current.UploadedAt < VersionCollapseWindow)
@@ -173,6 +188,7 @@ public class FileService(
             nodes.RefreshSearchText(node);
             await RefreshLinksAsync(node, userId, ct);
             await db.SaveChangesAsync(ct);
+            await sidecar.WriteAsync(node.Id, ct);
             return node.File.Current;
         }
         finally
@@ -181,8 +197,10 @@ public class FileService(
         }
     }
 
-    /// <summary>Reading a version back into the present: the old blob becomes the newest
-    /// version. Content-addressing makes this a row insert, not a byte copy.</summary>
+    /// <summary>Reading a version back into the present: the old content becomes the
+    /// newest version. Now that the working file is the system of record this is a byte
+    /// copy as well as a row insert — the archive still supplies the bytes for free, but
+    /// somebody looking at the directory has to see the restored document there.</summary>
     public async Task<Node> RestoreVersionAsync(Guid userId, Guid nodeId, int versionNumber,
         CancellationToken ct = default)
     {
@@ -193,6 +211,15 @@ public class FileService(
             var node = await RequireFileNodeAsync(userId, nodeId, ct);
             var version = node.File!.Versions.FirstOrDefault(v => v.Number == versionNumber)
                 ?? throw new NotFoundException($"Version {versionNumber} of node {nodeId} not found.");
+
+            // Put the outgoing content in the archive before overwriting it, then write
+            // the restored bytes where the document actually lives.
+            await ArchiveCurrentAsync(node, ct);
+            var path = await PathAsync(node, ct);
+            await using (var archived = await storage.OpenArchiveAsync(path.Root, version.Hash, ct))
+            {
+                await storage.WriteAsync(path, archived, ct);
+            }
 
             var restored = new FileVersion
             {
@@ -217,6 +244,7 @@ public class FileService(
             nodes.RefreshSearchText(node);
             await RefreshLinksAsync(node, userId, ct);
             await db.SaveChangesAsync(ct);
+            await sidecar.WriteAsync(node.Id, ct);
             QueueAnalysis(restored);
             return node;
         }
@@ -331,7 +359,7 @@ public class FileService(
         await db.SaveChangesAsync(ct);
     }
 
-    public async Task<FileContent> OpenContentAsync(Guid userId, Guid nodeId, int? versionNumber = null,
+    public async Task<FileContent> OpenContentAsync(Guid? userId, Guid nodeId, int? versionNumber = null,
         CancellationToken ct = default)
     {
         var node = await RequireFileNodeAsync(userId, nodeId, ct);
@@ -339,13 +367,13 @@ public class FileService(
             ? node.File!.Versions.FirstOrDefault(v => v.Number == number)
                 ?? throw new NotFoundException($"Version {number} of node {nodeId} not found.")
             : node.File!.Current;
-        var stream = await storage.OpenReadAsync(version.Hash, ct);
+        var stream = await OpenVersionAsync(node, version, ct);
         return new FileContent(stream, version.MediaType, version.FileName, version.SizeBytes);
     }
 
     /// <summary>The latest version number, cheaply — the editor polls this to notice
     /// someone else's save.</summary>
-    public async Task<int> GetHeadVersionAsync(Guid userId, Guid nodeId, CancellationToken ct = default)
+    public async Task<int> GetHeadVersionAsync(Guid? userId, Guid nodeId, CancellationToken ct = default)
     {
         await nodes.GetVisibleAsync(userId, nodeId, ct);
         return await db.FileVersions
@@ -355,7 +383,7 @@ public class FileService(
 
     /// <summary>The editable text of a text node — read from storage, so it is exact
     /// even where extraction truncates.</summary>
-    public async Task<string> GetTextAsync(Guid userId, Guid nodeId, CancellationToken ct = default)
+    public async Task<string> GetTextAsync(Guid? userId, Guid nodeId, CancellationToken ct = default)
     {
         var content = await OpenContentAsync(userId, nodeId, null, ct);
         await using (content.Stream)
@@ -365,7 +393,7 @@ public class FileService(
         }
     }
 
-    private async Task<Node> RequireFileNodeAsync(Guid userId, Guid nodeId, CancellationToken ct)
+    private async Task<Node> RequireFileNodeAsync(Guid? userId, Guid nodeId, CancellationToken ct)
     {
         var node = await nodes.GetWithBodyAsync(userId, nodeId, ct);
         if (node.File is null || node.File.Versions.Count == 0)
@@ -376,7 +404,7 @@ public class FileService(
     private async Task AddTextVersionAsync(Node node, Guid userId, string content, CancellationToken ct)
     {
         var bytes = Encoding.UTF8.GetBytes(content);
-        var blob = await storage.SaveAsync(new MemoryStream(bytes), ct);
+        var blob = await WriteWorkingAsync(node, new MemoryStream(bytes), ct);
         AddVersion(node, new FileVersion
         {
             Id = Guid.NewGuid(),
@@ -397,8 +425,9 @@ public class FileService(
     private async Task<FileVersion> AddUploadedVersionAsync(Node node, Guid userId, string fileName,
         string mediaType, Stream content, CancellationToken ct)
     {
-        var blob = await storage.SaveAsync(content, ct);
-        var text = await ExtractTextAsync(blob.Hash, mediaType, fileName, ct);
+        await ArchiveCurrentAsync(node, ct);
+        var blob = await WriteWorkingAsync(node, content, ct);
+        var text = await ExtractTextAsync(node, mediaType, fileName, ct);
         var analysis = await PlanAnalysisAsync(blob.Hash, mediaType, fileName, ct);
         var version = new FileVersion
         {
@@ -469,7 +498,7 @@ public class FileService(
         await nodes.ReplaceLinksAsync(node, targets, ct);
     }
 
-    private async Task<string> ExtractTextAsync(string hash, string mediaType, string fileName,
+    private async Task<string> ExtractTextAsync(Node node, string mediaType, string fileName,
         CancellationToken ct)
     {
         var extractor = extractors.FirstOrDefault(e => e.CanExtract(mediaType, fileName));
@@ -477,7 +506,7 @@ public class FileService(
             return "";
         try
         {
-            await using var stream = await storage.OpenReadAsync(hash, ct);
+            await using var stream = await storage.OpenReadAsync(await PathAsync(node, ct), ct);
             return await extractor.ExtractAsync(stream, mediaType, fileName, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -487,6 +516,77 @@ public class FileService(
                 fileName, mediaType);
             return "";
         }
+    }
+
+    /// <summary>The analyzer's way to the bytes. Keyed by version rather than by user
+    /// for the same reason the write-back is: nothing here is a request, and the bytes
+    /// were authorized when they were admitted at upload.</summary>
+    public async Task<Stream> OpenVersionAsync(Guid versionId, CancellationToken ct = default)
+    {
+        var version = await db.FileVersions.FirstOrDefaultAsync(v => v.Id == versionId, ct)
+            ?? throw new NotFoundException($"Version {versionId} not found.");
+        var node = await db.Nodes.Include(n => n.File!).ThenInclude(f => f.Versions)
+            .FirstOrDefaultAsync(n => n.Id == version.NodeId, ct)
+            ?? throw new NotFoundException($"Node {version.NodeId} not found.");
+        return await OpenVersionAsync(node, version, ct);
+    }
+
+    private async Task<NodePath> PathAsync(Node node, CancellationToken ct) =>
+        new(await roots.ForAsync(node.OwnerId, ct), node.RelativePath);
+
+    /// <summary>Writes the working file — the node's current content, and the thing that
+    /// survives losing everything else.</summary>
+    private async Task<StoredBlob> WriteWorkingAsync(Node node, Stream content, CancellationToken ct) =>
+        await storage.WriteAsync(await PathAsync(node, ct), content, ct);
+
+    /// <summary>Moves the content about to be replaced into the archive. Only superseded
+    /// bytes are archived: the newest version lives in the working file, which is the
+    /// asymmetry the whole design turns on — delete the archive and you lose history,
+    /// never a document. Content-addressing makes this idempotent, so a reverted page
+    /// costs nothing the second time.</summary>
+    private async Task ArchiveCurrentAsync(Node node, CancellationToken ct)
+    {
+        if (node.File is not { Versions.Count: > 0 } body)
+            return;
+        var path = await PathAsync(node, ct);
+        if (!await storage.ExistsAsync(path, ct))
+            return;
+        if (await storage.ArchivedAsync(path.Root, body.Current.Hash, ct))
+            return;
+        await using var stream = await storage.OpenReadAsync(path, ct);
+        await storage.ArchiveAsync(path.Root, stream, ct);
+    }
+
+    /// <summary>The current version is the file on disk; every older one is in the
+    /// archive. Falling back to the archive for the current version covers the window
+    /// where a reindex has seen a file that history has not caught up with.</summary>
+    private async Task<Stream> OpenVersionAsync(Node node, FileVersion version, CancellationToken ct)
+    {
+        var path = await PathAsync(node, ct);
+        if (version.Number == node.File!.Current.Number && await storage.ExistsAsync(path, ct))
+            return await storage.OpenReadAsync(path, ct);
+        return await storage.OpenArchiveAsync(path.Root, version.Hash, ct);
+    }
+
+    /// <summary>Where a new node's bytes go: inside its parent's child directory, under a
+    /// name nothing else in there has taken.</summary>
+    private async Task<string> AllocatePathAsync(Guid userId, Guid? parentId, string fileName,
+        CancellationToken ct)
+    {
+        var directory = "";
+        if (parentId is { } id)
+        {
+            var parent = await db.Nodes.FirstOrDefaultAsync(n => n.Id == id, ct);
+            if (parent is not null)
+                directory = NodePaths.ChildDirectory(parent);
+        }
+        var siblings = await db.Nodes
+            .Where(n => n.OwnerId == userId && n.ParentId == parentId)
+            .Select(n => n.RelativePath)
+            .ToListAsync(ct);
+        var taken = siblings.Select(p => p.Split('/')[^1])
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return NodePaths.Combine(directory, NodePaths.Deduplicate(fileName, taken.Contains));
     }
 
     /// <summary>Versions carry their Guid key from birth, so EF must be told they are

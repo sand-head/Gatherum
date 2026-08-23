@@ -42,6 +42,8 @@ public class FileVersionTests(PostgresFixture postgres) : IAsyncLifetime
     public async Task A_different_author_always_gets_a_fresh_version()
     {
         var page = await harness.Files.CreateTextNodeAsync(jess, null, "draft", "by jess");
+        // A second author has to have been let in: nothing is reachable by default.
+        await harness.Access.GrantAsync(jess, page.Id, sam, AccessRole.Editor);
 
         await harness.Files.SaveTextAsync(sam, page.Id, "by sam");
 

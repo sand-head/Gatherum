@@ -104,7 +104,7 @@ public sealed class ServerAppData(
         var tree = await ops.Nodes(s => s.GetTreeAsync(userId));
         return tree
             .Select(n => new TreeNodeInfo(n.Id, n.ParentId, n.Title, n.MediaType,
-                n.Kind.ToString(), n.Position, n.IsPrivate))
+                n.Kind.ToString(), n.Position, n.Access.ToString(), n.IsPublic, n.Owned))
             .ToList();
     }
 
@@ -142,10 +142,24 @@ public sealed class ServerAppData(
         await ops.Nodes(s => s.DeleteAsync(userId, nodeId));
     }
 
-    public async Task SetPrivateAsync(Guid nodeId, bool isPrivate)
+    public async Task SetAccessAsync(Guid nodeId, string access)
     {
         var userId = await UserIdAsync();
-        await ops.Nodes(s => s.SetPrivateAsync(userId, nodeId, isPrivate));
+        var mode = Enum.Parse<AccessMode>(access, ignoreCase: true);
+        await ops.Access(s => s.SetAccessAsync(userId, nodeId, mode));
+    }
+
+    public async Task ShareAsync(Guid nodeId, Guid userId, string role)
+    {
+        var actor = await UserIdAsync();
+        var parsed = Enum.Parse<AccessRole>(role, ignoreCase: true);
+        await ops.Access(s => s.GrantAsync(actor, nodeId, userId, parsed));
+    }
+
+    public async Task UnshareAsync(Guid nodeId, Guid userId)
+    {
+        var actor = await UserIdAsync();
+        await ops.Access(s => s.RevokeAsync(actor, nodeId, userId));
     }
 
     public async Task<NodeInfo> GetNodeAsync(Guid nodeId)
@@ -159,7 +173,7 @@ public sealed class ServerAppData(
                 body.Current.Summary, body.Current.Analysis.ToString(),
                 body.Current.AnalysisError.Length > 0 ? body.Current.AnalysisError : null)
             : null;
-        return new NodeInfo(node.Id, node.Title, node.IsPrivate,
+        return new NodeInfo(node.Id, node.Title, node.Access.ToString(),
             node.Categories
                 .Select(c => new CategoryRef(c.Category!.Path, c.Category.Name))
                 .OrderBy(c => c.Path)

@@ -38,7 +38,9 @@ public interface IAppData
     Task MoveAsync(Guid nodeId, Guid? newParentId, int? position = null);
     Task RenameAsync(Guid nodeId, string title);
     Task DeleteAsync(Guid nodeId);
-    Task SetPrivateAsync(Guid nodeId, bool isPrivate);
+    Task SetAccessAsync(Guid nodeId, string access);
+    Task ShareAsync(Guid nodeId, Guid userId, string role);
+    Task UnshareAsync(Guid nodeId, Guid userId);
 
     // A node's chrome: categories, file facts, history.
     Task<NodeInfo> GetNodeAsync(Guid nodeId);
@@ -72,8 +74,8 @@ public record PresenceInfo(IReadOnlyList<string> Editors, int HeadVersion);
 public record SearchHit(Guid Id, string Kind, string Title, string Snippet);
 public record TitleMatch(string Title, Guid Id);
 public record TreeNodeInfo(Guid Id, Guid? ParentId, string Title, string MediaType,
-    string Kind, int Position, bool IsPrivate);
-public record NodeInfo(Guid Id, string Title, bool IsPrivate,
+    string Kind, int Position, string Access, bool IsPublic, bool Owned);
+public record NodeInfo(Guid Id, string Title, string Access,
     IReadOnlyList<CategoryRef> Categories, FileFacts? File);
 public record FileFacts(string FileName, string MediaType, long SizeBytes, int Version,
     string Sha256, string Description, string ExtractedText, string Transcript, string Summary,
@@ -184,8 +186,14 @@ public sealed class HttpAppData(HttpClient http) : IAppData
     public async Task DeleteAsync(Guid nodeId) =>
         Ensure(await http.DeleteAsync($"/api/nodes/{nodeId}"));
 
-    public async Task SetPrivateAsync(Guid nodeId, bool isPrivate) =>
-        Ensure(await http.PostAsJsonAsync($"/api/nodes/{nodeId}/private", new { isPrivate }));
+    public async Task SetAccessAsync(Guid nodeId, string access) =>
+        Ensure(await http.PostAsJsonAsync($"/api/nodes/{nodeId}/access", new { access }));
+
+    public async Task ShareAsync(Guid nodeId, Guid userId, string role) =>
+        Ensure(await http.PostAsJsonAsync($"/api/nodes/{nodeId}/grants", new { userId, role }));
+
+    public async Task UnshareAsync(Guid nodeId, Guid userId) =>
+        Ensure(await http.DeleteAsync($"/api/nodes/{nodeId}/grants/{userId}"));
 
     public async Task<NodeInfo> GetNodeAsync(Guid nodeId) =>
         (await http.GetFromJsonAsync<NodeInfo>($"/api/nodes/{nodeId}"))!;

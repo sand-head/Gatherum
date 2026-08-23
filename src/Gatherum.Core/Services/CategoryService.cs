@@ -11,7 +11,8 @@ namespace Gatherum.Core.Services;
 /// addressed by path ("homelab/podman"), created by being used, and maintained —
 /// renamed, moved, deleted — like the rest of the wiki. The taxonomy belongs to both
 /// users: anyone who can see a node can file it, and there is no owner to ask.</summary>
-public class CategoryService(GatherumDbContext db, NodeService nodes, INodeAuthorizer authorizer)
+public class CategoryService(GatherumDbContext db, NodeService nodes, INodeAuthorizer authorizer,
+    NodeMetadataWriter sidecar)
 {
     /// <summary>Files a node under a category, creating the category and everything it
     /// is nested under if they are new; returns the path it landed on. The written path
@@ -34,6 +35,7 @@ public class CategoryService(GatherumDbContext db, NodeService nodes, INodeAutho
             nodes.RefreshSearchText(node);
         }
         await db.SaveChangesAsync(ct);
+        await sidecar.WriteAsync(nodeId, ct);
         return category.Path;
     }
 
@@ -52,6 +54,7 @@ public class CategoryService(GatherumDbContext db, NodeService nodes, INodeAutho
         db.NodeCategories.Remove(membership);
         nodes.RefreshSearchText(node);
         await db.SaveChangesAsync(ct);
+        await sidecar.WriteAsync(nodeId, ct);
     }
 
     /// <summary>The whole taxonomy as a flat, path-ordered list; callers nest it. Counts

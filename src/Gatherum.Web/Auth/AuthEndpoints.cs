@@ -8,7 +8,12 @@ namespace Gatherum.Web.Auth;
 
 public static class AuthEndpoints
 {
-    public static void MapAuthEndpoints(this WebApplication app, OidcOptions oidc)
+    /// <param name="allowDevelopmentLogin">Whether the no-identity-provider fallback is
+    /// permitted. Startup already refuses to run without OIDC outside Development; this
+    /// is the second lock on the same door, so that the endpoint cannot sign anybody in
+    /// just because some future refactor reorders the checks.</param>
+    public static void MapAuthEndpoints(this WebApplication app, OidcOptions oidc,
+        bool allowDevelopmentLogin)
     {
         app.MapGet("/auth/login", async (HttpContext http, UserService users, string? returnUrl) =>
         {
@@ -17,9 +22,12 @@ public static class AuthEndpoints
                 return Results.Challenge(new AuthenticationProperties { RedirectUri = target },
                     [OpenIdConnectDefaults.AuthenticationScheme]);
 
+            if (!allowDevelopmentLogin)
+                return Results.Problem("No identity provider is configured.", statusCode: 500);
+
             // No identity provider configured: sign in a local development user so the
             // app is usable straight from `dotnet run`. Never configure production this way.
-            var user = await users.GetOrCreateAsync("dev", "dev@localhost", "Dev User");
+            var user = await users.GetOrCreateAsync("dev", "dev@localhost", "Dev User", "dev");
             await http.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme,
                 new System.Security.Claims.ClaimsPrincipal(
                     user.ToIdentity(CookieAuthenticationDefaults.AuthenticationScheme)));

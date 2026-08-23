@@ -83,11 +83,51 @@ never fetches again. To build with no network, put those two files there yoursel
 `-p:FetchEmbeddingModel=false` and point `Gatherum__Embedding__ModelPath` at a copy. The
 running app never downloads anything.
 
-Or run the whole stack in containers:
+### Deploying it
+
+`compose.yaml` is a deployment rather than a demo, so it asks for the two things a
+deployment needs and refuses to start without them:
 
 ```sh
+cp .env.example .env          # fill in the password and your OIDC client
+mkdir -p data && sudo chown -R 1654:1654 data   # the image's user is uid 1654
 docker compose up --build     # or: podman compose up --build
 ```
+
+**On TrueNAS SCALE**, or anywhere else that runs containers as a fixed user, don't chown
+anything: point `GATHERUM_DATA` at your dataset and set `GATHERUM_UID`/`GATHERUM_GID` to
+the user that owns it — `568` for TrueNAS's `apps`. `stat -c %u:%g /path/to/dataset` if
+you are unsure. A mismatch here is a container that cannot write its own knowledge base.
+
+That user needs to own `${GATHERUM_DATA}` and everything under it. Nothing else on the
+host needs to be writable: the keys protecting sign-in cookies live in the database, so a
+restart does not sign anybody out and there is no second directory to get the permissions
+right on.
+
+Then point your reverse proxy at `127.0.0.1:8080`. The port is bound to loopback on
+purpose — see the note under Configuration about forwarded headers.
+
+Two things it does not do, deliberately:
+
+- **It will not run without an identity provider.** Auth is OIDC-only, and the
+  development fallback signs in whoever asks without authenticating them. Outside
+  `ASPNETCORE_ENVIRONMENT=Development` the app refuses to start rather than be an open
+  door, so a half-filled `.env` fails loudly instead of quietly.
+- **It does not put your knowledge base in a named volume.** `${GATHERUM_DATA}` is a bind
+  mount because that directory *is* the knowledge base: one directory per user, every page
+  and file readable, greppable and rsyncable with Gatherum switched off. Point your backup
+  at it.
+
+### Running it locally without an identity provider
+
+For a look at it on a machine only you can reach, set the environment explicitly:
+
+```sh
+GATHERUM_OIDC_AUTHORITY=none GATHERUM_OIDC_CLIENT_SECRET=none POSTGRES_PASSWORD=local \
+  docker compose run --rm -e ASPNETCORE_ENVIRONMENT=Development -p 8080:8080 gatherum
+```
+
+which turns the auto-login back on. Never do this anywhere reachable by anyone else.
 
 ## Configuration
 
@@ -97,7 +137,19 @@ Everything configures through environment variables (`Gatherum__Section__Key` fo
 | --- | --- | --- |
 | `Gatherum__Database__ConnectionString` | `Host=localhost;Database=gatherum;Username=gatherum;Password=gatherum` | Npgsql connection string |
 | `Gatherum__Database__Migrate` | `true` | Apply EF migrations on startup; set `false` to opt out |
-| `Gatherum__Storage__Root` | `data/files` (`/data/files` in the container) | Root of content-addressed file storage |
+| `Gatherum__Storage__Root` | `data/files` (`/data/files` in the container) | The system of record: one directory per user, named after their OIDC username |
+| `Gatherum__Storage__ReindexOnStartup` | `true` | Reconcile the index against the directories at startup — also how a lost database recovers |
+| `Gatherum__Sharing__AllowPublic` | `true` | Serve nodes marked public. Off hides them all at once, without editing what an owner recorded |
+| `Gatherum__Sharing__AnonymousReadsPerMinute` | `120` | Read budget per client address, for callers with no session |
+| `Gatherum__Sharing__AnonymousSearchesPerMinute` | `10` | Search budget per client address. Tighter, because the semantic half runs a model on the request path |
+
+**Behind a reverse proxy**, the anonymous budgets are per client address, so they depend on
+`X-Forwarded-For` reaching the app. The container image sets
+`ASPNETCORE_FORWARDEDHEADERS_ENABLED=true`, which honours it from *any* peer — so the thing
+keeping a client from spoofing the header and minting itself unlimited budgets is that
+nothing but the proxy can reach the port. The quadlet binds `127.0.0.1:8080` for exactly
+that reason. If you publish the port more widely than that, set
+`ASPNETCORE_FORWARDEDHEADERS_ENABLED=false` or put known proxies in front of it.
 | `Gatherum__Oidc__Authority` | *(empty)* | OIDC issuer URL; empty enables the dev auto-login |
 | `Gatherum__Oidc__ClientId` | *(empty)* | OIDC client id |
 | `Gatherum__Oidc__ClientSecret` | *(empty)* | OIDC client secret |
@@ -192,15 +244,19 @@ Then set `Gatherum__Oidc__Authority=https://auth.example.org`, the client id, an
 
 ## Backups
 
-Two things hold all state:
+**One thing holds your knowledge base**: the directory behind
+`Gatherum__Storage__Root` — one subdirectory per user, every page and file a plain
+file at a readable path, with titles, categories, sharing and history in a
+`.gatherum/meta.json` beside them. Back that up and you have everything.
 
-1. **The database** — `pg_dump gatherum > gatherum.sql` (or snapshot the
-   `gatherum-db` volume). Metadata, categories, links, versions, search text.
-2. **The file store** — the directory behind `Gatherum__Storage__Root` (the
-   `gatherum-files` volume). Every body — pages included — is a content-addressed
-   blob here, so this rsyncs cheaply.
+The database is an index over it. Lose it, corrupt it, botch a migration: start the
+container and the startup scan rebuilds it from the directories — tree, categories,
+links, version history, and who each node is shared with. Only users, API keys and the
+keys protecting sign-in cookies live in the database alone, and all three cost the same
+thing to lose: signing in again.
 
-Restore = restore both, start the container.
+So `pg_dump gatherum > gatherum.sql` is worth having to save re-embedding and
+re-running media analysis, but it is a convenience. The directory is the backup.
 
 ## Extending
 

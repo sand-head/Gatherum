@@ -36,6 +36,11 @@ public static class GatherumServiceCollectionExtensions
         AddAnalysis(services, configuration);
         AddEmbedding(services, configuration);
 
+        services.AddSingleton<INodeMetadataStore, JsonNodeMetadataStore>();
+        services.AddScoped<AccessService>();
+        services.AddScoped<UserRoots>();
+        services.AddScoped<NodeMetadataWriter>();
+        services.AddScoped<Reindexer>();
         services.AddScoped<NodeService>();
         services.AddScoped<CategoryService>();
         services.AddScoped<FileService>();

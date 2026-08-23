@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.DataProtection;
 using Gatherum.Core;
 using Gatherum.Core.Data;
 using Gatherum.Infrastructure;
@@ -90,18 +91,34 @@ if (oidc.IsConfigured)
             var subject = oidcIdentity.FindFirst("sub")?.Value
                 ?? throw new InvalidOperationException("The identity token has no 'sub' claim.");
             var email = oidcIdentity.FindFirst("email")?.Value ?? "";
-            var name = oidcIdentity.FindFirst("name")?.Value
-                ?? oidcIdentity.FindFirst("preferred_username")?.Value
-                ?? email;
+            // The username is what their directory gets named after, so it is read on its
+            // own rather than as a fallback for a display name. Authelia sends the login
+            // itself here; falling back to the subject keeps a provider that sends no
+            // preferred_username working, if less legibly.
+            var username = oidcIdentity.FindFirst("preferred_username")?.Value ?? subject;
+            var name = oidcIdentity.FindFirst("name")?.Value ?? username;
 
             var users = context.HttpContext.RequestServices
                 .GetRequiredService<Gatherum.Core.Services.UserService>();
-            var user = await users.GetOrCreateAsync(subject, email, name);
+            var user = await users.GetOrCreateAsync(subject, email, name, username);
             context.Principal = new System.Security.Claims.ClaimsPrincipal(
                 user.ToIdentity(CookieAuthenticationDefaults.AuthenticationScheme));
         };
     });
 }
+
+// Sign-in cookies are protected by keys that have to outlive the container. ASP.NET
+// keeps them under the runtime user's home directory by default, which is inside the
+// image on a good day and — when the container runs as a uid the image has never heard
+// of, as TrueNAS's 568 is — unwritable, leaving keys that die with the process and sign
+// everyone out on every restart. The database has none of those problems, and is already
+// where the other two things a rebuild cannot recover live.
+builder.Services.AddDataProtection()
+    .PersistKeysToDbContext<GatherumDbContext>()
+    // Pinned so the keys stay readable across renames of the app or its directory.
+    .SetApplicationName("Gatherum");
+
+builder.Services.AddAnonymousRateLimits();
 
 builder.Services.AddAuthorization(options =>
 {
@@ -148,6 +165,11 @@ app.Use((context, next) =>
 
 app.UseAuthentication();
 app.UseAuthorization();
+// After authorization on purpose. The budget is only for callers with no session, and
+// an API key is verified by the endpoint's own scheme rather than by UseAuthentication —
+// so before this point a perfectly good key still looks like the internet, and the two
+// people who own the instance would be metered against a bucket shared with it.
+app.UseRateLimiter();
 app.UseAntiforgery();
 
 app.MapStaticAssets().AllowAnonymous();
@@ -155,7 +177,7 @@ app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode()
     .AddInteractiveWebAssemblyRenderMode()
     .AddAdditionalAssemblies(typeof(Gatherum.Client.NodeEditor).Assembly);
-app.MapAuthEndpoints(oidc);
+app.MapAuthEndpoints(oidc, app.Environment.IsDevelopment());
 app.MapGatherumApi();
 app.MapMcp("/mcp").RequireAuthorization("Mcp");
 
@@ -168,8 +190,23 @@ app.MapGet("/healthz", async (GatherumDbContext db) =>
 await MigrateAsync(app);
 
 if (!oidc.IsConfigured)
+{
+    // Auth is OIDC-only, so the development auto-login is the one local account that
+    // exists — and it signs anybody in without asking them anything. Outside
+    // Development that is not a warning, it is an open door, and the app refuses to be
+    // one. Loud at startup beats a line in a log nobody reads until afterwards.
+    if (!app.Environment.IsDevelopment())
+    {
+        throw new InvalidOperationException(
+            "No identity provider is configured (Gatherum__Oidc__Authority, __ClientId, " +
+            "__ClientSecret), and the development auto-login signs in anyone who asks. " +
+            "Configure OIDC, or set ASPNETCORE_ENVIRONMENT=Development if this really is " +
+            "a machine only you can reach.");
+    }
     app.Logger.LogWarning(
-        "No OIDC authority configured (Gatherum__Oidc__Authority); using development auto-login.");
+        "No OIDC authority configured (Gatherum__Oidc__Authority); using development " +
+        "auto-login. Anyone who can reach this app can sign in as the development user.");
+}
 
 app.Run();
 
@@ -188,6 +225,17 @@ static async Task MigrateAsync(WebApplication app)
     if (GatherumServiceCollectionExtensions.EmbeddingEnabled(app.Configuration))
         await Gatherum.Infrastructure.Data.EmbeddingSchema.EnsureAsync(
             db, options.Embedding.Dimensions, app.Logger);
+
+    // Make the index agree with the directories. This is startup reconciliation and
+    // disaster recovery at once: an empty database simply reports everything as added.
+    if (options.Storage.ReindexOnStartup)
+    {
+        var report = await scope.ServiceProvider
+            .GetRequiredService<Gatherum.Core.Services.Reindexer>().RunAsync();
+        app.Logger.LogInformation(
+            "Storage reconciled: {Added} added, {Updated} updated, {Moved} moved, {Removed} removed.",
+            report.Added, report.Updated, report.Moved, report.Removed);
+    }
 }
 
 public partial class Program;

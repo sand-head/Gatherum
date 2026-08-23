@@ -75,7 +75,6 @@ public class SearchServiceTests(PostgresFixture postgres) : IAsyncLifetime
     public async Task Private_nodes_never_leak_into_other_users_results()
     {
         var page = await harness.Files.CreateTextNodeAsync(jess, null, "hidden treasure map");
-        await harness.Nodes.SetPrivateAsync(jess, page.Id, true);
 
         Assert.Single(await harness.Search.SearchAsync(jess, "treasure"));
         Assert.Empty(await harness.Search.SearchAsync(sam, "treasure"));

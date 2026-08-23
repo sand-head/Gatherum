@@ -65,7 +65,6 @@ public class SemanticSearchTests(PostgresFixture postgres) : IAsyncLifetime
     {
         var page = await harness.Files.CreateTextNodeAsync(sam, null, "Sam's rack",
             "The overheating started after the third drive went in.");
-        await harness.Nodes.SetPrivateAsync(sam, page.Id, true);
         await harness.EmbedStaleAsync();
 
         Assert.Empty(await harness.Search.SearchAsync(jess, "noisy"));

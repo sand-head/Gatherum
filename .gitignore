@@ -436,3 +436,8 @@ src/Gatherum.Web/data/
 
 # Fetched by the build, not committed: the packaged embedding model.
 models/
+
+# Deployment secrets and the knowledge base itself. The data directory is the
+# system of record; it belongs in a backup, never in the repo.
+.env
+/data/

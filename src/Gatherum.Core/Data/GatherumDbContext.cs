@@ -1,9 +1,11 @@
 using Gatherum.Core.Domain;
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
 namespace Gatherum.Core.Data;
 
-public class GatherumDbContext(DbContextOptions<GatherumDbContext> options) : DbContext(options)
+public class GatherumDbContext(DbContextOptions<GatherumDbContext> options)
+    : DbContext(options), IDataProtectionKeyContext
 {
     public DbSet<Node> Nodes => Set<Node>();
     public DbSet<FileBody> FileBodies => Set<FileBody>();
@@ -11,9 +13,21 @@ public class GatherumDbContext(DbContextOptions<GatherumDbContext> options) : Db
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<NodeCategory> NodeCategories => Set<NodeCategory>();
     public DbSet<NodeLink> NodeLinks => Set<NodeLink>();
+    public DbSet<NodeGrant> NodeGrants => Set<NodeGrant>();
+    public DbSet<NodeAccessEntry> NodeAccessEntries => Set<NodeAccessEntry>();
     public DbSet<NodeEmbedding> NodeEmbeddings => Set<NodeEmbedding>();
     public DbSet<User> Users => Set<User>();
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
+
+    /// <summary>The keys protecting sign-in cookies. They belong here rather than on disk
+    /// for the same reason <see cref="Users"/> and <see cref="ApiKeys"/> do: they are not
+    /// derived from the directories, and losing them costs exactly one thing — signing in
+    /// again — which is what losing the users costs anyway.
+    ///
+    /// Keeping them out of the storage root also keeps them out of the backup somebody is
+    /// encouraged to take of it. That directory is meant to be browsed, rsynced and
+    /// copied around; cookie-signing key material should not ride along.</summary>
+    public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 
     protected override void OnModelCreating(ModelBuilder model)
     {
@@ -28,6 +42,11 @@ public class GatherumDbContext(DbContextOptions<GatherumDbContext> options) : Db
                 .HasForeignKey(n => n.ParentId).OnDelete(DeleteBehavior.Cascade);
             node.HasOne(n => n.Owner).WithMany().HasForeignKey(n => n.OwnerId);
             node.HasIndex(n => new { n.ParentId, n.Position });
+            node.Property(n => n.RelativePath).HasMaxLength(1024);
+            // Ownership is the path, so a path is unique within the root that owns it.
+            node.HasIndex(n => new { n.OwnerId, n.RelativePath });
+            // The anonymous predicate: public nodes and nothing else.
+            node.HasIndex(n => n.EffectivePublic);
             node.Property(n => n.SearchVector)
                 .HasComputedColumnSql(
                     """
@@ -88,6 +107,24 @@ public class GatherumDbContext(DbContextOptions<GatherumDbContext> options) : Db
                 .HasForeignKey(l => l.SourceId).OnDelete(DeleteBehavior.Cascade);
             link.HasOne(l => l.Target).WithMany(n => n.InboundLinks)
                 .HasForeignKey(l => l.TargetId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        model.Entity<NodeGrant>(grant =>
+        {
+            grant.HasKey(g => new { g.NodeId, g.UserId });
+            grant.HasOne(g => g.Node).WithMany(n => n.Grants)
+                .HasForeignKey(g => g.NodeId).OnDelete(DeleteBehavior.Cascade);
+            grant.HasOne(g => g.User).WithMany()
+                .HasForeignKey(g => g.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        model.Entity<NodeAccessEntry>(entry =>
+        {
+            entry.HasKey(e => new { e.NodeId, e.UserId });
+            entry.HasOne(e => e.Node).WithMany(n => n.AccessEntries)
+                .HasForeignKey(e => e.NodeId).OnDelete(DeleteBehavior.Cascade);
+            // The join every signed-in visibility check makes.
+            entry.HasIndex(e => e.UserId);
         });
 
         model.Entity<NodeEmbedding>(embedding =>

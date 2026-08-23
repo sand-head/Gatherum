@@ -40,15 +40,32 @@
                 }
             </span>
             <span class="node-title">@Node.Title</span>
-            @if (Node.IsPrivate)
+            @* Private is the default, so it is the exceptions that earn a badge:
+               shared with somebody, or out on the internet. *@
+            @if (Node.IsPublic)
             {
-                <span class="node-private" title="Private">
+                <span class="node-public" title="Public — anyone on the internet can read this">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                          stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <rect x="4" y="11" width="16" height="10" rx="2" />
-                        <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+                        <circle cx="12" cy="12" r="9" />
+                        <path d="M3 12h18M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18" />
                     </svg>
                 </span>
+            }
+            else if (Node.Access == "Shared")
+            {
+                <span class="node-shared" title="Shared with someone">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                         stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                        <circle cx="9" cy="7" r="4" />
+                        <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+                    </svg>
+                </span>
+            }
+            @if (!Node.Owned)
+            {
+                <span class="node-foreign" title="Shared with you — lives in its owner's tree">↗</span>
             }
         </NavLink>
         <button class="row-menu" title="More actions" @onclick="() => menuOpen = !menuOpen">
@@ -70,8 +87,10 @@
             <button @onclick="() => Tree.MoveBy(Node, -1)">Move up</button>
             <button @onclick="() => Tree.MoveBy(Node, +1)">Move down</button>
             <button @onclick="() => Tree.BeginMove(Node)">Move to…</button>
-            <button @onclick="() => Tree.TogglePrivateAsync(Node)">
-                @(Node.IsPrivate ? "Make visible" : "Make private")
+            @* Publishing is the gesture worth making visible and a little alarming;
+               sharing with a person needs a name, and goes through the share control. *@
+            <button disabled="@(!Node.Owned)" @onclick="() => Tree.TogglePublicAsync(Node)">
+                @(Node.IsPublic ? "Unpublish" : "Publish to the internet…")
             </button>
             <button class="danger" @onclick="() => Tree.DeleteAsync(Node)">Delete</button>
         </div>

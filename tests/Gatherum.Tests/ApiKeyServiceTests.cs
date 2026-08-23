@@ -18,6 +18,7 @@ public class ApiKeyServiceTests(PostgresFixture postgres) : IAsyncLifetime
         var user = new User
         {
             Id = Guid.NewGuid(), Subject = "jess", Email = "jess@example.org", DisplayName = "jess",
+            Username = "jess", RootName = "jess",
         };
         db.Users.Add(user);
         await db.SaveChangesAsync();
@@ -58,6 +59,7 @@ public class ApiKeyServiceTests(PostgresFixture postgres) : IAsyncLifetime
         var other = new User
         {
             Id = Guid.NewGuid(), Subject = "sam", Email = "sam@example.org", DisplayName = "sam",
+            Username = "sam", RootName = "sam",
         };
         db.Users.Add(other);
         await db.SaveChangesAsync();

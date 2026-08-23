@@ -39,6 +39,19 @@ public static class MediaTypes
 
     /// <summary>Resolves the stored media type for an upload: a meaningful declared
     /// type wins, known extensions refine the generic ones browsers fall back to.</summary>
+    /// <summary>The extension a media type wants on disk, so a page Gatherum creates is
+    /// a file anything else can open. The first extension mapped to the type wins, which
+    /// keeps ".md" ahead of ".markdown".</summary>
+    public static string ExtensionFor(string mediaType)
+    {
+        foreach (var (extension, type) in ByExtension)
+        {
+            if (type == mediaType)
+                return extension;
+        }
+        return "";
+    }
+
     public static string Resolve(string? declared, string fileName)
     {
         var extension = Path.GetExtension(fileName);

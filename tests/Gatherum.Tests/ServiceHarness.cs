@@ -17,6 +17,15 @@ public sealed class ServiceHarness : IAsyncDisposable
 {
     public GatherumDbContext Db { get; }
     public NodeService Nodes { get; }
+    public AccessService Access { get; }
+    public UserRoots Roots { get; }
+    public INodeMetadataStore Metadata { get; }
+    public NodeMetadataWriter Sidecar { get; }
+    public IFileStorage Storage => storage;
+
+    /// <summary>The live options the stack was built with, so a test can flip an
+    /// operator's switch and see the effect immediately.</summary>
+    public IOptions<GatherumOptions> Settings { get; private set; } = null!;
     public CategoryService Categories { get; }
     public FileService Files { get; }
     public SearchService Search { get; }
@@ -34,15 +43,34 @@ public sealed class ServiceHarness : IAsyncDisposable
     /// search text — which is the part that has to be right.</summary>
     public FakeMediaAnalyzer Analyzer { get; } = new();
 
-    private readonly string storageRoot =
-        Path.Combine(Path.GetTempPath(), $"gatherum-test-{Guid.NewGuid():N}");
+    private readonly string storageRoot;
+
+    /// <summary>The directory the whole knowledge base lives in — the system of record,
+    /// and the thing a recovery test is allowed to keep when it throws the index away.</summary>
+    public string StorageRoot => storageRoot;
+
+    /// <summary>Whether this harness owns its storage. A fork shares the original's
+    /// directory and must not delete it out from under the harness that made it.</summary>
+    private readonly bool ownsStorage;
 
     private readonly FileSystemStorage storage;
 
     public ServiceHarness(string connectionString)
+        : this(connectionString, Path.Combine(Path.GetTempPath(), $"gatherum-test-{Guid.NewGuid():N}"),
+            ownsStorage: true)
     {
+    }
+
+    /// <summary>A second stack over the same directories and an empty database — what a
+    /// restored deployment looks like the moment before it reindexes.</summary>
+    public ServiceHarness Fork(string connectionString) =>
+        new(connectionString, storageRoot, ownsStorage: false);
+
+    private ServiceHarness(string connectionString, string storageRoot, bool ownsStorage)
+    {
+        this.storageRoot = storageRoot;
+        this.ownsStorage = ownsStorage;
         Db = PostgresFixture.CreateContext(connectionString);
-        var authorizer = new DefaultNodeAuthorizer();
         var settings = Options.Create(new GatherumOptions
         {
             Storage = new StorageOptions { Root = storageRoot },
@@ -61,12 +89,18 @@ public sealed class ServiceHarness : IAsyncDisposable
                 MaxDistance = 0.55,
             },
         });
+        Settings = settings;
+        var authorizer = new DefaultNodeAuthorizer(settings);
         storage = new FileSystemStorage(settings);
         Embeddings = new EmbeddingService(Db, [Embedder], new QueryEmbeddingCache(), settings,
             NullLogger<EmbeddingService>.Instance);
-        Nodes = new NodeService(Db, authorizer, Clock, Embeddings);
-        Categories = new CategoryService(Db, Nodes, authorizer);
-        Files = new FileService(Db, Nodes, storage,
+        Roots = new UserRoots(Db);
+        Metadata = new JsonNodeMetadataStore(storage);
+        Sidecar = new NodeMetadataWriter(Db, Metadata, Roots);
+        Access = new AccessService(Db, Clock, Sidecar);
+        Nodes = new NodeService(Db, authorizer, Clock, Embeddings, Access);
+        Categories = new CategoryService(Db, Nodes, authorizer, Sidecar);
+        Files = new FileService(Db, Nodes, storage, Roots, Sidecar,
             [new PlainTextExtractor(), new PdfTextExtractor(), new DocxTextExtractor(),
                 new ImageMetadataExtractor()],
             [Analyzer], AnalysisQueue, Clock, NullLogger<FileService>.Instance);
@@ -81,6 +115,11 @@ public sealed class ServiceHarness : IAsyncDisposable
             Subject = name,
             Email = $"{name}@example.org",
             DisplayName = name,
+            Username = name,
+            // The same mapping production uses, so a username that needs sanitizing is
+            // exercised here rather than only in the wild.
+            RootName = UserRoots.Propose(name, name, Guid.NewGuid(),
+                taken => Db.Users.Any(u => u.RootName == taken)),
         };
         Db.Users.Add(user);
         await Db.SaveChangesAsync();
@@ -110,7 +149,7 @@ public sealed class ServiceHarness : IAsyncDisposable
                 .Select(v => new { v.Hash, v.MediaType, v.FileName, v.SizeBytes })
                 .FirstAsync();
             var source = new MediaSource(version.Hash, version.MediaType, version.FileName,
-                version.SizeBytes, ct => storage.OpenReadAsync(version.Hash, ct));
+                version.SizeBytes, ct => Files.OpenVersionAsync(id, ct));
             try
             {
                 await Files.ApplyAnalysisAsync(id, await Analyzer.AnalyzeAsync(source));
@@ -131,7 +170,7 @@ public sealed class ServiceHarness : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         await Db.DisposeAsync();
-        if (Directory.Exists(storageRoot))
+        if (ownsStorage && Directory.Exists(storageRoot))
             Directory.Delete(storageRoot, recursive: true);
     }
 }

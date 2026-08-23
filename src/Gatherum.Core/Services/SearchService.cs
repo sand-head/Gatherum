@@ -23,7 +23,7 @@ public class SearchService(
     INodeAuthorizer authorizer,
     EmbeddingService embeddings)
 {
-    public async Task<List<SearchResult>> SearchAsync(Guid userId, string query,
+    public async Task<List<SearchResult>> SearchAsync(Guid? userId, string query,
         NodeKind? kind = null, int limit = 20, SearchMode mode = SearchMode.Hybrid,
         CancellationToken ct = default)
     {
