@@ -22,12 +22,15 @@ public class UserService(GatherumDbContext db, TimeProvider clock)
             return user;
         }
 
+        var id = Guid.NewGuid();
+        var takenRoots = await db.Users.Select(u => u.RootName).ToListAsync(ct);
         user = new User
         {
-            Id = Guid.NewGuid(),
+            Id = id,
             Subject = subject,
             Email = email,
             DisplayName = displayName,
+            RootName = UserRoots.Propose(displayName, subject, id, takenRoots.Contains),
             IsAdmin = !await db.Users.AnyAsync(ct),
             CreatedAt = clock.GetUtcNow(),
         };

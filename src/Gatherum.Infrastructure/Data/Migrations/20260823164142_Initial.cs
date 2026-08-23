@@ -45,6 +45,7 @@ namespace Gatherum.Infrastructure.Data.Migrations
                     Email = table.Column<string>(type: "character varying(320)", maxLength: 320, nullable: false),
                     DisplayName = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: false),
                     IsAdmin = table.Column<bool>(type: "boolean", nullable: false),
+                    RootName = table.Column<string>(type: "text", nullable: false),
                     CreatedAt = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>

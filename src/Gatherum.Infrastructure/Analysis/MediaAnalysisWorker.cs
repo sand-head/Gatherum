@@ -96,9 +96,8 @@ public class MediaAnalysisWorker(
             return;
         }
 
-        var storage = provider.GetRequiredService<IFileStorage>();
         var source = new MediaSource(version.Hash, version.MediaType, version.FileName,
-            version.SizeBytes, token => storage.OpenReadAsync(version.Hash, token));
+            version.SizeBytes, token => files.OpenVersionAsync(versionId, token));
 
         try
         {

@@ -14,7 +14,7 @@ using Pgvector;
 namespace Gatherum.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(GatherumDbContext))]
-    [Migration("20260823162945_Initial")]
+    [Migration("20260823164142_Initial")]
     partial class Initial
     {
         /// <inheritdoc />
@@ -389,6 +389,10 @@ namespace Gatherum.Infrastructure.Data.Migrations
 
                     b.Property<bool>("IsAdmin")
                         .HasColumnType("boolean");
+
+                    b.Property<string>("RootName")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<string>("Subject")
                         .IsRequired()

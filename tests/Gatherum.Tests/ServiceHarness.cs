@@ -18,6 +18,7 @@ public sealed class ServiceHarness : IAsyncDisposable
     public GatherumDbContext Db { get; }
     public NodeService Nodes { get; }
     public AccessService Access { get; }
+    public UserRoots Roots { get; }
     public CategoryService Categories { get; }
     public FileService Files { get; }
     public SearchService Search { get; }
@@ -68,7 +69,8 @@ public sealed class ServiceHarness : IAsyncDisposable
         Access = new AccessService(Db, Clock);
         Nodes = new NodeService(Db, authorizer, Clock, Embeddings, Access);
         Categories = new CategoryService(Db, Nodes, authorizer);
-        Files = new FileService(Db, Nodes, storage,
+        Roots = new UserRoots(Db);
+        Files = new FileService(Db, Nodes, storage, Roots,
             [new PlainTextExtractor(), new PdfTextExtractor(), new DocxTextExtractor(),
                 new ImageMetadataExtractor()],
             [Analyzer], AnalysisQueue, Clock, NullLogger<FileService>.Instance);
@@ -83,6 +85,7 @@ public sealed class ServiceHarness : IAsyncDisposable
             Subject = name,
             Email = $"{name}@example.org",
             DisplayName = name,
+            RootName = name,
         };
         Db.Users.Add(user);
         await Db.SaveChangesAsync();
@@ -112,7 +115,7 @@ public sealed class ServiceHarness : IAsyncDisposable
                 .Select(v => new { v.Hash, v.MediaType, v.FileName, v.SizeBytes })
                 .FirstAsync();
             var source = new MediaSource(version.Hash, version.MediaType, version.FileName,
-                version.SizeBytes, ct => storage.OpenReadAsync(version.Hash, ct));
+                version.SizeBytes, ct => Files.OpenVersionAsync(id, ct));
             try
             {
                 await Files.ApplyAnalysisAsync(id, await Analyzer.AnalyzeAsync(source));

@@ -37,6 +37,7 @@ public static class GatherumServiceCollectionExtensions
         AddEmbedding(services, configuration);
 
         services.AddScoped<AccessService>();
+        services.AddScoped<UserRoots>();
         services.AddScoped<NodeService>();
         services.AddScoped<CategoryService>();
         services.AddScoped<FileService>();
