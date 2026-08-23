@@ -22,6 +22,10 @@ public sealed class ServiceHarness : IAsyncDisposable
     public INodeMetadataStore Metadata { get; }
     public NodeMetadataWriter Sidecar { get; }
     public IFileStorage Storage => storage;
+
+    /// <summary>The live options the stack was built with, so a test can flip an
+    /// operator's switch and see the effect immediately.</summary>
+    public IOptions<GatherumOptions> Settings { get; private set; } = null!;
     public CategoryService Categories { get; }
     public FileService Files { get; }
     public SearchService Search { get; }
@@ -67,7 +71,6 @@ public sealed class ServiceHarness : IAsyncDisposable
         this.storageRoot = storageRoot;
         this.ownsStorage = ownsStorage;
         Db = PostgresFixture.CreateContext(connectionString);
-        var authorizer = new DefaultNodeAuthorizer();
         var settings = Options.Create(new GatherumOptions
         {
             Storage = new StorageOptions { Root = storageRoot },
@@ -86,6 +89,8 @@ public sealed class ServiceHarness : IAsyncDisposable
                 MaxDistance = 0.55,
             },
         });
+        Settings = settings;
+        var authorizer = new DefaultNodeAuthorizer(settings);
         storage = new FileSystemStorage(settings);
         Embeddings = new EmbeddingService(Db, [Embedder], new QueryEmbeddingCache(), settings,
             NullLogger<EmbeddingService>.Instance);
@@ -110,7 +115,11 @@ public sealed class ServiceHarness : IAsyncDisposable
             Subject = name,
             Email = $"{name}@example.org",
             DisplayName = name,
-            RootName = name,
+            Username = name,
+            // The same mapping production uses, so a username that needs sanitizing is
+            // exercised here rather than only in the wild.
+            RootName = UserRoots.Propose(name, name, Guid.NewGuid(),
+                taken => Db.Users.Any(u => u.RootName == taken)),
         };
         Db.Users.Add(user);
         await Db.SaveChangesAsync();

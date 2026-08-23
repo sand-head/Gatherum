@@ -20,17 +20,34 @@ public class AppIntegrationTests(PostgresFixture postgres) : IAsyncLifetime
     private WebApplicationFactory<Program> factory = null!;
     private HttpClient client = null!;
     private string storageRoot = "";
+    private string connectionString = "";
     private readonly FakeEmbedder embedder = new();
 
     public async Task InitializeAsync()
     {
-        var connectionString = await postgres.CreateDatabaseAsync();
+        connectionString = await postgres.CreateDatabaseAsync();
         storageRoot = Path.Combine(Path.GetTempPath(), $"gatherum-it-{Guid.NewGuid():N}");
         embedder.Means("cooling", "thermals", "overheating", "noisy");
-        factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        factory = CreateFactory();
+        await SeedAsync();
+    }
+
+    /// <summary>The app under test. Rate-limit windows are keyed by client address and
+    /// shared across every client of one instance, so a test that means to exhaust a
+    /// budget gets an instance of its own rather than spending everybody else's.</summary>
+    private WebApplicationFactory<Program> CreateFactory(
+        params (string Key, string Value)[] overrides)
+    {
+        return new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
             builder.UseSetting("Gatherum:Database:ConnectionString", connectionString);
             builder.UseSetting("Gatherum:Storage:Root", storageRoot);
+            // Generous here so the other anonymous tests are never metered; the budget
+            // test builds its own app with limits it can exhaust deliberately.
+            builder.UseSetting("Gatherum:Sharing:AnonymousReadsPerMinute", "1000");
+            builder.UseSetting("Gatherum:Sharing:AnonymousSearchesPerMinute", "1000");
+            foreach (var (key, value) in overrides)
+                builder.UseSetting(key, value);
             // Configured so the app wires embeddings up at all; the endpoint is never
             // reached because the embedder behind it is replaced below.
             builder.UseSetting("Gatherum:Embedding:Endpoint", "http://embedder.invalid");
@@ -43,16 +60,24 @@ public class AppIntegrationTests(PostgresFixture postgres) : IAsyncLifetime
                 services.AddSingleton<IEmbedder>(embedder);
             });
         });
+    }
 
-        using var scope = factory.Services.CreateScope();
+    private async Task SeedAsync() => client = await AuthorClientAsync(factory);
+
+    /// <summary>A signed-in client for an app: the user and their API key, since every
+    /// instance shares one database but each needs its own key issued through it.</summary>
+    private static async Task<HttpClient> AuthorClientAsync(WebApplicationFactory<Program> app)
+    {
+        using var scope = app.Services.CreateScope();
         var users = scope.ServiceProvider.GetRequiredService<UserService>();
-        var user = await users.GetOrCreateAsync("it-user", "it@example.org", "Integration");
+        var user = await users.GetOrCreateAsync("it-user", "it@example.org", "Integration", "tester");
         var keys = scope.ServiceProvider.GetRequiredService<ApiKeyService>();
         var created = await keys.CreateAsync(user.Id, "integration");
 
-        client = factory.CreateClient();
-        client.DefaultRequestHeaders.Authorization =
+        var http = app.CreateClient();
+        http.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", created.PlaintextToken);
+        return http;
     }
 
     public async Task DisposeAsync()
@@ -182,6 +207,47 @@ public class AppIntegrationTests(PostgresFixture postgres) : IAsyncLifetime
 
         var mcp = await anonymous.PostAsJsonAsync("/mcp", new { jsonrpc = "2.0", id = 1, method = "ping" });
         Assert.Equal(HttpStatusCode.Unauthorized, mcp.StatusCode);
+    }
+
+    [Fact]
+    public async Task The_internet_gets_a_budget_and_a_signed_in_user_does_not()
+    {
+        using var metered = CreateFactory(
+            // Small enough to exhaust deliberately, with no queue, so an over-budget
+            // request is refused rather than made to wait.
+            ("Gatherum:Sharing:AnonymousReadsPerMinute", "3"),
+            ("Gatherum:Sharing:AnonymousSearchesPerMinute", "2"),
+            ("Gatherum:Sharing:AnonymousQueueDepth", "0"));
+        using var author = await AuthorClientAsync(metered);
+
+        var page = (await (await author.PostAsJsonAsync("/api/pages",
+            new { title = "Published", markdown = "the closet gets hot" }))
+            .Content.ReadFromJsonAsync<NodeDto>())!;
+        await author.PostAsJsonAsync($"/api/nodes/{page.Id}/access", new { access = "Public" });
+
+        using var anonymous = metered.CreateClient();
+
+        // Three reads a minute, then refused — with a Retry-After a well-behaved client
+        // can act on.
+        for (var i = 0; i < 3; i++)
+            Assert.Equal(HttpStatusCode.OK, (await anonymous.GetAsync($"/api/nodes/{page.Id}")).StatusCode);
+
+        var refused = await anonymous.GetAsync($"/api/nodes/{page.Id}");
+        Assert.Equal(HttpStatusCode.TooManyRequests, refused.StatusCode);
+        Assert.NotNull(refused.Headers.RetryAfter);
+
+        // Search has its own, tighter budget: its semantic half runs a model on the
+        // request path, so it is metered apart from plain reads.
+        for (var i = 0; i < 2; i++)
+            Assert.Equal(HttpStatusCode.OK, (await anonymous.GetAsync("/api/search?query=closet")).StatusCode);
+        Assert.Equal(HttpStatusCode.TooManyRequests,
+            (await anonymous.GetAsync("/api/search?query=closet")).StatusCode);
+
+        // The two people who authenticated to get here are never metered.
+        for (var i = 0; i < 12; i++)
+            Assert.Equal(HttpStatusCode.OK, (await author.GetAsync($"/api/nodes/{page.Id}")).StatusCode);
+        for (var i = 0; i < 12; i++)
+            Assert.Equal(HttpStatusCode.OK, (await author.GetAsync("/api/search?query=closet")).StatusCode);
     }
 
     [Fact]

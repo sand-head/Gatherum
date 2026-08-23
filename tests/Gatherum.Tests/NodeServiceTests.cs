@@ -156,6 +156,27 @@ public class NodeServiceTests(PostgresFixture postgres) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Turning_public_sharing_off_hides_public_nodes_at_once()
+    {
+        var page = await NewPageAsync(jess, null, "published");
+        await harness.Access.SetAccessAsync(jess, page.Id, AccessMode.Public);
+        Assert.Single(await nodes.GetTreeAsync(null));
+
+        harness.Settings.Value.Sharing.AllowPublic = false;
+
+        // Immediate, and without rewriting anything the owner recorded: the node still
+        // says it is public, and nothing anonymous can reach it.
+        Assert.Empty(await nodes.GetTreeAsync(null));
+        await Assert.ThrowsAsync<Gatherum.Core.NotFoundException>(
+            () => nodes.GetWithBodyAsync(null, page.Id));
+        Assert.Equal(AccessMode.Public,
+            (await nodes.GetWithBodyAsync(jess, page.Id)).Access);
+
+        harness.Settings.Value.Sharing.AllowPublic = true;
+        Assert.Single(await nodes.GetTreeAsync(null));
+    }
+
+    [Fact]
     public async Task Only_the_owner_can_change_who_may_reach_a_node()
     {
         var page = await NewPageAsync(jess, null, "mine");

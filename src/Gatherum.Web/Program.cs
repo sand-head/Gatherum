@@ -90,18 +90,23 @@ if (oidc.IsConfigured)
             var subject = oidcIdentity.FindFirst("sub")?.Value
                 ?? throw new InvalidOperationException("The identity token has no 'sub' claim.");
             var email = oidcIdentity.FindFirst("email")?.Value ?? "";
-            var name = oidcIdentity.FindFirst("name")?.Value
-                ?? oidcIdentity.FindFirst("preferred_username")?.Value
-                ?? email;
+            // The username is what their directory gets named after, so it is read on its
+            // own rather than as a fallback for a display name. Authelia sends the login
+            // itself here; falling back to the subject keeps a provider that sends no
+            // preferred_username working, if less legibly.
+            var username = oidcIdentity.FindFirst("preferred_username")?.Value ?? subject;
+            var name = oidcIdentity.FindFirst("name")?.Value ?? username;
 
             var users = context.HttpContext.RequestServices
                 .GetRequiredService<Gatherum.Core.Services.UserService>();
-            var user = await users.GetOrCreateAsync(subject, email, name);
+            var user = await users.GetOrCreateAsync(subject, email, name, username);
             context.Principal = new System.Security.Claims.ClaimsPrincipal(
                 user.ToIdentity(CookieAuthenticationDefaults.AuthenticationScheme));
         };
     });
 }
+
+builder.Services.AddAnonymousRateLimits();
 
 builder.Services.AddAuthorization(options =>
 {
@@ -148,6 +153,11 @@ app.Use((context, next) =>
 
 app.UseAuthentication();
 app.UseAuthorization();
+// After authorization on purpose. The budget is only for callers with no session, and
+// an API key is verified by the endpoint's own scheme rather than by UseAuthentication —
+// so before this point a perfectly good key still looks like the internet, and the two
+// people who own the instance would be metered against a bucket shared with it.
+app.UseRateLimiter();
 app.UseAntiforgery();
 
 app.MapStaticAssets().AllowAnonymous();

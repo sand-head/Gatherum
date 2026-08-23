@@ -117,6 +117,8 @@ fresh DI scope via `Services/AppOperations`.
   from `EmbeddedFingerprint`. That comparison is the only thing that queues work. Never
   add an enqueue call beside it: a second source of truth can only ever be the one that
   gets forgotten.
+- A user's root directory is named after their OIDC `preferred_username`, assigned once
+  and never renamed — moving it would mean moving every file they own.
 - Auth is OIDC-only (plus API keys). No local accounts, ever. Anonymous is not identity:
   it reaches public nodes read-only, through `VisibleTo(nodes, null)` and nothing else. An
   API endpoint is authenticated unless it says `.AllowAnonymous()`, and no write ever does.
@@ -219,8 +221,8 @@ Deviations and judgment calls go in [DECISIONS.md](DECISIONS.md) when they happe
 commit messages alone don't count.
 
 [FILESYSTEM.md](FILESYSTEM.md) is the architecture: the directory tree is the system of
-record and the database is a derived index. Stages 1–4 are built; frontmatter, the
-union-tree UI and the filesystem watcher are not. Read it before changing storage, node
+record and the database is a derived index. Stages 1–4 are built, rate limiting
+included; frontmatter, the union-tree UI and the filesystem watcher are not. Read it before changing storage, node
 identity, or the access model.
 
 ## What not to do

@@ -8,15 +8,20 @@ public class UserService(GatherumDbContext db, TimeProvider clock)
 {
     /// <summary>Called on every OIDC sign-in. The first user ever seen becomes admin.</summary>
     public async Task<User> GetOrCreateAsync(string subject, string email, string displayName,
-        CancellationToken ct = default)
+        string username, CancellationToken ct = default)
     {
         var user = await db.Users.FirstOrDefaultAsync(u => u.Subject == subject, ct);
         if (user is not null)
         {
-            if (user.Email != email || user.DisplayName != displayName)
+            if (user.Email != email || user.DisplayName != displayName
+                || user.Username != username)
             {
                 user.Email = email;
                 user.DisplayName = displayName;
+                // Deliberately not touching RootName: their directory keeps the name it
+                // was given. Renaming it would mean moving every file they own, and
+                // nothing good comes of a directory that moved on its own.
+                user.Username = username;
                 await db.SaveChangesAsync(ct);
             }
             return user;
@@ -30,7 +35,9 @@ public class UserService(GatherumDbContext db, TimeProvider clock)
             Subject = subject,
             Email = email,
             DisplayName = displayName,
-            RootName = UserRoots.Propose(displayName, subject, id, takenRoots.Contains),
+            Username = username,
+            RootName = UserRoots.Propose(username, subject, id,
+                name => takenRoots.Contains(name, StringComparer.OrdinalIgnoreCase)),
             IsAdmin = !await db.Users.AnyAsync(ct),
             CreatedAt = clock.GetUtcNow(),
         };

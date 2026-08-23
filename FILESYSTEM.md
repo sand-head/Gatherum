@@ -1,7 +1,7 @@
 # Filesystem of record — design
 
-**Status**: stages 1–4 built and green; 5 and 6 partly. See Plan at the end for what
-is and is not done.
+**Status**: stages 1–4 built and green, rate limiting included; 5 and 6 partly. See Plan
+at the end for what is and is not done.
 
 **Session assumptions**: Gatherum is not deployed anywhere. There is no data to preserve,
 no migration to stage, and no compatibility to keep — breaking changes are free. Files are
@@ -42,7 +42,7 @@ them down, and they live in a sidecar that travels with the directory.
 
 ```
 {Gatherum__Storage__Root}/
-  alice/                        ← one directory per user; the name is the mapping key
+  sand_head/                    ← the user's OIDC username, verbatim where it can be
     Homelab/
       Podman.md                 ← a node. filename is the title.
       rack-photo.jpg            ← also a node. no metadata needed to be useful.
@@ -53,6 +53,13 @@ them down, and they live in a sidecar that travels with the directory.
   bob/
     ...
 ```
+
+The root directory is named after the user's `preferred_username` — Authelia sends the
+login itself, so `sand_head` is `sand_head`. That is the point of using it: somebody
+looking at these directories with no Gatherum running should recognise whose is whose, and
+mangling the name into a slug spends exactly what makes it useful. Only what a directory
+genuinely cannot hold is replaced, and the name is assigned once and never changed, because
+renaming it would mean moving every file the user owns.
 
 `.gatherum/meta.json` is per-directory, keyed by filename within that directory, and is
 the fallback carrier for everything a path cannot say. It sits *beside* the files it
@@ -171,8 +178,11 @@ and it should be a narrow one:
 - **Anonymous reach is exactly the public subtree**: node content, previews, downloads,
   backlinks and category listings filtered to public nodes, and search restricted the same
   way. A public wiki that cannot be searched is not much of one.
-- **Rate limiting stops being optional.** Semantic search runs a bounded model call on the
-  request path; exposing that to anonymous callers without a limit is an invitation.
+- **Rate limiting stops being optional**, and is implemented: reads and searches each get
+  a per-minute budget per client address, searches much tighter because the semantic half
+  runs a model on the request path. Signed-in callers are never metered — they
+  authenticated to get here, and an IP-keyed bucket shared with the internet would meter
+  them unpredictably.
 - **MCP and `/api` writes stay authenticated.** Read endpoints gain an anonymous path;
   everything else keeps its current posture.
 
@@ -302,10 +312,11 @@ disk.
    yet self-describing on its own.
 3. **Sharing model** — *done*. Three states, grants with roles, additive inheritance,
    `inherit: false`, the authority rule, `VisibleTo(…, Guid?)`.
-4. **Public on the internet** — *done, minus rate limiting*. Anonymous reads reach public
-   nodes through the same seam; every write refuses anonymous. **Rate limiting is not
-   implemented**, and semantic search makes a bounded model call on the request path, so
-   an instance should not be exposed publicly until it is.
+4. **Public on the internet** — *done*. Anonymous reads reach public nodes through the
+   same seam; every write refuses anonymous; reads and searches are rate limited per
+   client address with signed-in callers exempt; `Gatherum__Sharing__AllowPublic=false`
+   hides every public node at once, immediately and without editing what an owner
+   recorded on disk.
 5. **Union tree** — *partly*. The data is right: `GetTreeAsync` returns owned plus
    shared-in, and `TreeNode.Owned` distinguishes them. The UI shows badges and disables
    publishing on somebody else's node, but there is no share-with-a-person control and no

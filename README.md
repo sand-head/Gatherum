@@ -97,7 +97,11 @@ Everything configures through environment variables (`Gatherum__Section__Key` fo
 | --- | --- | --- |
 | `Gatherum__Database__ConnectionString` | `Host=localhost;Database=gatherum;Username=gatherum;Password=gatherum` | Npgsql connection string |
 | `Gatherum__Database__Migrate` | `true` | Apply EF migrations on startup; set `false` to opt out |
-| `Gatherum__Storage__Root` | `data/files` (`/data/files` in the container) | Root of content-addressed file storage |
+| `Gatherum__Storage__Root` | `data/files` (`/data/files` in the container) | The system of record: one directory per user, named after their OIDC username |
+| `Gatherum__Storage__ReindexOnStartup` | `true` | Reconcile the index against the directories at startup — also how a lost database recovers |
+| `Gatherum__Sharing__AllowPublic` | `true` | Serve nodes marked public. Off hides them all at once, without editing what an owner recorded |
+| `Gatherum__Sharing__AnonymousReadsPerMinute` | `120` | Read budget per client address, for callers with no session |
+| `Gatherum__Sharing__AnonymousSearchesPerMinute` | `10` | Search budget per client address. Tighter, because the semantic half runs a model on the request path |
 | `Gatherum__Oidc__Authority` | *(empty)* | OIDC issuer URL; empty enables the dev auto-login |
 | `Gatherum__Oidc__ClientId` | *(empty)* | OIDC client id |
 | `Gatherum__Oidc__ClientSecret` | *(empty)* | OIDC client secret |

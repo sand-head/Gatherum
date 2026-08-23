@@ -19,7 +19,7 @@ public static class AuthEndpoints
 
             // No identity provider configured: sign in a local development user so the
             // app is usable straight from `dotnet run`. Never configure production this way.
-            var user = await users.GetOrCreateAsync("dev", "dev@localhost", "Dev User");
+            var user = await users.GetOrCreateAsync("dev", "dev@localhost", "Dev User", "dev");
             await http.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme,
                 new System.Security.Claims.ClaimsPrincipal(
                     user.ToIdentity(CookieAuthenticationDefaults.AuthenticationScheme)));

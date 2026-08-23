@@ -9,6 +9,31 @@ public class GatherumOptions
     public OidcOptions Oidc { get; set; } = new();
     public AnalysisOptions Analysis { get; set; } = new();
     public EmbeddingOptions Embedding { get; set; } = new();
+    public SharingOptions Sharing { get; set; } = new();
+}
+
+/// <summary>What reaches people who are not signed in. A node marked
+/// <c>Public</c> is on the internet — no session, no key — which is a different kind of
+/// exposure from anything else Gatherum does, and the only one that needs a budget.</summary>
+public class SharingOptions
+{
+    /// <summary>Whether public nodes are served at all. Off, a node that says it is
+    /// public is treated as private by every query, immediately and without touching what
+    /// is recorded on disk — an operator's switch, not an edit to somebody's data.</summary>
+    public bool AllowPublic { get; set; } = true;
+
+    /// <summary>Reads per minute per client address, for callers with no session.
+    /// Generous: reading a public wiki is meant to be pleasant.</summary>
+    public int AnonymousReadsPerMinute { get; set; } = 120;
+
+    /// <summary>Searches per minute per client address, for callers with no session.
+    /// Much tighter than reads, because the semantic half runs a model on the request
+    /// path and an unmetered anonymous caller would be spending your GPU.</summary>
+    public int AnonymousSearchesPerMinute { get; set; } = 10;
+
+    /// <summary>How many over-budget requests wait rather than being refused. Small: a
+    /// queue that grows is a slower way to be unavailable.</summary>
+    public int AnonymousQueueDepth { get; set; } = 4;
 }
 
 public class DatabaseOptions

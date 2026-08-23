@@ -14,7 +14,7 @@ using Pgvector;
 namespace Gatherum.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(GatherumDbContext))]
-    [Migration("20260823164142_Initial")]
+    [Migration("20260823170921_Initial")]
     partial class Initial
     {
         /// <inheritdoc />
@@ -398,6 +398,10 @@ namespace Gatherum.Infrastructure.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)");
+
+                    b.Property<string>("Username")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.HasKey("Id");
 

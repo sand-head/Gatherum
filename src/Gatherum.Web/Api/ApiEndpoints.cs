@@ -23,29 +23,29 @@ public static class ApiEndpoints
             var results = await search.SearchAsync(http.User.GetUserIdOrNull(), query, nodeKind,
                 limit ?? 20, searchMode);
             return Results.Ok(results.Select(SearchResultDto.From));
-        }).AllowAnonymous();
+        }).AllowAnonymous().RequireRateLimiting(AnonymousRateLimits.Search);
 
         api.MapGet("/nodes/tree", async (NodeService nodes, HttpContext http) =>
         {
             var tree = await nodes.GetTreeAsync(http.User.GetUserIdOrNull());
             return Results.Ok(tree.Select(TreeNodeDto.From));
-        }).AllowAnonymous();
+        }).AllowAnonymous().RequireRateLimiting(AnonymousRateLimits.Read);
 
         api.MapGet("/nodes/{id:guid}", async (NodeService nodes, HttpContext http, Guid id) =>
             Results.Ok(NodeDto.From(await nodes.GetWithBodyAsync(http.User.GetUserIdOrNull(), id))))
-            .AllowAnonymous();
+            .AllowAnonymous().RequireRateLimiting(AnonymousRateLimits.Read);
 
         api.MapGet("/nodes/{id:guid}/children", async (NodeService nodes, HttpContext http, Guid id) =>
         {
             var children = await nodes.GetChildrenAsync(http.User.GetUserIdOrNull(), id);
             return Results.Ok(children.Select(NodeSummaryDto.From));
-        }).AllowAnonymous();
+        }).AllowAnonymous().RequireRateLimiting(AnonymousRateLimits.Read);
 
         api.MapGet("/nodes/roots", async (NodeService nodes, HttpContext http) =>
         {
             var roots = await nodes.GetChildrenAsync(http.User.GetUserIdOrNull(), null);
             return Results.Ok(roots.Select(NodeSummaryDto.From));
-        }).AllowAnonymous();
+        }).AllowAnonymous().RequireRateLimiting(AnonymousRateLimits.Read);
 
         api.MapPost("/pages", async (FileService files, NodeService nodes, HttpContext http,
             CreatePageRequest request) =>
@@ -211,14 +211,14 @@ public static class ApiEndpoints
         {
             var backlinks = await nodes.GetBacklinksAsync(http.User.GetUserIdOrNull(), id);
             return Results.Ok(backlinks.Select(NodeSummaryDto.From));
-        }).AllowAnonymous();
+        }).AllowAnonymous().RequireRateLimiting(AnonymousRateLimits.Read);
 
         api.MapGet("/nodes/{id:guid}/similar", async (NodeService nodes, HttpContext http,
             Guid id, int? limit) =>
         {
             var similar = await nodes.GetSimilarAsync(http.User.GetUserIdOrNull(), id, limit ?? 5);
             return Results.Ok(similar.Select(SimilarDto.From));
-        }).AllowAnonymous();
+        }).AllowAnonymous().RequireRateLimiting(AnonymousRateLimits.Read);
 
         api.MapGet("/nodes/{id:guid}/versions", async (NodeService nodes, HttpContext http, Guid id) =>
         {
@@ -260,7 +260,7 @@ public static class ApiEndpoints
             var content = await files.OpenContentAsync(http.User.GetUserIdOrNull(), id, version);
             return Results.Stream(content.Stream, content.MediaType,
                 enableRangeProcessing: true);
-        }).AllowAnonymous();
+        }).AllowAnonymous().RequireRateLimiting(AnonymousRateLimits.Read);
 
         api.MapGet("/files/{id:guid}/download", async (FileService files, HttpContext http,
             Guid id, int? version) =>
@@ -268,7 +268,7 @@ public static class ApiEndpoints
             var content = await files.OpenContentAsync(http.User.GetUserIdOrNull(), id, version);
             return Results.Stream(content.Stream, content.MediaType,
                 fileDownloadName: content.FileName);
-        }).AllowAnonymous();
+        }).AllowAnonymous().RequireRateLimiting(AnonymousRateLimits.Read);
 
         api.MapPut("/files/{id:guid}/description", async (FileService files, HttpContext http,
             Guid id, DescriptionRequest request) =>

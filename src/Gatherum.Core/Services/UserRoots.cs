@@ -20,28 +20,54 @@ public class UserRoots(GatherumDbContext db)
         return id;
     }
 
-    /// <summary>A directory name for a new user: their sign-in name where it can be one,
-    /// falling back to their id. Deliberately readable — somebody will one day be looking
-    /// at these directories in a file manager with no Gatherum running.</summary>
-    public static string Propose(string displayName, string subject, Guid id,
-        Func<string, bool> taken)
+    /// <summary>A directory name for a new user, from the name their identity provider
+    /// knows them by. Authelia's <c>preferred_username</c> is the login itself, so
+    /// <c>sand_head</c> stays <c>sand_head</c> — the point of using it is that somebody
+    /// looking at these directories with no Gatherum running recognises whose is whose,
+    /// and mangling it into a slug would spend exactly the thing that makes it useful.
+    ///
+    /// Only what a directory genuinely cannot hold is replaced. Underscores, dots and
+    /// hyphens survive; separators, control characters and the names Windows reserves do
+    /// not.</summary>
+    public static string Propose(string username, string subject, Guid id, Func<string, bool> taken)
     {
-        foreach (var candidate in new[] { Slug(displayName), Slug(subject) })
+        foreach (var candidate in new[] { Sanitize(username), Sanitize(subject) })
         {
-            if (candidate.Length > 0 && !taken(candidate))
+            if (candidate.Length == 0)
+                continue;
+            if (!taken(candidate))
                 return candidate;
+            for (var n = 2; n < 100; n++)
+            {
+                if (!taken($"{candidate}-{n}"))
+                    return $"{candidate}-{n}";
+            }
         }
-        var fallback = $"user-{id:N}"[..12];
-        return taken(fallback) ? $"user-{id:N}" : fallback;
+        return $"user-{id:N}";
     }
 
-    private static string Slug(string value)
+    /// <summary>Names Windows refuses, kept out of the way even on Linux so a store stays
+    /// portable. Gatherum's own <c>.gatherum</c> is not listed because it cannot be
+    /// produced: a sanitized name never begins with a dot.</summary>
+    private static readonly HashSet<string> Reserved = new(StringComparer.OrdinalIgnoreCase)
     {
-        var slug = new string(value.Trim().ToLowerInvariant()
-            .Select(c => char.IsLetterOrDigit(c) ? c : '-').ToArray())
-            .Trim('-');
-        while (slug.Contains("--"))
-            slug = slug.Replace("--", "-");
-        return slug.Length > 40 ? slug[..40].Trim('-') : slug;
+        "CON", "PRN", "AUX", "NUL",
+        "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+        "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+    };
+
+    public static string Sanitize(string username)
+    {
+        var kept = new string(username.Trim()
+            .Select(c => char.IsLetterOrDigit(c) || c is '_' or '-' or '.' ? c : '-')
+            .ToArray());
+        while (kept.Contains("--"))
+            kept = kept.Replace("--", "-");
+        // A leading dot would make the directory hidden, and a trailing one is illegal on
+        // Windows. Neither is worth keeping to preserve a name.
+        kept = kept.Trim('.', '-');
+        if (kept.Length > 60)
+            kept = kept[..60].Trim('.', '-');
+        return Reserved.Contains(kept) ? "" : kept;
     }
 }
