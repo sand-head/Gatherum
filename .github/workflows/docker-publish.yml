@@ -42,6 +42,18 @@ jobs:
       - name: Determine version
         id: version
         uses: gittools/actions/gitversion/execute@v4.7.0
+        with:
+          # Normalization exists to repair a checkout GitVersion cannot reason about
+          # — a shallow clone, a detached head with no branches. Ours is neither: the
+          # step above fetches the whole history on purpose. What normalization does
+          # here instead is create a local branch for every remote one, and a local
+          # branch still pointing at commits already merged into main is exactly what
+          # the Mainline strategy cannot walk: it recurses to find where the branch
+          # was branched from, finds it already landed, and throws. That is why every
+          # pull request run failed from the moment the first feature branch was
+          # merged and left on the remote, while pushes to main — checked out on a
+          # real branch, so nothing to normalize — kept working.
+          disableNormalization: true
 
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
