@@ -17,6 +17,7 @@ public class FileService(
     NodeService nodes,
     IFileStorage storage,
     UserRoots roots,
+    NodeMetadataWriter sidecar,
     IEnumerable<ITextExtractor> extractors,
     IEnumerable<IMediaAnalyzer> analyzers,
     MediaAnalysisQueue analysisQueue,
@@ -44,6 +45,7 @@ public class FileService(
             NodePaths.FileNameFor(title, extension) ?? $"{node.Id:N}{extension}", ct);
         await AddTextVersionAsync(node, userId, content, ct);
         await db.SaveChangesAsync(ct);
+        await sidecar.WriteAsync(node.Id, ct);
         return node;
     }
 
@@ -57,6 +59,7 @@ public class FileService(
             NodePaths.IsLegalSegment(fileName) ? fileName : $"{node.Id:N}", ct);
         var version = await AddUploadedVersionAsync(node, userId, fileName, mediaType, content, ct);
         await db.SaveChangesAsync(ct);
+        await sidecar.WriteAsync(node.Id, ct);
         QueueAnalysis(version);
         return node;
     }
@@ -73,6 +76,7 @@ public class FileService(
             var version = await AddUploadedVersionAsync(node, userId, fileName, mediaType, content, ct);
             node.MediaType = mediaType;
             await db.SaveChangesAsync(ct);
+            await sidecar.WriteAsync(node.Id, ct);
             QueueAnalysis(version);
             return node;
         }
@@ -128,6 +132,7 @@ public class FileService(
             nodes.RefreshSearchText(node);
             await RefreshLinksAsync(node, userId, ct);
             await db.SaveChangesAsync(ct);
+            await sidecar.WriteAsync(node.Id, ct);
             return node.File.Current;
         }
         finally
@@ -183,6 +188,7 @@ public class FileService(
             nodes.RefreshSearchText(node);
             await RefreshLinksAsync(node, userId, ct);
             await db.SaveChangesAsync(ct);
+            await sidecar.WriteAsync(node.Id, ct);
             return node.File.Current;
         }
         finally
@@ -238,6 +244,7 @@ public class FileService(
             nodes.RefreshSearchText(node);
             await RefreshLinksAsync(node, userId, ct);
             await db.SaveChangesAsync(ct);
+            await sidecar.WriteAsync(node.Id, ct);
             QueueAnalysis(restored);
             return node;
         }

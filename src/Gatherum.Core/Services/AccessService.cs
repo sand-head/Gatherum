@@ -13,7 +13,7 @@ namespace Gatherum.Core.Services;
 /// anything about a node, and because the node tree is the directory tree, every ancestor
 /// inside a root shares that root's owner. Ownership decides who gets to say; it does not
 /// narrow what may be said.</summary>
-public class AccessService(GatherumDbContext db, TimeProvider clock)
+public class AccessService(GatherumDbContext db, TimeProvider clock, NodeMetadataWriter sidecar)
 {
     public async Task SetAccessAsync(Guid userId, Guid nodeId, AccessMode mode, bool inherit = true,
         CancellationToken ct = default)
@@ -24,7 +24,7 @@ public class AccessService(GatherumDbContext db, TimeProvider clock)
         node.UpdatedAt = clock.GetUtcNow();
         if (mode == AccessMode.Private)
             db.NodeGrants.RemoveRange(await db.NodeGrants.Where(g => g.NodeId == nodeId).ToListAsync(ct));
-        await ApplyAsync(ct);
+        await ApplyAsync(nodeId, ct);
     }
 
     public async Task GrantAsync(Guid userId, Guid nodeId, Guid granteeId, AccessRole role,
@@ -47,7 +47,7 @@ public class AccessService(GatherumDbContext db, TimeProvider clock)
         if (node.Access == AccessMode.Private)
             node.Access = AccessMode.Shared;
         node.UpdatedAt = clock.GetUtcNow();
-        await ApplyAsync(ct);
+        await ApplyAsync(nodeId, ct);
     }
 
     public async Task RevokeAsync(Guid userId, Guid nodeId, Guid granteeId, CancellationToken ct = default)
@@ -60,18 +60,21 @@ public class AccessService(GatherumDbContext db, TimeProvider clock)
             && !await db.NodeGrants.AnyAsync(g => g.NodeId == nodeId && g.UserId != granteeId, ct))
             node.Access = AccessMode.Private;
         node.UpdatedAt = clock.GetUtcNow();
-        await ApplyAsync(ct);
+        await ApplyAsync(nodeId, ct);
     }
 
     /// <summary>Persist the declaration, then rebuild the closure from it, then persist
     /// that. The order is the whole point: <see cref="RecomputeAsync"/> reads the grants
     /// back out of the database, and a grant that has only been added to the change
     /// tracker is not something a query can see.</summary>
-    private async Task ApplyAsync(CancellationToken ct)
+    private async Task ApplyAsync(Guid nodeId, CancellationToken ct)
     {
         await db.SaveChangesAsync(ct);
         await RecomputeAsync(ct);
         await db.SaveChangesAsync(ct);
+        // An access rule that lived only in the database would be the one thing a rebuild
+        // could not recover — and it would come back wrong in the unsafe direction.
+        await sidecar.WriteAsync(nodeId, ct);
     }
 
     /// <summary>Rebuilds the closure for the whole tree. Called after anything that can
