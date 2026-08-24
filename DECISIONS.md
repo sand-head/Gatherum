@@ -798,3 +798,35 @@ before the second navigation so nothing is cancelled mid-flight, and console err
 the run — with a filter for the download-cancellation noise a navigation always leaves
 behind, narrow enough that the `TypeLoadException` above still fails it.
 
+## The manual ships inside the app
+Gatherum's pages are written in a dialect nothing else speaks — `[[wiki links]]`,
+`:::infobox` and `:::figure` asides, `> [!NOTE]` callouts — and the people most likely to
+write a page here now are models, which have never seen any of it. A README on a git host
+does not solve that: it describes whatever `main` says today, not the version somebody is
+actually running, and it is not a link you can hand to a fetch tool that also lands on the
+instance the page is going into.
+
+So the manual is embedded in the assembly and served at `/docs`: as pages for a person, as
+`/docs/<page>.md` for whatever is reading, and as `/docs/all.md` and `/docs/llms.txt` for
+something that would rather fetch once than crawl. Embedded rather than a directory on
+disk, because a deployment cannot forget to copy what it does not have to copy — the
+Dockerfile only ever copies `src`.
+
+Unauthenticated, deliberately. The manual is identical in every install and says nothing
+about the knowledge base it sits next to, and a model handed a link arrives holding no
+session. It answers under the same per-address read budget as the rest of the anonymous
+surface.
+
+Rendered with Markdig rather than through `GatherumMarkdown` and slopedit's HTML writer,
+which would have been the dogfooding answer. The writer is built for a document the editor
+could open — it is the read view's other half — and a manual is a static page with tables
+and anchored headings and no canvas anywhere near it. Markdig's alert blocks and custom
+containers get callouts and asides close enough to demonstrate the constructs the page is
+about, and the CSS restates app.css's tokens rather than `ChromeInk`'s canvas colors. The
+one visible seam: an aside's side and width arguments are the editor's, and the docs
+renderer ignores them.
+
+What keeps it honest is `DocsTests`: every page has a title, every `/docs/…` link inside
+the manual lands on something served, and the dialect page has to name every callout kind
+in `CalloutExtension.Kinds` and both aside names in `BlockTags`. Adding a construct
+without documenting it fails the suite.

@@ -1,0 +1,63 @@
+@page "/docs"
+@page "/docs/{Slug}"
+@using Microsoft.AspNetCore.Authorization
+@inject DocsLibrary Docs
+@* The manual describes the software, not the knowledge base, and is the same in every
+   install — so it answers whoever asks. It is also the thing you hand a model, which
+   holds no session. *@
+@attribute [AllowAnonymous]
+
+<PageTitle>@(page?.Title ?? "Documentation") — Gatherum</PageTitle>
+
+<div class="docs">
+    <nav class="docs-nav" aria-label="Documentation">
+        <div class="docs-nav-title">Documentation</div>
+        @foreach (var entry in Docs.Pages)
+        {
+            <a href="@($"{DocsLibrary.Root}/{entry.Slug}")"
+               class="@(entry.Slug == page?.Slug ? "current" : null)">@entry.Title</a>
+        }
+        <div class="docs-nav-title">For a model</div>
+        <a href="@($"{DocsLibrary.Root}/all.md")">The whole manual (.md)</a>
+        <a href="@($"{DocsLibrary.Root}/llms.txt")">llms.txt</a>
+    </nav>
+
+    @if (page is null)
+    {
+        <article class="docs-article">
+            <h1>No such page</h1>
+            <p>There is no documentation page called “@Slug”. Everything there is sits in
+               the list beside this one.</p>
+        </article>
+    }
+    else
+    {
+        <article class="docs-article">
+            @((MarkupString)page.Html)
+            <footer class="docs-source">
+                This page as Markdown:
+                <a href="@($"{DocsLibrary.Root}/{page.Slug}.md")">@($"{DocsLibrary.Root}/{page.Slug}.md")</a>
+            </footer>
+        </article>
+
+        @if (page.Sections.Count > 1)
+        {
+            <nav class="docs-toc" aria-label="On this page">
+                <div class="docs-nav-title">On this page</div>
+                @foreach (var section in page.Sections)
+                {
+                    <a href="#@section.Id">@section.Title</a>
+                }
+            </nav>
+        }
+    }
+</div>
+
+@code {
+    [Parameter]
+    public string? Slug { get; set; }
+
+    private DocPage? page;
+
+    protected override void OnParametersSet() => page = Docs.Find(Slug);
+}

@@ -319,6 +319,39 @@ public class AppIntegrationTests(PostgresFixture postgres) : IAsyncLifetime
             && response.Headers.Location?.OriginalString.Contains("/auth/login") == true;
 
     [Fact]
+    public async Task The_manual_answers_a_visitor_holding_no_key()
+    {
+        // Shipping the documentation is only worth anything if it can be handed to
+        // somebody — or something — as a link, and neither a browser tab nor a model's
+        // fetch tool arrives holding a key. The pages say nothing about this instance,
+        // so there is nothing here to protect.
+        using var anonymous = factory.CreateClient(
+            new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        foreach (var path in new[] { "/docs", "/docs/markdown" })
+        {
+            var response = await anonymous.GetAsync(path);
+            Assert.False(IsRedirectToLogin(response), $"{path} redirected to sign in.");
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        }
+
+        // The dialect as its own source: what you actually paste into a model.
+        var source = await anonymous.GetAsync("/docs/markdown.md");
+        Assert.Equal(HttpStatusCode.OK, source.StatusCode);
+        Assert.Equal("text/markdown", source.Content.Headers.ContentType?.MediaType);
+        Assert.Contains(":::infobox", await source.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+
+        Assert.Contains("/docs/all.md", await anonymous.GetStringAsync("/docs/llms.txt"),
+            StringComparison.Ordinal);
+
+        // A .md naming no page answers in kind, rather than being re-executed into the
+        // not-found page and — for a caller with no session — a redirect to sign in.
+        var missing = await anonymous.GetAsync("/docs/no-such-page.md");
+        Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+        Assert.False(IsRedirectToLogin(missing));
+    }
+
+    [Fact]
     public async Task A_stranger_can_read_a_published_page_in_a_browser()
     {
         // The half that was missing: publishing worked for curl against /api and not for

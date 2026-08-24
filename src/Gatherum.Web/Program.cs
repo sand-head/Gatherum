@@ -27,6 +27,7 @@ builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<Gatherum.Web.Services.AppOperations>();
 builder.Services.AddSingleton<Gatherum.Web.Services.PresenceTracker>();
+builder.Services.AddSingleton<Gatherum.Web.Services.DocsLibrary>();
 builder.Services.AddScoped<Gatherum.Client.IAppData, Gatherum.Web.Services.ServerAppData>();
 builder.Services.AddScoped<Gatherum.Client.TreeState>();
 builder.Services.AddScoped<Gatherum.Client.OutlineState>();
@@ -198,6 +199,7 @@ app.MapRazorComponents<App>()
     .AddAdditionalAssemblies(typeof(Gatherum.Client.NodeEditor).Assembly);
 app.MapAuthEndpoints(oidc, app.Environment.IsDevelopment());
 app.MapGatherumApi();
+app.MapGatherumDocs();
 app.MapMcp("/mcp").RequireAuthorization("Mcp");
 
 app.MapGet("/healthz", async (GatherumDbContext db) =>

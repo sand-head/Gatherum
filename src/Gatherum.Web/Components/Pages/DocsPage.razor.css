@@ -1,0 +1,197 @@
+/* Three columns where there is room: what the manual contains, the page, and where
+   you are in it. The middle one is the only one that matters, so it is the one that
+   survives when the room runs out. */
+.docs {
+    display: grid;
+    grid-template-columns: 190px minmax(0, 1fr) 170px;
+    gap: 40px;
+    align-items: start;
+}
+
+.docs-nav, .docs-toc {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    position: sticky;
+    top: 0;
+    font-size: 13.5px;
+}
+
+.docs-nav-title {
+    font: 500 11px/1.6 var(--font-ui);
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    color: var(--on-surface-dim);
+    margin: 14px 0 4px;
+}
+
+.docs-nav-title:first-child { margin-top: 0; }
+
+.docs-nav a, .docs-toc a {
+    color: var(--on-surface);
+    padding: 4px 10px;
+    border-radius: var(--radius-full);
+    text-decoration: none;
+}
+
+.docs-nav a:hover, .docs-toc a:hover { background: var(--hover); }
+
+.docs-nav a.current {
+    background: var(--chip-bg);
+    color: var(--on-chip);
+    font-weight: 500;
+}
+
+.docs-toc a { color: var(--on-surface-dim); }
+
+/* The article's own measure. Prose wants a column, and the manual is prose even where
+   it is a table of environment variables. */
+.docs-article {
+    max-width: 760px;
+    line-height: 1.62;
+}
+
+.docs-article ::deep h2 {
+    font: 400 21px/1.3 var(--font-ui);
+    margin: 34px 0 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--outline-dim);
+}
+
+.docs-article ::deep h3 {
+    font: 500 16px/1.35 var(--font-ui);
+    margin: 24px 0 8px;
+}
+
+.docs-article ::deep p, .docs-article ::deep ul, .docs-article ::deep ol { margin: 0 0 14px; }
+.docs-article ::deep li { margin: 3px 0; }
+.docs-article ::deep li > p { margin: 0 0 6px; }
+
+.docs-article ::deep pre { margin: 0 0 16px; }
+
+.docs-article ::deep table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 0 0 18px;
+    font-size: 13.5px;
+}
+
+.docs-article ::deep :is(th, td) {
+    border: 1px solid var(--outline);
+    padding: 6px 10px;
+    text-align: left;
+    vertical-align: top;
+}
+
+.docs-article ::deep th { background: var(--surface-dim); font-weight: 500; }
+
+.docs-article ::deep blockquote {
+    margin: 0 0 16px;
+    padding: 2px 0 2px 14px;
+    border-left: 3px solid var(--outline);
+    color: var(--on-surface-dim);
+}
+
+.docs-article ::deep hr { border: none; border-top: 1px solid var(--outline-dim); margin: 28px 0; }
+
+.docs-article ::deep .contains-task-list { list-style: none; padding-left: 18px; }
+
+.docs-source {
+    margin-top: 40px;
+    padding-top: 12px;
+    border-top: 1px solid var(--outline-dim);
+    font-size: 13px;
+    color: var(--on-surface-dim);
+}
+
+/* The constructs the manual is about, drawn the way it says they are drawn. The paint
+   restates app.css's tokens rather than ChromeInk's canvas colors, because this is
+   HTML — but it is the same palette answering. */
+.docs-article ::deep .infobox {
+    float: right;
+    width: 280px;
+    max-width: 100%;
+    margin: 0 0 16px 24px;
+    padding: 8px 12px;
+    background: var(--surface-dim);
+    border: 1px solid var(--outline);
+    border-radius: var(--radius-s);
+    font-size: 13px;
+}
+
+.docs-article ::deep .infobox :is(h1, h2, h3) {
+    font: 500 15px/1.4 var(--font-ui);
+    text-align: center;
+    background: var(--chip-bg);
+    border: none;
+    border-radius: 4px;
+    margin: 4px 0 8px;
+    padding: 3px 6px;
+}
+
+.docs-article ::deep .infobox :is(table, th, td) { border: none; }
+.docs-article ::deep .infobox thead { display: none; }
+
+.docs-article ::deep .figure {
+    float: left;
+    width: 320px;
+    max-width: 100%;
+    margin: 0 24px 16px 0;
+    padding: 8px;
+    background: var(--surface-dim);
+    border: 1px solid var(--outline);
+    border-radius: var(--radius-s);
+    text-align: center;
+    font-size: 13px;
+}
+
+.docs-article ::deep :is(.infobox, .figure) img { max-width: 100%; }
+
+.docs-article ::deep .markdown-alert {
+    margin: 0 0 16px;
+    padding: 10px 14px;
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-s);
+    background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+    --accent: var(--link);
+}
+
+.docs-article ::deep .markdown-alert-title {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin: 0 0 6px;
+    font-weight: 500;
+    color: var(--accent);
+}
+
+.docs-article ::deep .markdown-alert-title svg { fill: currentColor; }
+.docs-article ::deep .markdown-alert > :last-child { margin-bottom: 0; }
+.docs-article ::deep .markdown-alert-tip { --accent: var(--ok); }
+.docs-article ::deep .markdown-alert-important { --accent: var(--primary); }
+.docs-article ::deep .markdown-alert-warning { --accent: var(--warn); }
+.docs-article ::deep .markdown-alert-caution { --accent: var(--danger); }
+
+@media (max-width: 1240px) {
+    .docs { grid-template-columns: 180px minmax(0, 1fr); }
+    .docs-toc { display: none; }
+}
+
+@media (max-width: 900px) {
+    .docs { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+
+    /* Above the article rather than beside it, and not sticky — a column of links
+       pinned to a phone's viewport is a column of links you scroll past. */
+    .docs-nav {
+        position: static;
+        flex-flow: row wrap;
+        gap: 6px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid var(--outline-dim);
+    }
+
+    .docs-nav-title { display: none; }
+    .docs-nav a { background: var(--surface-dim); }
+
+    .docs-article ::deep :is(.infobox, .figure) { float: none; width: auto; margin: 0 0 16px; }
+}

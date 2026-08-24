@@ -53,7 +53,10 @@ auto-login. Migrations: `dotnet ef migrations add <Name> -p src/Gatherum.Infrast
   column to the configured model at startup).
 - `src/Gatherum.Web` — the static pages and layout (`Components/`), REST API
   (`Api/`), MCP tools (`Mcp/`), auth (`Auth/`), presence + `ServerAppData`, the
-  server implementation of the interactive components' data seam (`Services/`).
+  server implementation of the interactive components' data seam (`Services/`), and
+  `Docs/` — the manual that ships with the app: Markdown files embedded in the
+  assembly, read by `Services/DocsLibrary`, served as pages by
+  `Components/Pages/DocsPage.razor` and as their own source by `Api/DocsEndpoints`.
 - `src/Gatherum.Client` — every interactive component, all Interactive Auto: the
   editor (`NodeEditor` hosting slopedit's `DocumentView` for pages and docx,
   `EditorView` for code/source; a document that is read rather than edited goes to
@@ -145,6 +148,9 @@ fresh DI scope via `Services/AppOperations`.
 - Every Markdown ⇄ document conversion goes through `GatherumMarkdown` — never
   `MarkdownSerializer` directly. A page read without the extension set writes the wiki's
   own syntax back out as prose.
+- The manual in `src/Gatherum.Web/Docs` is part of the feature, not a follow-up. It is
+  served unauthenticated on purpose — it describes the software, never the instance — so
+  nothing about a particular deployment goes in it.
 - No comment where a better name would do. Comments explain invariants and whys, not whats.
 - Warnings are errors. Never leave the tree red; build and test before every commit.
 
@@ -178,6 +184,10 @@ touch the server only through `IAppData`.
 4. If the construct links nodes, teach the server to see it too — `Markdown/` in Core,
    then `FileService.RefreshLinksAsync` — or it won't backlink.
 5. Round-trip test in `GatherumMarkdownTests`: parse, write, parse, write, compare.
+6. Write it into `src/Gatherum.Web/Docs/markdown.md`. The manual ships with the app and
+   is what a model gets pointed at, so a construct it never mentions may as well not
+   exist — `DocsTests` fails on a callout kind or an aside name the page has not heard
+   of.
 
 **Add a text extractor**:
 1. Implement `ITextExtractor` in `src/Gatherum.Infrastructure/Extraction/` (cf.

@@ -58,6 +58,24 @@ C#/Blazor — the only JavaScript is a ~65-line interop file.
 - **Privacy**: any node can be marked private, hiding its whole subtree from the other
   user — in the tree, in search, over the API, and over MCP.
 
+## Documentation
+
+Every copy of Gatherum serves its own manual at **`/docs`** — what a node is, the
+Markdown dialect pages are written in, categories, search, sharing, the REST API, the
+MCP server, and configuration. It is built from
+[`src/Gatherum.Web/Docs`](src/Gatherum.Web/Docs) and embedded in the assembly, so it
+always describes the version that is running.
+
+It is also written to be handed to a model, which is the point: the wiki words below are
+syntax no assistant has seen before. Those URLs need no sign-in.
+
+| Link | What it is |
+| --- | --- |
+| `/docs/markdown.md` | The dialect on its own — the one page to paste if you only paste one |
+| `/docs/all.md` | The whole manual as a single Markdown file |
+| `/docs/llms.txt` | An index of every page, in the [llms.txt](https://llmstxt.org) convention |
+| `/docs/<page>.md` | Any page's Markdown source |
+
 ## Run it locally
 
 Requires the .NET 10 SDK with the `wasm-tools` workload (`dotnet workload install
