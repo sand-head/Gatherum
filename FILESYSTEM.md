@@ -43,6 +43,8 @@ them down, and they live in a sidecar that travels with the directory.
 ```
 {Gatherum__Storage__Root}/
   sand_head/                    ← the user's OIDC username, verbatim where it can be
+    Categories/
+      Podman.md                 ← a category. a page like any other, marked as a subject.
     Homelab/
       Podman.md                 ← a node. filename is the title.
       rack-photo.jpg            ← also a node. no metadata needed to be useful.
@@ -230,10 +232,16 @@ A cache. Everything in it is either a copy of something on disk or recomputed fr
 |---|---|
 | `Nodes` | derived from paths, names, frontmatter, `meta.json` |
 | `FileVersions` | derived from `.gatherum/versions/` + manifest history |
-| `Categories`, `NodeCategories` | derived from frontmatter / `meta.json` |
+| `NodeCategories` | derived from frontmatter / `meta.json` — by category *name* |
 | `NodeLinks` | reparsed from body content |
 | `NodeEmbeddings` | recomputed locally |
 | `Users`, `ApiKeys`, `DataProtectionKeys` | **the exceptions — genuinely DB-only** |
+
+`Categories` is not in that list any more because there is no such table: a category is a
+node, its page is a file, and the only thing a sidecar has to carry is `"category": true`
+plus the *names* a node is filed under. Names rather than ids for the same reason a grant
+is recorded by root directory — an id is a database's opinion, and this file exists for the
+day there is no database.
 
 So `gatherum reindex`, and a scan on startup, become the whole disaster-recovery story:
 drop the database, restart, and everything returns except recomputed vectors and re-run

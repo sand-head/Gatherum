@@ -24,7 +24,7 @@ public class ReindexTests(PostgresFixture postgres) : IAsyncLifetime
 
     private Reindexer NewReindexer(ServiceHarness host) => new(
         host.Db, host.Storage, host.Metadata, host.Roots, host.Nodes, host.Access,
-        host.Files, host.Sidecar,
+        host.Categories,
         [new Gatherum.Infrastructure.Extraction.PlainTextExtractor()],
         host.Clock, NullLogger<Reindexer>.Instance);
 

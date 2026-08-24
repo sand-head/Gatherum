@@ -53,6 +53,19 @@ else if (node is not null)
             <NodeEditor @rendermode="InteractiveAuto" NodeId="@node.Id" FileName="@fileName"
                         MediaType="@node.MediaType" />
         }
+        else if (category is not null && unwritten)
+        {
+            @* A category nobody has written yet is Wikipedia's redlinked category: it
+               already lists what is in it, and says so instead of opening half a screen
+               of empty document above the only thing on the page. *@
+            <p class="node-unwritten">
+                Nobody has said what belongs here yet.
+                @if (editable)
+                {
+                    <a href="/nodes/@node.Id?edit">Write it</a><text>.</text>
+                }
+            </p>
+        }
         else if (readable)
         {
             <NodeReader @rendermode="InteractiveAuto" NodeId="@node.Id" FileName="@fileName"
@@ -117,6 +130,7 @@ else if (node is not null)
     private string fileName = "";
     private bool readable;
     private bool editable;
+    private bool unwritten;
     private bool notFound;
 
     protected override async Task OnParametersSetAsync()
@@ -151,6 +165,8 @@ else if (node is not null)
             // Editing is never offered to somebody who is not signed in, whatever the
             // node says — public is a publishing gesture, not an invitation.
             editable = readable && SignedIn;
+            unwritten = node.File is { Versions.Count: > 0 } body
+                && body.Current.ExtractedText.Trim().Length == 0;
             notFound = false;
         }
         catch (Gatherum.Core.NotFoundException)

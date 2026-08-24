@@ -35,11 +35,15 @@ C#/Blazor — the only JavaScript is a ~65-line interop file.
   background worker after the upload returns, survives restarts, and is reused when the
   same bytes turn up again. Off by default; nothing is ever sent anywhere without an
   endpoint you configured.
-- **Categories**: what a node is *about*, arranged the way an encyclopedia arranges it
-  — nested, not a tag cloud. File a page under `Homelab/Podman` and it is a page about
-  the homelab too: the parent category lists it, a search for either name finds it, and
-  "Similar" counts the kinship. Categories are created by being used and maintained like
-  anything else — renamed, re-nested, deleted — with their subcategories following along.
+- **Categories**: what a node is *about*, arranged the way an encyclopedia arranges it —
+  nested, not a tag cloud. And each one is a *page*: a body saying what belongs in it, a
+  history, backlinks, a `[[Podman]]` that resolves to it. Filing a page under `Podman`
+  is one edge; filing Podman's own page under `Homelab` is the same edge, and that is what
+  a subcategory is — so the page is about the homelab too, the parent lists it, a search
+  for either name finds it, and "Similar" counts the kinship. A subject can sit under two
+  parents at once. There is nothing to maintain that is not an ordinary page operation:
+  rename it by renaming its page, re-nest it by filing it elsewhere, delete it by deleting
+  it.
 - **Search**: two halves that answer different questions, and both work out of the box.
   PostgreSQL full-text (`tsvector` + GIN, `websearch_to_tsquery`) over titles, category
   names, and text — including what a model read, heard, or made of your media — finds the

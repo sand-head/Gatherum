@@ -54,16 +54,20 @@ browser sessions — including against the built container).
   newer-version warning in the editor (verified: fires when another user saves the
   open document). Concurrent saves are serialized per node; nobody's save is ever
   lost — it's a version.
-- **Categories, not tags** — a second tree, of subjects rather than of nodes: a page
-  filed under `Homelab/Podman` is a member of `Homelab` too, so the parent category
-  lists it (`?deep=true`), a search for either name finds it (the whole ancestry goes
-  into the node's search text), and "Similar" scores a shared category above a shared
-  corner of the taxonomy. Categories are created by being used, spelled case- and
-  whitespace-insensitively, and maintained — rename, re-nest, delete — with their
-  subcategories and their members' search text following along. A category whose only
-  members are private to the other user isn't listed at all. `/categories` browses the
-  tree; the chips in a node's header file and unfile it. Tags are gone: the migration
-  carries every tag over as a root category.
+- **Categories, not tags — and each one is a page** — subjects rather than nodes, and
+  `NodeCategory` is the taxonomy's only relation: an edge to a category files a page under
+  it, an edge from one category to another *is* a subcategory. So a page filed under
+  `Podman` is a member of `Homelab` too when Podman is filed there, the parent lists it
+  (`?deep=true`), a search for either name finds it (the whole ancestry goes into the
+  node's search text), and "Similar" scores a shared category above a shared corner of the
+  taxonomy. A subject can sit under two parents at once. Categories are created by being
+  used, spelled case- and whitespace-insensitively, and maintained — rename, re-nest,
+  delete — as the pages they are, with their members' search text and sidecars following
+  along. Deleting one frees its pages and promotes its subcategories rather than taking
+  them with it, because they are pages too. A category whose only members are private to
+  the other user isn't listed at all. `/categories` browses the taxonomy and
+  `/categories/<Name>` is the category's own page; the bar at the foot of a node files and
+  unfiles it. Tags are gone.
 - **Tree + search** — sidebar tree mixing all nodes (create, rename, delete, menu
   move up/down/move-to, drag-drop upload), one header search box — Ctrl/⌘-K puts the
   caret in it and the matches float under it, with kind badges and

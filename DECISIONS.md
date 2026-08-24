@@ -332,6 +332,9 @@ the bytes are stored, versioned, and searchable by title and category before any
 asked anything.
 
 ## Nested categories replace tags
+*Superseded in part by [A category is a page](#a-category-is-a-page): the argument against
+tags stands, the path does not.*
+
 Tags were in the brief from the start, and they were the wrong thing for this app.
 Wikipedia has no tags; Google Docs has none either. A tag is a flat label, so a wiki
 grown past a few dozen pages ends up with `podman`, `quadlet`, `quadlets` and `homelab`
@@ -962,3 +965,86 @@ The list shows eight, where the palette showed fifteen. A dropdown under a heade
 recognizing the page you meant, not for reading a result set — and eight is what fits
 without the keyboard walking the selection out of view, which is the only reason the
 palette's scroller was ever needed.
+
+## A category is a page
+Categories irked, and the complaint was worth taking seriously: *on Wikipedia a category is
+a thing that gets made, and pages are added to it; here pages dictate categories.* Half of
+that is a misreading — Wikipedia's membership is declared on the member too, `[[Category:X]]`
+is typed into the article, and a category page can be a redlink while already listing what
+is in it. The direction of filing was never the difference.
+
+The difference is that a Wikipedia category is **a page**. It has a body saying what belongs
+in it, a history, a talk page, something for a link to resolve to — and, decisively, it
+declares its own parents by being filed under them. Gatherum's category was a string. It
+had none of that, and it had `Path` doing the work of identity, which is where the rest of
+the awkwardness came from: a parallel set of verbs (rename, move, delete) that existed only
+because a path is a thing its own service has to maintain, and a shape that could not say
+"Podman is a homelab subject *and* a container subject" because a string has one prefix.
+
+So a category is a page. `Node.IsCategory`, an ordinary Markdown file at
+`Categories/<Name>.md` in the root of whoever first mentioned it, and `NodeCategory` demoted
+to an edge between two nodes. That edge is the taxonomy's **only** relation: pointed at a
+category it is a membership, pointed from one category at another it is a subcategory.
+Nesting is not a second mechanism.
+
+What that is worth, mostly measured in what stopped existing:
+
+- **Three verbs became none.** Rename is renaming the node. Re-nest is filing it somewhere
+  else — the same gesture as filing a page, on the same bar. Delete is deleting it.
+  `CategoryService.RenameAsync`/`MoveAsync`/`DeleteAsync`, three REST endpoints, and
+  `CategoryTools` — a whole component that existed to maintain paths — are gone.
+- **Deleting a category no longer deletes its subcategories.** It could when they were
+  rows under a prefix. They are pages now, so they lose a parent and become subjects of
+  their own, and the pages filed in the deleted one are simply no longer filed there. That
+  is the change most likely to surprise, and it is the one the model forces and improves:
+  deleting `Homelab` should never have been able to delete somebody's writing about Podman.
+- **The taxonomy is a graph.** `Podman` under `Homelab` and under `Containers` at once, and
+  members belong to both. An index does this. `Homelab/Podman` could not.
+- **Rename stops rewriting the world.** Identity is an id, so no path is repathed and no
+  `RepathAsync` exists. It still costs the search text of everything beneath it — a
+  category contributes its whole ancestry to its members' findable text, and that is the
+  property the embedding staleness rule was written for — and it now also costs the
+  *sidecars* of its direct members, because a name is what they write down.
+- **`[[Homelab]]` resolves.** A category is a page, so it is a wiki-link target, a backlink
+  target, and something `get_node` reads. That was the whole ask.
+
+`CategoryPath` becomes `CategoryName`: one name, trimmed and whitespace-collapsed and
+compared case-insensitively, unique among categories. Unique is load-bearing rather than
+tidy — it is what lets `meta.json` say `"categories": ["Podman"]` and mean something with no
+database to look an id up in, which is the same argument that already made a grant record a
+root directory instead of a `Guid`. It is also what makes `/categories/Podman` addressable,
+and a category name is the one address in this wiki a reader would type, so the readable
+route is a second `@page` on `NodePage` rather than a second article view to keep in step.
+
+Things worth stating because they are not free:
+
+- **Ancestry was a string prefix and is now a walk.** `CategoryIndex` loads the whole
+  taxonomy for the length of one operation and answers ancestors, descendants and closures
+  from memory. That is not a new trade — `GetSimilarAsync` already decided it, in those
+  words, for exactly this question — and the taxonomy is a table of dozens of rows in a
+  wiki for two people. It is a snapshot: load one per operation and let it go.
+- **The reindex needs two passes.** A page filed under "Podman" cannot be joined up until
+  whichever root holds Podman's page has been walked, so filings are collected during the
+  walk and wired afterwards, in one pass, against one snapshot. A name nothing answers to —
+  somebody typed it into a `meta.json` by hand — gets its page written. That is the one
+  place the scan creates a file outside `.gatherum`, and it is deliberate: a taxonomy half
+  of which exists only in the database would not survive the next cold start, which is the
+  one thing this whole architecture is for.
+- **A category page is private until its author says otherwise**, like any page. The
+  taxonomy still has no owner in the sense that mattered — anyone who can edit a node can
+  file it under anything, and listings are still computed against what the asker can see —
+  but who may read a category's *prose* is now that page's own business. The subject is
+  everyone's; the essay about it is its author's. Sharing it is the ordinary gesture.
+- **An unqualified search no longer returns categories.** Every filed page has a same-named
+  subject standing beside it, so the default would answer half in headings. They are
+  indexed like the pages they are and `kind: category` asks for them.
+- **Two spellings of one subject are two subjects**, and always were — the datalist under
+  the category field is what keeps that from happening, and it matters more now that a
+  second spelling writes a second file. An ordinary page called "Podman" is *not* quietly
+  promoted into a subject when somebody files something under that word; only a category
+  answers to a category name.
+
+One thing was fixed on the way past because the design made it load-bearing:
+`NodeService.RenameAsync` never wrote the sidecar, so a title override lived in the index
+alone and the next reindex would quietly undo it. Harmless-looking until a category's name
+is what its members write on disk.

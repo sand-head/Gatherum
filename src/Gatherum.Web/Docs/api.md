@@ -51,7 +51,7 @@ A node comes back like this:
   "parentId": "…",
   "position": 3,
   "access": "Private",
-  "categories": [{ "path": "Homelab/Podman", "name": "Podman" }],
+  "categories": [{ "id": "3c1e…", "name": "Podman" }],
   "createdAt": "2026-01-04T10:12:00+00:00",
   "updatedAt": "2026-02-18T22:41:07+00:00",
   "markdown": "# Podman on the NAS\n…",
@@ -113,13 +113,23 @@ the latest one.
 
 | Endpoint | Notes |
 | --- | --- |
-| `GET /api/categories?matching=` | The whole taxonomy, with member counts |
-| `GET /api/categories/{path}?deep=` | One category: ancestry, subcategories, members |
-| `POST /api/nodes/{id}/categories` | `{ "path": "Homelab/Podman" }` |
-| `DELETE /api/nodes/{id}/categories/{path}` | Unfile from one category |
-| `POST /api/categories/rename` | `{ "path": "…", "name": "…" }` |
-| `POST /api/categories/move` | `{ "path": "…", "newParentPath": null }` |
-| `DELETE /api/categories/{path}` | Removes the category, not what was in it |
+A category is a node — see [Categories](/docs/categories) — so it is read, renamed,
+re-nested and deleted through the node endpoints above. What is left here is the taxonomy
+itself.
+
+| Endpoint | Notes |
+| --- | --- |
+| `GET /api/categories?matching=` | Every category, with member counts and its parents' ids |
+| `GET /api/categories/{name}?deep=` | One category: its parents, subcategories, members |
+| `POST /api/nodes/{id}/categories` | `{ "name": "Podman" }` — writes the category's page if none exists |
+| `DELETE /api/nodes/{id}/categories/{name}` | Unfile from one category |
+
+Nesting is the same call: `POST /api/nodes/{podmanCategoryId}/categories` with
+`{ "name": "Homelab" }` makes Podman a subcategory of Homelab. A category can be nested
+under more than one, so `parentIds` is a list and there is no path up to a single root.
+
+The category's own page — its prose, its history, its access — is `GET /api/nodes/{id}`
+like any other node, with `"kind": "Category"`.
 
 ## Sharing
 

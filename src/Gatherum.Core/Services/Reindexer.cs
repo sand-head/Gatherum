@@ -21,8 +21,7 @@ public class Reindexer(
     UserRoots roots,
     NodeService nodes,
     AccessService access,
-    FileService files,
-    NodeMetadataWriter metadataWriter,
+    CategoryService categories,
     IEnumerable<ITextExtractor> extractors,
     TimeProvider clock,
     ILogger<Reindexer> logger)
@@ -297,9 +296,11 @@ public class Reindexer(
                 }
                 if (!byName.TryGetValue(CategoryName.Key(name), out var category))
                 {
-                    category = await WriteCategoryPageAsync(filing.OwnerId, name, ct);
+                    category = await categories.EnsureAsync(filing.OwnerId, name, ct);
                     byName[CategoryName.Key(name)] = category;
                     report.Added++;
+                    logger.LogInformation(
+                        "Wrote a page for category '{Name}' that only a sidecar knew.", name);
                 }
                 if (category.Id != filing.NodeId && edges.Add((filing.NodeId, category.Id)))
                     db.NodeCategories.Add(new NodeCategory
@@ -315,37 +316,6 @@ public class Reindexer(
         // its categories' whole ancestry, and until this point there was no ancestry.
         var everything = await db.Nodes.Select(n => n.Id).ToListAsync(ct);
         await nodes.RefreshSearchTextAsync(everything, await CategoryIndex.LoadAsync(db, ct), ct);
-    }
-
-    private async Task<Node> WriteCategoryPageAsync(Guid ownerId, string name,
-        CancellationToken ct)
-    {
-        var folder = await db.Nodes.FirstOrDefaultAsync(
-            n => n.OwnerId == ownerId && n.RelativePath == CategoryService.Folder, ct);
-        if (folder is null)
-        {
-            var now = clock.GetUtcNow();
-            folder = new Node
-            {
-                Id = Guid.NewGuid(),
-                Title = CategoryService.Folder,
-                MediaType = MediaTypes.Directory,
-                OwnerId = ownerId,
-                RelativePath = CategoryService.Folder,
-                CreatedAt = now,
-                UpdatedAt = now,
-            };
-            db.Nodes.Add(folder);
-            await db.SaveChangesAsync(ct);
-        }
-        var page = await files.CreateTextNodeAsync(ownerId, folder.Id, name, "",
-            MediaTypes.Markdown, ct);
-        page.IsCategory = true;
-        await db.SaveChangesAsync(ct);
-        await metadataWriter.WriteAsync(page.Id, ct);
-        logger.LogInformation("Wrote a page for category '{Name}' that only a sidecar knew.",
-            name);
-        return page;
     }
 
     /// <summary>What one indexed file said it was about, held until every root has been

@@ -171,9 +171,13 @@ public class CategoryService(GatherumDbContext db, NodeService nodes, FileServic
 
     /// <summary>The category page for a name, written if nobody has written one. Creating
     /// it is an ordinary page creation — that is the whole claim of this design — so it
-    /// lands in the creator's own root, private until they say otherwise, with an empty
-    /// body waiting for somebody to say what belongs in it.</summary>
-    private async Task<Node> EnsureAsync(Guid userId, string name, CancellationToken ct)
+    /// lands in the given user's own root, private until they say otherwise, with an empty
+    /// body waiting for somebody to say what belongs in it.
+    ///
+    /// Public because the reindex needs it too: a name in a <c>meta.json</c> that nothing
+    /// on disk answers to has to become a page, and there should be exactly one piece of
+    /// code that decides where a category page goes.</summary>
+    public async Task<Node> EnsureAsync(Guid userId, string name, CancellationToken ct = default)
     {
         if (await ResolveAsync(name, ct) is { } existing)
             return existing;

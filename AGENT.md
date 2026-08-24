@@ -38,7 +38,8 @@ auto-login. Migrations: `dotnet ef migrations add <Name> -p src/Gatherum.Infrast
 
 - `src/Gatherum.Core` — domain entities, `GatherumDbContext`, **application services**
   (`Services/`) where every business rule lives (`NodeService` = tree/links/title
-  resolution, `CategoryService` = the taxonomy and what is filed in it,
+  resolution, `CategoryService` = the taxonomy and what is filed in it, with
+  `CategoryIndex` the one-snapshot-per-operation view of its graph,
   `FileService` = bodies/versions/text editing), `Markdown/MarkdownContent`
   and `Markdown/WikiLinkSyntax` (the link conventions, read server-side), the seam
   interfaces in `Abstractions/`, `Services/MediaAnalysisQueue` — the hand-off from
@@ -61,8 +62,8 @@ auto-login. Migrations: `dotnet ef migrations add <Name> -p src/Gatherum.Infrast
   editor (`NodeEditor` hosting slopedit's `DocumentView` for pages and docx,
   `EditorView` for code/source; a document that is read rather than edited goes to
   `DocumentHtmlView` instead — the version panel's preview is the one today), tree,
-  sidebar panels (contents/similar/recent), search box, node header, categories,
-  version panel, file view, and settings keys — plus Gatherum's Markdown dialect, which lives
+  sidebar panels (contents/similar/recent), search box, node header, the category bar at
+  the foot of a page (`NodeCategories`), version panel, file view, and settings keys — plus Gatherum's Markdown dialect, which lives
   here because it is the editor's word: `GatherumMarkdown` (the extension set and the
   only read/write door), `AsideExtension`/`CalloutExtension`/`BlockTags`,
   `DocumentChrome` (floats and decorations derived from tags), `ChromeInk`, `WikiLinks`,
@@ -110,9 +111,13 @@ fresh DI scope via `Services/AppOperations`.
   misreport the page, and following it would only reach a 404. Locking is the read
   view's alone: it rewrites runs, and a document that can be saved has to write back the
   bytes it was read from.
-- Two trees, and only two: nodes have one place in the node tree, and categories nest
-  in their own. A category is identified by its path — `CategoryPath` is the only place
-  that decides how one is spelled — and nothing else names a subject. No tags.
+- One tree for placement, one graph for subject, and nothing else names a subject. A node
+  has one place in the node tree. A category is a *page* — a node with `IsCategory` set —
+  and `NodeCategory` is the taxonomy's only relation: an edge to a category is a
+  membership, and an edge from a category to a category is a subcategory. So a subject can
+  sit under two parents, categories are renamed/re-nested/deleted as the pages they are,
+  and `CategoryName` is the only place that decides how one is spelled. No tags, and no
+  second set of verbs.
 - MCP and REST stay thin adapters over the same application services. No logic in
   endpoints, tools, or components.
 - Storage (`IFileStorage`), extraction (`ITextExtractor`), analysis (`IMediaAnalyzer`),

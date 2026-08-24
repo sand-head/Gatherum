@@ -36,7 +36,8 @@ in the order an agent needs it.
   it does, and the rules the parser follows.
 - **[Pages and files](/docs/pages-and-files)** — nodes, the tree, editing, uploads,
   versions, and what Gatherum reads out of a file.
-- **[Categories](/docs/categories)** — what a node is *about*, and how the taxonomy nests.
+- **[Categories](/docs/categories)** — what a node is *about*. Each one is a page of its
+  own, and nesting one is filing it under another.
 - **[Search](/docs/search)** — the two halves of the search box and when to reach for
   each.
 - **[Sharing and privacy](/docs/sharing)** — private, shared, unlisted, public, and the
@@ -60,9 +61,10 @@ A few facts everything else rests on:
 - **A page is a node whose file is Markdown.** Nothing distinguishes it in the database:
   `Kind` is derived from the media type, so renaming `notes.txt` to `notes.md` makes it
   a page.
-- **One tree for placement, one tree for subject.** A node sits in exactly one place in
-  the node tree (its parent), and belongs to any number of nested categories. There are
-  no tags.
+- **One tree for placement, one graph for subject.** A node sits in exactly one place in
+  the node tree (its parent), and belongs to any number of categories. A category is a
+  page too, and filing one under another is what makes it a subcategory — so a subject
+  can sit under two parents at once. There are no tags.
 - **Every save is a version.** Old versions stay downloadable, restorable, and readable
   as HTML.
 - **Private by default.** A node nobody has published is its owner's alone, and so is
