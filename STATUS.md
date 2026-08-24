@@ -99,28 +99,41 @@ browser sessions — including against the built container).
 - **Links** — mentions (`[@Title](node://id)`), `[[wiki links]]` and embedded files
   parse straight from Markdown into link rows; backlinks everywhere; all three are
   clickable in the editor (Ctrl/⌘+click while editing, a plain click while reading).
+  A page may link a node its reader may not open — a public page pointing at its
+  author's private file is ordinary — so the reader asks which of the ids it links are
+  reachable (the direct-link question, so an unlisted node answers yes) and draws the
+  rest locked: greyed, padlocked, and with no target at all, an embedded picture
+  becoming its own caption rather than a broken image. The page still says what it says;
+  the link stops pretending it goes somewhere.
 - **Auth** — OIDC-only via discovery, defensive `offline_access`, first user becomes
   admin, cookie sessions; API keys hashed at rest, revocable, shown once; dev
   auto-login only when no authority is configured.
 - **REST API** (`/api`) and **MCP** (`/mcp`, all eleven tools) — thin adapters over the
   same services; page bodies are Markdown verbatim in both directions.
 - **Privacy** — per-subtree private flag enforced by one `INodeAuthorizer` in every
-  read path.
+  read path, and a published page renders for whoever may reach it: signed out, the node
+  page opens in the same read view a signed-in reader gets, with the editor and every
+  affordance that writes left off.
 - **Ops** — multi-stage Dockerfile (wasm-tools for the Auto island, non-root runtime; built and
   exercised against a postgres container, editor verified in-browser against the
   containerized app), compose.yaml, Podman Quadlets, `/healthz`, JSON console logs
   outside Development, migrations on startup with opt-out.
-- **Tests** — 144 passing: the Markdown dialect (infobox/figure/callout round trips,
+- **Tests** — 182 passing: the Markdown dialect (infobox/figure/callout round trips,
   wiki-link spellings, extension composition, derived chrome, red-link inking, in-app
   URL shapes) and the same dialect as read-only HTML (the aside and its card, a
   callout's tint, a wiki link's URL, a mention that keeps its look and loses its
-  target), markdown links, docx extraction/editing/backlinks, tree ops, privacy,
+  target), the padlock a link the reader may not follow wears (which links are asked
+  about, which are locked, the picture that becomes its caption, re-inking across a mode
+  change, and the emitted HTML carrying a lock and no target),
+  markdown links, docx extraction/editing/backlinks, tree ops, privacy,
   versions (collapse, restore, re-upload, cross-author), search, title resolution, API
   keys, storage/extraction, the taxonomy (nesting, counts, privacy, rename/move/delete,
   path spelling), and integration tests booting the app on Testcontainers Postgres
   (create page → search → MCP `get_node`; wiki link → backlink → `resolve-titles`;
   file a page in a nested category → find it from the category above, over REST and
-  MCP; create a page → find it over REST by a question that shares none of its words).
+  MCP; create a page → find it over REST by a question that shares none of its words;
+  publish a page that mentions a private one → a stranger gets the page, the mention's
+  text, and the answer that its target is not theirs to open).
   The packaged model is tested as it ships (shape, normalization, determinism,
   batch-invariance, that it tells two subjects apart, and that the shipped `MaxDistance`
   falls between kin and strangers). Everything *around* semantic search is tested against
@@ -137,6 +150,19 @@ browser sessions — including against the built container).
 
 ## Known gaps
 
+- A `[[wiki link]]` naming a page the reader may not see inks red, not locked, and
+  offers to write it. That is on purpose: a wiki link is a search by title, and
+  answering "that one exists, it just isn't yours" would hand out the existence of a
+  private page to anybody who guessed its name. A mention carries the id already, which
+  is why it can wear the padlock instead.
+- Only the read view locks. The editor draws a link to a node its author cannot see as
+  an ordinary link — locking rewrites runs, and a document that saves has to write back
+  the bytes it was read from. It costs a co-editor a click into a 404 on somebody else's
+  private file, which is the small side of that trade.
+- A signed-out visitor reaching a published *file* (an image, a PDF — anything with no
+  document form) still lands on `FileView`, which offers a description box, an upload
+  button and a History control that the API refuses. They are refusals, not leaks, but
+  they should not be drawn for somebody who cannot use them.
 - Typing `[[A Title]]` or a `:::infobox` fence *into* the document editor leaves it as
   the text you typed until the page is read again — the extensions read source, and an
   open document is past that. The Insert menu and the node picker create both directly,

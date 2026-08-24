@@ -175,6 +175,33 @@ public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeP
         return resolved;
     }
 
+    /// <summary>How many links one page may ask about at a time.</summary>
+    public const int MaxLinkTargets = 500;
+
+    /// <summary>Which of these ids the caller may actually reach. A page is free to link
+    /// a node its reader is not allowed to open — a public page linking its author's
+    /// private file is the ordinary case, not the exotic one — so a rendered page asks
+    /// this about every node it links and dresses the ones that come back missing as
+    /// locked rather than as links that go nowhere.
+    ///
+    /// <see cref="INodeAuthorizer.CanSee"/>, not <see cref="INodeAuthorizer.VisibleTo"/>:
+    /// a link is the direct-reach question, and an unlisted node is reachable by the link
+    /// that names it. Bounded because the caller may be the internet — a page with more
+    /// links than <see cref="MaxLinkTargets"/> gets the first of them answered, and the
+    /// rest are treated as unreachable, which errs toward the lock.</summary>
+    public async Task<IReadOnlySet<Guid>> ReachableIdsAsync(Guid? userId,
+        IReadOnlyCollection<Guid> ids, CancellationToken ct = default)
+    {
+        var wanted = ids.Distinct().Take(MaxLinkTargets).ToList();
+        if (wanted.Count == 0)
+            return new HashSet<Guid>();
+
+        var candidates = await db.Nodes.Include(n => n.AccessEntries)
+            .Where(n => wanted.Contains(n.Id))
+            .ToListAsync(ct);
+        return candidates.Where(n => authorizer.CanSee(n, userId)).Select(n => n.Id).ToHashSet();
+    }
+
     public Task<List<Node>> GetBacklinksAsync(Guid? userId, Guid nodeId, CancellationToken ct = default) =>
         authorizer.VisibleTo(db.Nodes, userId)
             .Where(n => n.OutboundLinks.Any(l => l.TargetId == nodeId))

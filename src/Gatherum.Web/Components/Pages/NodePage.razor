@@ -42,7 +42,7 @@ else if (node is not null)
             <NodeEditor @rendermode="InteractiveAuto" NodeId="@node.Id" FileName="@fileName"
                         MediaType="@node.MediaType" />
         }
-        else if (editable)
+        else if (readable)
         {
             <NodeReader @rendermode="InteractiveAuto" NodeId="@node.Id" FileName="@fileName"
                         MediaType="@node.MediaType" />
@@ -83,6 +83,7 @@ else if (node is not null)
     private List<CategoryRef> categories = [];
     private List<Node> backlinks = [];
     private string fileName = "";
+    private bool readable;
     private bool editable;
     private bool notFound;
 
@@ -97,11 +98,15 @@ else if (node is not null)
                 .ToList();
             backlinks = await Ops.Nodes(s => s.GetBacklinksAsync(ViewerId, Id));
             fileName = node.File is { Versions.Count: > 0 } file ? file.Current.FileName : "";
-            // Editing is never offered to somebody who is not signed in, whatever the
-            // node says — public is a publishing gesture, not an invitation.
-            editable = SignedIn && fileName.Length > 0
+            // What the document surfaces can open at all — a page, a source file, a docx.
+            // Reading one is what publishing a page means, so this asks nothing about who
+            // is looking; a file with no document form falls through to FileView.
+            readable = fileName.Length > 0
                 && node.File!.Current.SizeBytes <= 4 * 1024 * 1024
                 && (MediaTypes.IsText(node.MediaType, fileName) || node.MediaType == MediaTypes.Docx);
+            // Editing is never offered to somebody who is not signed in, whatever the
+            // node says — public is a publishing gesture, not an invitation.
+            editable = readable && SignedIn;
             notFound = false;
         }
         catch (Gatherum.Core.NotFoundException)

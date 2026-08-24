@@ -62,8 +62,8 @@ auto-login. Migrations: `dotnet ef migrations add <Name> -p src/Gatherum.Infrast
   version panel, file view, and settings keys — plus Gatherum's Markdown dialect, which lives
   here because it is the editor's word: `GatherumMarkdown` (the extension set and the
   only read/write door), `AsideExtension`/`CalloutExtension`/`BlockTags`,
-  `DocumentChrome` (floats and decorations derived from tags), `ChromeInk`, `WikiLinks`
-  and `NodeUrl`. `IAppData` (`AppData.cs`) is their only view of the world —
+  `DocumentChrome` (floats and decorations derived from tags), `ChromeInk`, `WikiLinks`,
+  `NodeLinks` (the padlock a link the reader may not follow wears) and `NodeUrl`. `IAppData` (`AppData.cs`) is their only view of the world —
   implemented by `ServerAppData` over the services on the server circuit and by
   `HttpAppData` over `/api` in WebAssembly.
 - `tests/Gatherum.Tests` — unit tests plus `AppIntegrationTests` booting the real app.
@@ -99,6 +99,14 @@ fresh DI scope via `Services/AppOperations`.
 - Reaching and enumerating are two questions. `INodeAuthorizer.CanSee` answers a direct
   link and needs `NodeReach.WithLink`; `VisibleTo` answers every listing and needs
   `Listed`. Never answer one with the other — unlisted is the case where they differ.
+  A link written into a page is the first question (`NodeService.ReachableIdsAsync`), a
+  `[[wiki link]]`'s title is the second (`ResolveTitlesAsync`): an id is permission, a
+  title is a search.
+- A page says what it says, whoever is reading. A link the reader may not follow is
+  drawn locked (`NodeLinks`), never deleted and never left live — hiding it would
+  misreport the page, and following it would only reach a 404. Locking is the read
+  view's alone: it rewrites runs, and a document that can be saved has to write back the
+  bytes it was read from.
 - Two trees, and only two: nodes have one place in the node tree, and categories nest
   in their own. A category is identified by its path — `CategoryPath` is the only place
   that decides how one is spelled — and nothing else names a subject. No tags.

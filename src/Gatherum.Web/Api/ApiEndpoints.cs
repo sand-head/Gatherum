@@ -208,13 +208,25 @@ public static class ApiEndpoints
                 await categories.GetAsync(http.User.GetUserId(), path, deep ?? false))));
 
         // Titles, not ids: what a [[wiki link]] has to ask before it can go anywhere.
+        // Anonymous, because a public page's wiki links are read by whoever the page was
+        // published for, and the authorizer answers them with what that visitor may see.
         api.MapPost("/nodes/resolve-titles", async (NodeService nodes, HttpContext http,
             ResolveTitlesRequest request) =>
         {
-            var resolved = await nodes.ResolveTitlesAsync(http.User.GetUserId(),
+            var resolved = await nodes.ResolveTitlesAsync(http.User.GetUserIdOrNull(),
                 request.Titles ?? []);
             return Results.Ok(resolved.Select(m => new TitleMatchDto(m.Key, m.Value)));
-        });
+        }).AllowAnonymous().RequireRateLimiting(AnonymousRateLimits.Read);
+
+        // Ids, not titles: which of the nodes a page links its reader may open. What
+        // comes back missing is drawn locked instead of as a link.
+        api.MapPost("/nodes/reachable", async (NodeService nodes, HttpContext http,
+            ReachableRequest request) =>
+        {
+            var reachable = await nodes.ReachableIdsAsync(http.User.GetUserIdOrNull(),
+                request.Ids ?? []);
+            return Results.Ok(reachable);
+        }).AllowAnonymous().RequireRateLimiting(AnonymousRateLimits.Read);
 
         api.MapGet("/nodes/{id:guid}/backlinks", async (NodeService nodes, HttpContext http, Guid id) =>
         {
