@@ -142,6 +142,17 @@ browser sessions — including against the built container).
   thing — because a real model's answers are approximate and an assertion about ranking
   made against one is a coin toss.
 
+- **A manual in the box** — ten pages (`src/Gatherum.Web/Docs`) embedded in the assembly
+  and served at `/docs`: what a node is, the Markdown dialect in full, categories,
+  search, sharing, the REST API, the MCP server, a briefing for agents, and
+  configuration. Also served as their own source — `/docs/<page>.md`, `/docs/all.md`,
+  `/docs/llms.txt` — because the dialect is syntax no model has seen and a link is how
+  you teach it one. Unauthenticated (it describes the software, not the instance) and
+  under the anonymous read budget. Each page's outline goes in the sidebar rail through
+  a layout section, beside the rest of the manual, the way a wiki page's contents do.
+  `DocsTests` checks every internal link lands and that the dialect page still names
+  every callout kind and aside the code implements.
+
 ## Stubbed / not shipped (tracked in PLAN.md)
 
 - Drag-and-drop *reorder/reparent* in the tree (menu move ships).

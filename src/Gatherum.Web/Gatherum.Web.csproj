@@ -5,6 +5,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- The manual travels inside the assembly: a deployment cannot forget to copy a
+         directory it does not have to copy. See Services/DocsLibrary.cs. -->
+    <None Remove="Docs\*.md" />
+    <EmbeddedResource Include="Docs\*.md" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Gatherum.Client\Gatherum.Client.csproj" />
     <ProjectReference Include="..\Gatherum.Core\Gatherum.Core.csproj" />
     <ProjectReference Include="..\Gatherum.Infrastructure\Gatherum.Infrastructure.csproj" />

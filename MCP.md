@@ -71,6 +71,10 @@ is fine, and search still finds it.
 
 ## Markdown conventions
 
+The full reference is served by your own instance at `/docs/markdown` — and at
+`/docs/markdown.md` as its own source, which is the link to hand an agent. What follows
+is the summary.
+
 Pages *are* Markdown files, so bodies round-trip verbatim. The Gatherum-specific forms:
 
 - **Mentions**: `[@Some Node](node://<node-id>)` — renders as an @-mention in the editor
@@ -102,6 +106,8 @@ editor and the API speak the same dialect.
 
 - Private subtrees belonging to other users are invisible to your key — searches,
   `get_node`, and `list_children` behave as if they don't exist.
+- Every copy of Gatherum serves its whole manual at `/docs`, without a key —
+  `/docs/all.md` is all of it in one fetch, `/docs/llms.txt` is the index.
 - The REST API under `/api` accepts the same bearer token and covers the same
   operations plus file upload/download, including
   `POST /api/nodes/resolve-titles` (`{ "titles": ["Homelab"] }`) — which titles
