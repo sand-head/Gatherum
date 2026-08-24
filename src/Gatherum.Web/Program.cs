@@ -31,7 +31,13 @@ builder.Services.AddSingleton<Gatherum.Web.Services.DocsLibrary>();
 builder.Services.AddScoped<Gatherum.Client.IAppData, Gatherum.Web.Services.ServerAppData>();
 builder.Services.AddScoped<Gatherum.Client.TreeState>();
 builder.Services.AddScoped<Gatherum.Client.OutlineState>();
-builder.Services.AddScoped<Gatherum.Client.ThemeState>();
+// Seeded from the request rather than left to guess: a prerender has no JS to ask, and
+// guessing wrong is visible (see BrowserTheme). Once interactive there is no HttpContext
+// and no need for one — the watch answers before anything is painted.
+builder.Services.AddScoped<Gatherum.Client.ThemeState>(services => new Gatherum.Client.ThemeState(
+    services.GetRequiredService<Microsoft.JSInterop.IJSRuntime>(),
+    Gatherum.Web.Services.BrowserTheme.IsDark(
+        services.GetRequiredService<IHttpContextAccessor>().HttpContext) ?? false));
 builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
     options.MultipartBodyLengthLimit = Gatherum.Client.IAppData.MaxUploadBytes);
 builder.Services.AddMcpServer(options => options.ServerInfo = new ModelContextProtocol.Protocol.Implementation
@@ -163,6 +169,24 @@ if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
 }
+// Ask for the reader's OS color preference, so the very first visit — the one with no
+// cookie for gatherum.js to have written yet — still prerenders the article in the mode
+// the browser is about to paint. Critical-CH is what makes the answer arrive on *this*
+// navigation rather than the next one: a browser that has not been asked before retries
+// the request once with the hint attached. Only Chromium answers at all; everywhere else
+// the cookie covers every load after the first. Document responses only — an asset is not
+// prerendered and has nothing to learn.
+app.Use((context, next) =>
+{
+    if (context.Request.Headers.Accept.ToString().Contains("text/html", StringComparison.Ordinal))
+    {
+        context.Response.Headers["Accept-CH"] = Gatherum.Web.Services.BrowserTheme.ClientHint;
+        context.Response.Headers["Critical-CH"] = Gatherum.Web.Services.BrowserTheme.ClientHint;
+        context.Response.Headers.Vary = Gatherum.Web.Services.BrowserTheme.ClientHint;
+    }
+    return next(context);
+});
+
 app.UseWhen(
     context => !context.Request.Path.StartsWithSegments("/api") &&
         !context.Request.Path.StartsWithSegments("/mcp"),
