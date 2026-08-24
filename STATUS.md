@@ -102,9 +102,9 @@ browser sessions — including against the built container).
   A page may link a node its reader may not open — a public page pointing at its
   author's private file is ordinary — so the reader asks which of the ids it links are
   reachable (the direct-link question, so an unlisted node answers yes) and draws the
-  rest locked: greyed, padlocked, and with no target at all, an embedded picture
-  becoming its own caption rather than a broken image. The page still says what it says;
-  the link stops pretending it goes somewhere.
+  rest locked: greyed, padlocked with Lucide's lock, and with no target at all, an
+  embedded picture becoming its own caption rather than a broken image. The page still
+  says what it says; the link stops pretending it goes somewhere.
 - **Auth** — OIDC-only via discovery, defensive `offline_access`, first user becomes
   admin, cookie sessions; API keys hashed at rest, revocable, shown once; dev
   auto-login only when no authority is configured.
@@ -118,13 +118,14 @@ browser sessions — including against the built container).
   exercised against a postgres container, editor verified in-browser against the
   containerized app), compose.yaml, Podman Quadlets, `/healthz`, JSON console logs
   outside Development, migrations on startup with opt-out.
-- **Tests** — 182 passing: the Markdown dialect (infobox/figure/callout round trips,
+- **Tests** — 183 passing: the Markdown dialect (infobox/figure/callout round trips,
   wiki-link spellings, extension composition, derived chrome, red-link inking, in-app
   URL shapes) and the same dialect as read-only HTML (the aside and its card, a
   callout's tint, a wiki link's URL, a mention that keeps its look and loses its
   target), the padlock a link the reader may not follow wears (which links are asked
   about, which are locked, the picture that becomes its caption, re-inking across a mode
-  change, and the emitted HTML carrying a lock and no target),
+  change, the allow-list the read view asks slopedit for, and an emitted anchor for the
+  stylesheet to padlock with no target left in it),
   markdown links, docx extraction/editing/backlinks, tree ops, privacy,
   versions (collapse, restore, re-upload, cross-author), search, title resolution, API
   keys, storage/extraction, the taxonomy (nesting, counts, privacy, rename/move/delete,

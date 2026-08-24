@@ -283,3 +283,7 @@ dotnet test                  # unit + integration tests; Postgres via Testcontai
 See [AGENT.md](AGENT.md) for the repo map and conventions, [PLAN.md](PLAN.md) for the
 build plan, [DECISIONS.md](DECISIONS.md) for recorded trade-offs, and
 [STATUS.md](STATUS.md) for what ships and what's stubbed.
+
+Icons are [Lucide](https://lucide.dev), ISC — mostly inline in the markup, and as files
+under `src/Gatherum.Web/wwwroot/icons/` (with the pack's licence) where a stylesheet has
+to draw one.

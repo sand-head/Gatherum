@@ -164,6 +164,13 @@ file, named for the type. Static pages and layout live under
 `Components/{Layout,Pages}` in Web; interactive components live flat in Client and
 touch the server only through `IAppData`.
 
+Icons are [Lucide](https://lucide.dev) (ISC), inline `<svg>` with
+`stroke="currentColor"` where there is markup to put one in — which is nearly
+everywhere. An icon CSS has to draw instead, because the thing it decorates is text a
+renderer emits, goes in `wwwroot/icons/` as a file from the pack and is masked, not
+`background-image`d, so `currentColor` keeps working; see the README there. Don't add a
+second icon set, and don't hand-draw a path when the pack has one.
+
 **Make a new format editable/previewable**:
 1. Teach `MediaTypes` (`src/Gatherum.Core/Domain/MediaTypes.cs`) the extension.
 2. Editable text just works once `MediaTypes.IsText` says yes; for a richer preview,

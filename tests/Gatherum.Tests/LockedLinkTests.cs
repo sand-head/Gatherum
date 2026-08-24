@@ -20,6 +20,11 @@ public class LockedLinkTests
 
     private static IReadOnlySet<Guid> Reachable(params Guid[] ids) => ids.ToHashSet();
 
+    /// <summary>The HTML the read view asks for, which is the whole point of the
+    /// exercise: the padlock is a stylesheet rule, and a rule needs an element.</summary>
+    private static RichHtmlOptions ReaderOptions() =>
+        new() { AllowedUrlSchemes = NodeLinks.ReaderUrlSchemes };
+
     private static Block Prose(RichDocument document) =>
         document.Blocks.First(b => b.Runs.Any(r => r.Text == "@Diary"));
 
@@ -42,10 +47,14 @@ public class LockedLinkTests
         Assert.True(NodeLinks.Seal(doc, Reachable(Open), Ink));
 
         var runs = Prose(doc).Runs;
-        var at = runs.FindIndex(r => r.Text == "@Diary");
-        Assert.Equal(NodeLinks.LockPrefix, runs[at - 1].Text);
-        Assert.Equal(Ink.LockedLink, runs[at].Style.Color);
-        Assert.False(NodeUrl.TryParse(runs[at].Style.Link, out _));
+        var locked = runs[runs.FindIndex(r => r.Text == "@Diary")];
+        Assert.Equal(Ink.LockedLink, locked.Style.Color);
+        Assert.Equal($"{NodeLinks.LockedScheme}{Shut}", locked.Style.Link);
+        Assert.False(NodeUrl.TryParse(locked.Style.Link, out _));
+
+        // The padlock is a picture the stylesheet hangs on that scheme, not a character
+        // in the page: nothing about the text the author wrote has changed.
+        Assert.Equal("@Diary", locked.Text);
 
         // The one the reader may open is left exactly as the page wrote it.
         var live = runs[runs.FindIndex(r => r.Text == "@Notebook")];
@@ -66,7 +75,8 @@ public class LockedLinkTests
         var picture = Picture(doc, at);
         Assert.NotEqual(BlockKind.Image, picture.Kind);
         Assert.Equal("", picture.ImageUrl);
-        Assert.Equal(NodeLinks.LockPrefix + "The rack", picture.Text);
+        Assert.Equal("The rack", picture.Text);
+        Assert.Equal($"{NodeLinks.LockedScheme}{Shut}", picture.Runs[0].Style.Link);
         Assert.Equal(Ink.LockedLink, picture.Runs[0].Style.Color);
     }
 
@@ -77,7 +87,6 @@ public class LockedLinkTests
 
         Assert.True(NodeLinks.Seal(doc, Reachable(Open), Ink));
         Assert.False(NodeLinks.Seal(doc, Reachable(Open), Ink));
-        Assert.Equal(1, Prose(doc).Runs.Count(r => r.Text == NodeLinks.LockPrefix));
     }
 
     [Fact]
@@ -90,7 +99,7 @@ public class LockedLinkTests
 
         Assert.True(NodeLinks.Seal(doc, Reachable(Open), dark));
 
-        Assert.All(Prose(doc).Runs.Where(r => r.Text == NodeLinks.LockPrefix),
+        Assert.All(Prose(doc).Runs.Where(r => r.Style.Link?.StartsWith(NodeLinks.LockedScheme) == true),
             r => Assert.Equal(dark.LockedLink, r.Style.Color));
         Assert.Equal(dark.LockedLink, Picture(doc, at).Runs[0].Style.Color);
     }
@@ -105,18 +114,28 @@ public class LockedLinkTests
     }
 
     [Fact]
-    public void The_reader_gets_a_padlock_and_no_target_at_all()
+    public void The_read_views_allow_list_adds_ours_to_slopedits_own()
+    {
+        // Read off slopedit rather than restated, so a scheme it starts keeping keeps
+        // working here without anyone noticing this list exists.
+        Assert.Equal([.. new RichHtmlOptions().AllowedUrlSchemes, "locked"],
+            NodeLinks.ReaderUrlSchemes);
+    }
+
+    [Fact]
+    public void The_reader_gets_an_anchor_to_padlock_and_no_target_at_all()
     {
         var doc = Page();
         NodeLinks.Seal(doc, Reachable(Open), Ink);
 
-        var html = RichHtmlWriter.WriteBody(doc, new RichHtmlOptions());
+        var html = RichHtmlWriter.WriteBody(doc, ReaderOptions());
 
-        // locked: is on nobody's allow-list, so the anchor never becomes one — a click
-        // has nothing to follow, and neither does a crawler.
-        Assert.DoesNotContain("locked:", html);
+        // An anchor, because the stylesheet needs something to hang the padlock on — and
+        // one no browser can follow: locked: is nobody's protocol, the reader's click
+        // delegate routes it Nowhere, and the file's own URL is gone from the page.
+        Assert.Contains($"href=\"{NodeLinks.LockedScheme}{Shut}\"", html);
         Assert.DoesNotContain($"/api/files/{Shut}/content", html);
-        Assert.Contains(NodeLinks.LockPrefix, html);
+        Assert.DoesNotContain("\U0001F512", html);
         Assert.Contains("@Notebook", html);
     }
 }

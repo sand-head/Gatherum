@@ -7,28 +7,31 @@ namespace Gatherum.Client;
 /// open — a public page pointing at its author's private file is the ordinary case, not
 /// the exotic one — and the id is written into the page either way, so dropping the link
 /// would misreport what the page says while leaving it live would misreport where it
-/// goes. A link nobody answered for is drawn as what it is: greyed, prefixed with a
-/// padlock, and going nowhere.
+/// goes. A link nobody answered for is drawn as what it is: greyed, padlocked, and going
+/// nowhere.
 ///
 /// Which links those are is a question only the server can answer, and the answer is the
 /// reader's rather than the page's — the same shape as <see cref="WikiLinks"/>, one
 /// question later: a wiki link asks whether a title names anything, a mention already
 /// knows the id and asks whether this particular visitor may follow it.
 ///
-/// Reading only. Sealing rewrites runs and inserts text, and a document that can be
-/// saved has to write back the bytes it was read from.
+/// Reading only. Sealing rewrites runs, and a document that can be saved has to write
+/// back the bytes it was read from.
 /// </summary>
 public static class NodeLinks
 {
-    /// <summary>What a locked link wears. The space is non-breaking so the padlock never
-    /// wraps away from the words it belongs to.</summary>
-    public const string LockPrefix = "\U0001F512\u00A0";
+    /// <summary>What a sealed link points at instead. Deliberately not a scheme any
+    /// browser knows — nothing navigates, and <see cref="LinkRouter"/> routes it Nowhere —
+    /// but a scheme the read view's HTML is told to keep, because an anchor is the only
+    /// thing CSS can hang a padlock on: a document's runs are text, and there is nowhere
+    /// in one to put an icon. <c>NodeReader.razor.css</c> draws it. The id stays legible
+    /// so a theme change can find the run again and re-ink it.</summary>
+    public const string LockedScheme = "locked:";
 
-    /// <summary>A link that has been sealed. Deliberately not a scheme anything knows:
-    /// the HTML emitter's allow-list rejects it so the anchor loses its href,
-    /// <see cref="LinkRouter"/> routes it Nowhere, and the id stays legible so a theme
-    /// change can find the run again and re-ink it.</summary>
-    private const string LockedScheme = "locked:";
+    /// <summary>The URL schemes the read view keeps in its HTML: slopedit's own set, asked
+    /// of slopedit rather than restated here, plus ours.</summary>
+    public static IReadOnlyCollection<string> ReaderUrlSchemes { get; } =
+        [.. new RichHtmlOptions().AllowedUrlSchemes, LockedScheme.TrimEnd(':')];
 
     /// <summary>Every node this document links or embeds, de-duplicated — what the
     /// reader asks the server about before it draws them.</summary>
@@ -64,7 +67,7 @@ public static class NodeLinks
                 continue;
             }
             for (var r = 0; r < block.Runs.Count; r++)
-                changed |= SealRun(block, ref r, reachable, ink);
+                changed |= SealRun(block, r, reachable, ink);
         }
         if (changed)
             document.InvalidateLayout();
@@ -84,17 +87,14 @@ public static class NodeLinks
         block.Kind = BlockKind.Paragraph;
         block.ImageUrl = "";
         block.Runs.Clear();
-        block.Runs.Add(new StyledRun(LockPrefix + label, LockedStyle(picture, ink)));
+        block.Runs.Add(new StyledRun(label, LockedStyle(picture, ink)));
         return true;
     }
 
-    /// <summary>Advances <paramref name="index"/> past the padlock it inserts, so the
-    /// caller's walk does not read the prefix as a run of its own.</summary>
-    private static bool SealRun(Block block, ref int index, IReadOnlySet<Guid> reachable,
-        ChromeInk ink)
+    private static bool SealRun(Block block, int index, IReadOnlySet<Guid> reachable, ChromeInk ink)
     {
         var run = block.Runs[index];
-        if (LockedIdOf(run.Style.Link) is not null)
+        if (IsLocked(run.Style.Link))
         {
             if (run.Style.Color == ink.LockedLink)
                 return false;
@@ -108,25 +108,12 @@ public static class NodeLinks
         {
             Style = run.Style with { Link = LockedScheme + target, Color = ink.LockedLink },
         };
-        if (WearsPadlock(block, index - 1, target))
-            return true;
-        block.Runs.Insert(index, new StyledRun(LockPrefix, LockedStyle(target, ink)));
-        index++;
         return true;
     }
-
-    /// <summary>Whether the run before a locked one is already its padlock — which is how
-    /// a link split across several runs (a bold word inside it, say) gets one.</summary>
-    private static bool WearsPadlock(Block block, int index, Guid target) =>
-        index >= 0 && block.Runs[index].Text == LockPrefix
-        && LockedIdOf(block.Runs[index].Style.Link) == target;
 
     private static InlineStyle LockedStyle(Guid nodeId, ChromeInk ink) =>
         InlineStyle.Plain with { Link = LockedScheme + nodeId, Color = ink.LockedLink };
 
-    private static Guid? LockedIdOf(string? link) =>
-        link is not null && link.StartsWith(LockedScheme, StringComparison.Ordinal)
-        && Guid.TryParse(link[LockedScheme.Length..], out var id)
-            ? id
-            : null;
+    private static bool IsLocked(string? link) =>
+        link is not null && link.StartsWith(LockedScheme, StringComparison.Ordinal);
 }
