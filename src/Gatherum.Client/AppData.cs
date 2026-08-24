@@ -20,12 +20,24 @@ public interface IAppData
     Task<int> SaveBytesAsync(Guid nodeId, byte[] content);
     Task<PresenceInfo> HeartbeatAsync(Guid nodeId);
     Task LeaveAsync(Guid nodeId);
+
+    /// <summary>A body as a reader needs it, without the heartbeat a load carries:
+    /// opening a page to read it is not editing it, and a visitor with no session has no
+    /// presence to announce and no version to race.</summary>
+    Task<string> ReadTextAsync(Guid nodeId);
+    Task<byte[]> ReadBytesAsync(Guid nodeId);
+
     Task<IReadOnlyList<SearchHit>> SearchAsync(string query, int limit);
 
     /// <summary>Which of these titles name a node the user can see. A [[wiki link]]
     /// addresses a page by name, so this is what it has to ask before it can go
     /// anywhere — and what tells the editor which links are still red.</summary>
     Task<IReadOnlyDictionary<string, Guid>> ResolveTitlesAsync(IReadOnlyList<string> titles);
+
+    /// <summary>Which of these nodes the reader may open. The ids are already in the
+    /// page — a mention or an embedded file names one outright — so the answer decides
+    /// how the link is drawn, not what the page is allowed to say.</summary>
+    Task<IReadOnlySet<Guid>> ReachableNodesAsync(IReadOnlyList<Guid> nodeIds);
 
     /// <summary>Bytes for an image a document embeds. Only in-app content URLs
     /// (/api/files/…/content) resolve; anything else stays a placeholder.</summary>
@@ -143,6 +155,12 @@ public sealed class HttpAppData(HttpClient http) : IAppData
     public Task LeaveAsync(Guid nodeId) =>
         http.PostAsync($"/api/nodes/{nodeId}/presence/leave", null);
 
+    public Task<string> ReadTextAsync(Guid nodeId) =>
+        http.GetStringAsync($"/api/files/{nodeId}/content");
+
+    public Task<byte[]> ReadBytesAsync(Guid nodeId) =>
+        http.GetByteArrayAsync($"/api/files/{nodeId}/content");
+
     public async Task<IReadOnlyList<SearchHit>> SearchAsync(string query, int limit) =>
         await http.GetFromJsonAsync<List<SearchHit>>(
             $"/api/search?query={Uri.EscapeDataString(query)}&limit={limit}") ?? [];
@@ -156,6 +174,15 @@ public sealed class HttpAppData(HttpClient http) : IAppData
         response.EnsureSuccessStatusCode();
         var matches = await response.Content.ReadFromJsonAsync<List<TitleMatch>>() ?? [];
         return matches.ToDictionary(m => m.Title, m => m.Id, StringComparer.OrdinalIgnoreCase);
+    }
+
+    public async Task<IReadOnlySet<Guid>> ReachableNodesAsync(IReadOnlyList<Guid> nodeIds)
+    {
+        if (nodeIds.Count == 0)
+            return new HashSet<Guid>();
+        var response = await http.PostAsJsonAsync("/api/nodes/reachable", new { ids = nodeIds });
+        response.EnsureSuccessStatusCode();
+        return (await response.Content.ReadFromJsonAsync<List<Guid>>() ?? []).ToHashSet();
     }
 
     public async Task<byte[]?> GetImageAsync(string url)

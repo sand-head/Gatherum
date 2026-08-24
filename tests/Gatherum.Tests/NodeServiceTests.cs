@@ -367,6 +367,32 @@ public class NodeServiceTests(PostgresFixture postgres) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_page_asks_which_of_the_nodes_it_links_the_reader_may_open()
+    {
+        var published = await NewPageAsync(jess, null, "Published");
+        var unlisted = await NewPageAsync(jess, null, "Unlisted");
+        var shared = await NewPageAsync(jess, null, "Shared");
+        var mine = await NewPageAsync(jess, null, "Mine alone");
+        await harness.Access.SetAccessAsync(jess, published.Id, AccessMode.Public);
+        await harness.Access.SetAccessAsync(jess, unlisted.Id, AccessMode.Unlisted);
+        await harness.Access.GrantAsync(jess, shared.Id, sam, AccessRole.Reader);
+        var nothing = Guid.NewGuid();
+
+        var links = new List<Guid> { published.Id, unlisted.Id, shared.Id, mine.Id, nothing };
+
+        async Task<List<Guid>> Reachable(Guid? viewer) =>
+            [.. (await nodes.ReachableIdsAsync(viewer, links)).OrderBy(links.IndexOf)];
+
+        // A link is the direct-reach question, so unlisted answers it — the id in the
+        // page is what stands in for permission. Private to its author stays private,
+        // and an id naming nothing is unreachable rather than an error.
+        Assert.Equal([published.Id, unlisted.Id], await Reachable(null));
+        Assert.Equal([published.Id, unlisted.Id, shared.Id], await Reachable(sam));
+        Assert.Equal([published.Id, unlisted.Id, shared.Id, mine.Id], await Reachable(jess));
+        Assert.Empty(await nodes.ReachableIdsAsync(jess, []));
+    }
+
+    [Fact]
     public async Task Titles_resolve_by_name_ignoring_case_and_hiding_the_private()
     {
         var homelab = await NewPageAsync(jess, null, "Homelab");

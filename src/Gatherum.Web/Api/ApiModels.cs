@@ -137,6 +137,7 @@ public record SearchResultDto(Guid Id, string Kind, string Title, string Snippet
 public record TitleMatchDto(string Title, Guid Id);
 
 public record ResolveTitlesRequest(IReadOnlyList<string>? Titles);
+public record ReachableRequest(IReadOnlyList<Guid>? Ids);
 public record CreatePageRequest(Guid? ParentId, string Title, string? Markdown);
 public record UpdatePageRequest(string Markdown, string? Title);
 public record SaveTextRequest(string Text);

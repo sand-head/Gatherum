@@ -219,6 +219,42 @@ public class AppIntegrationTests(PostgresFixture postgres) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_published_page_tells_a_stranger_which_of_its_links_they_may_follow()
+    {
+        var secret = (await (await client.PostAsJsonAsync("/api/pages",
+            new { title = "Rack inventory", markdown = "serials and passwords" }))
+            .Content.ReadFromJsonAsync<NodeDto>())!;
+        var published = (await (await client.PostAsJsonAsync("/api/pages",
+            new
+            {
+                title = "The homelab",
+                markdown = $"What is in it: [@Rack inventory](node://{secret.Id}).",
+            })).Content.ReadFromJsonAsync<NodeDto>())!;
+        await client.PostAsJsonAsync($"/api/nodes/{published.Id}/access", new { access = "Public" });
+
+        using var anonymous = factory.CreateClient();
+
+        // The page is theirs to read, mention and all — publishing a page publishes what
+        // it says, not what it points at.
+        var page = await anonymous.GetStringAsync($"/api/files/{published.Id}/content");
+        Assert.Contains($"node://{secret.Id}", page);
+
+        // And this is what the reader dresses that mention with: the link's own node,
+        // unanswered for.
+        var reachable = await anonymous.PostAsJsonAsync("/api/nodes/reachable",
+            new { ids = new[] { secret.Id, published.Id } });
+        Assert.Equal([published.Id],
+            await reachable.Content.ReadFromJsonAsync<List<Guid>>());
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await anonymous.GetAsync($"/api/nodes/{secret.Id}")).StatusCode);
+
+        // Its author is told the truth for their own session: both.
+        var mine = await client.PostAsJsonAsync("/api/nodes/reachable",
+            new { ids = new[] { secret.Id, published.Id } });
+        Assert.Equal(2, (await mine.Content.ReadFromJsonAsync<List<Guid>>())!.Count);
+    }
+
+    [Fact]
     public async Task The_internet_gets_a_budget_and_a_signed_in_user_does_not()
     {
         using var metered = CreateFactory(

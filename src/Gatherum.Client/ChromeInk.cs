@@ -12,14 +12,18 @@ namespace Gatherum.Client;
 /// <param name="CardBorder">Its outline — <c>--outline</c>.</param>
 /// <param name="Band">The tint behind an infobox's headings — <c>--chip-bg</c>.</param>
 /// <param name="DeadLink">A <c>[[wiki link]]</c> whose title names nothing — <c>--danger</c>.</param>
+/// <param name="LockedLink">A link to a node this reader may not open — <c>--on-surface-dim</c>.
+/// Grey rather than red, because nothing is wrong with it: the page is simply not
+/// addressed to you.</param>
 public sealed record ChromeInk(CellColor CardFill, CellColor CardBorder, CellColor Band,
-    CellColor DeadLink, CellColor Surface, bool IsDark)
+    CellColor DeadLink, CellColor LockedLink, CellColor Surface, bool IsDark)
 {
     private static readonly ChromeInk LightInk = new(
         CardFill: CellColor.Rgb(0xf8, 0xf9, 0xfa),
         CardBorder: CellColor.Rgb(0xda, 0xdc, 0xe0),
         Band: CellColor.Rgb(0xe8, 0xf0, 0xfe),
         DeadLink: CellColor.Rgb(0xd9, 0x30, 0x25),
+        LockedLink: CellColor.Rgb(0x5f, 0x63, 0x68),
         Surface: CellColor.Rgb(0xff, 0xff, 0xff),
         IsDark: false);
 
@@ -28,6 +32,7 @@ public sealed record ChromeInk(CellColor CardFill, CellColor CardBorder, CellCol
         CardBorder: CellColor.Rgb(0x44, 0x47, 0x46),
         Band: CellColor.Rgb(0x1f, 0x37, 0x60),
         DeadLink: CellColor.Rgb(0xf2, 0x8b, 0x82),
+        LockedLink: CellColor.Rgb(0x9a, 0xa0, 0xa6),
         Surface: CellColor.Rgb(0x1e, 0x1f, 0x20),
         IsDark: true);
 

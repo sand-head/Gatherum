@@ -17,9 +17,43 @@
 
    So this is a box for the view to sit in and nothing more. If the document
    needs to lay out differently on a narrow screen, that belongs to slopedit,
-   where both renderers get the answer. */
+   where both renderers get the answer.
+
+   The padlock below is the one exception, and it is one because it says nothing
+   about the document. It is what the *reader* may open — chrome about access,
+   which the canvas has no business drawing, because the canvas is the editor and
+   only reading locks anything. The divergence is already there before CSS
+   arrives: NodeLinks rewrites those runs for the read view alone. All this adds
+   is the picture, on an anchor slopedit was asked to emit through
+   AllowedUrlSchemes — the same extension point wikilink: uses — and keyed on a
+   scheme the host invented. Nothing of slopedit's own vocabulary is touched. */
 .reader-doc {
     min-width: 0;
+}
+
+/* Lucide's lock, masked rather than drawn: an SVG fetched as an image cannot see
+   currentColor, but its alpha makes a fine stencil, and the fill under it is the
+   link's own ink — so the padlock greys, darkens and lightens with the text it
+   belongs to, in both modes, for free. */
+.reader-doc ::deep a[href^="locked:"] {
+    cursor: default;
+    text-decoration: none;
+}
+
+.reader-doc ::deep a[href^="locked:"]::before {
+    content: "";
+    /* Told to a screen reader, which cannot see a background. Second declaration
+       because a browser without the alt-text syntax must drop this one and keep
+       the icon, not the other way round. */
+    content: "" / "Locked: ";
+    display: inline-block;
+    width: 1em;
+    height: 1em;
+    margin-right: 0.15em;
+    vertical-align: -0.15em;
+    background-color: currentColor;
+    -webkit-mask: url("/icons/lock.svg") no-repeat center / contain;
+    mask: url("/icons/lock.svg") no-repeat center / contain;
 }
 
 /* Same as .reader-doc: a box for the view, nothing about what it renders. The

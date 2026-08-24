@@ -111,4 +111,6 @@ editor and the API speak the same dialect.
 - The REST API under `/api` accepts the same bearer token and covers the same
   operations plus file upload/download, including
   `POST /api/nodes/resolve-titles` (`{ "titles": ["Homelab"] }`) — which titles
-  currently name a node, the question a `[[wiki link]]` asks.
+  currently name a node, the question a `[[wiki link]]` asks — and
+  `POST /api/nodes/reachable` (`{ "ids": ["…"] }`) — which of the nodes a page links
+  you may open, the question a rendered page asks before it draws them.

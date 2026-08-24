@@ -61,6 +61,24 @@ public sealed class ServerAppData(
     public async Task LeaveAsync(Guid nodeId) =>
         presence.Leave(nodeId, await UserIdAsync());
 
+    public async Task<string> ReadTextAsync(Guid nodeId)
+    {
+        var userId = await ViewerIdAsync();
+        return await ops.Files(s => s.GetTextAsync(userId, nodeId));
+    }
+
+    public async Task<byte[]> ReadBytesAsync(Guid nodeId)
+    {
+        var userId = await ViewerIdAsync();
+        var content = await ops.Files(s => s.OpenContentAsync(userId, nodeId));
+        await using (content.Stream)
+        {
+            using var buffer = new MemoryStream();
+            await content.Stream.CopyToAsync(buffer);
+            return buffer.ToArray();
+        }
+    }
+
     public async Task<IReadOnlyList<SearchHit>> SearchAsync(string query, int limit)
     {
         var userId = await ViewerIdAsync();
@@ -75,6 +93,12 @@ public sealed class ServerAppData(
     {
         var userId = await ViewerIdAsync();
         return await ops.Nodes(s => s.ResolveTitlesAsync(userId, titles));
+    }
+
+    public async Task<IReadOnlySet<Guid>> ReachableNodesAsync(IReadOnlyList<Guid> nodeIds)
+    {
+        var userId = await ViewerIdAsync();
+        return await ops.Nodes(s => s.ReachableIdsAsync(userId, nodeIds));
     }
 
     public async Task<byte[]?> GetImageAsync(string url)

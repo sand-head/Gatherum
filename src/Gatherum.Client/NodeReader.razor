@@ -30,8 +30,12 @@
                measures, so it has to be the same number the editor passes or the two
                wrap in different places. The article's breathing room is .content's
                padding; the document does not need its own. *@
+            @* The allow-list carries locked: through to the HTML so a link the reader
+               may not follow arrives as an anchor CSS can hang a padlock on. Nothing
+               navigates: no browser knows the scheme, and LinkRouter routes it Nowhere. *@
             <DocumentHtmlView Grid="doc" Theme="EditorThemes.For(AppTheme.IsDark)"
                               ContentPadding="0" TopPadding="0"
+                              AllowedUrlSchemes="NodeLinks.ReaderUrlSchemes"
                               OnLinkActivated="FollowAsync" AriaLabel="Article" />
         </div>
     }
@@ -73,6 +77,11 @@
     /// re-ink the red ones without asking the server again.</summary>
     private IReadOnlySet<string> liveTitles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Nodes this page links that the reader may actually open, once the server
+    /// has said — kept so a theme change can re-ink the locked ones without asking again.
+    /// Null until it answers, which is not the same as "none of them".</summary>
+    private IReadOnlySet<Guid>? reachable;
+
     /// <summary>Block index of each heading the outline published, in the order they
     /// appear — which is also their order among the emitted h1-h6, and so the index a
     /// jump needs. The block index alone cannot find a heading in the HTML.</summary>
@@ -91,18 +100,17 @@
         }
         if (IsDocx)
         {
-            var payload = await Data.LoadBytesAsync(NodeId);
-            using var docx = new MemoryStream(payload.Content);
+            using var docx = new MemoryStream(await Data.ReadBytesAsync(NodeId));
             doc = DocxConverter.ToRichDocument(docx);
             GatherumMarkdown.Dress(doc, AppTheme.IsDark);
         }
         else
         {
-            var payload = await Data.LoadAsync(NodeId);
+            var text = await Data.ReadTextAsync(NodeId);
             if (IsMarkdown)
-                doc = GatherumMarkdown.Parse(payload.Text, AppTheme.IsDark);
+                doc = GatherumMarkdown.Parse(text, AppTheme.IsDark);
             else
-                sourceDoc = new EditorDocument(payload.Text)
+                sourceDoc = new EditorDocument(text)
                 {
                     Lexer = LexerRegistry.ForPath(FileName),
                     SyntaxTheme = EditorThemes.Syntax(AppTheme.IsDark),
@@ -111,6 +119,7 @@
         Outline.JumpRequested += OnJumpRequestedAsync;
         PublishOutline();
         await ResolveWikiLinksAsync();
+        await SealUnreachableLinksAsync();
     }
 
     private void OnAppThemeChanged() => _ = InvokeAsync(() =>
@@ -119,6 +128,8 @@
         {
             GatherumMarkdown.Dress(doc, AppTheme.IsDark);
             InkWikiLinks();
+            if (reachable is not null)
+                NodeLinks.Seal(doc, reachable, ChromeInk.For(AppTheme.IsDark));
         }
         if (sourceDoc is not null)
             sourceDoc.SyntaxTheme = EditorThemes.Syntax(AppTheme.IsDark);
@@ -151,6 +162,33 @@
     {
         if (doc is not null)
             WikiLinks.Mark(doc, liveTitles, ChromeInk.For(AppTheme.IsDark));
+    }
+
+    /// <summary>Which of the nodes this page links the reader may open. A public page
+    /// can name a file that is private to whoever wrote it, and the id is in the page
+    /// either way — so the ones that come back unreachable are drawn locked rather than
+    /// offered as links into a 404.</summary>
+    private async Task SealUnreachableLinksAsync()
+    {
+        if (doc is null)
+            return;
+        var targets = NodeLinks.TargetsIn(doc);
+        if (targets.Count == 0)
+            return;
+        IReadOnlySet<Guid> answer;
+        try
+        {
+            answer = await Data.ReachableNodesAsync(targets);
+        }
+        catch (Exception)
+        {
+            // Unanswered is not the same as forbidden: leave the links as the page wrote
+            // them rather than padlocking a page over a hiccup.
+            return;
+        }
+        reachable = answer;
+        if (NodeLinks.Seal(doc, answer, ChromeInk.For(AppTheme.IsDark)))
+            StateHasChanged();
     }
 
     private void PublishOutline()
