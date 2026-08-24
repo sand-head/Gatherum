@@ -779,6 +779,43 @@ Gatherum's history is still a toggle at the foot of the page. Moving it up would
 `VersionPanel` giving up its own open/closed state to the header, which is a bigger
 change than this one and not obviously right.
 
+## Categories moved to the foot of the page
+The chips sat in `NodeHeader`, between the title and the first line of the article. No
+wiki puts them there, and the reason is not habit: a category is a way *out* of a page,
+and a row of exits above the prose is an invitation to leave before reading. Wikipedia's
+catlinks bar has always been the last thing on an article, under the references and the
+navboxes; Gatherum's is now the last thing under the history and "Referenced by", in a
+box with a border on all four sides — the other foot sections open with a rule because
+something follows them, and nothing follows this one.
+
+The move made the component the header's, and it should not have been. `CategoryEditor`
+is `NodeCategories` now: it renders the whole bar, label included, and owns the list it
+shows. Filing a category was the only thing on the page that changed when you filed one,
+and the header was re-reading the node on the article's behalf to keep a row of chips it
+did not need. The page hands it what the prerender already knew, so the bar arrives with
+the article rather than a beat after it, and every change after that is the bar's own.
+
+Two things fell out of moving it that were wrong where it stood:
+
+- **A reader is no longer offered the editor.** The old bar showed an anonymous visitor
+  to a public page a × on every chip and a "+ category" field, both of which the API
+  would refuse. The taxonomy still has no owner — any signed-in user files any node they
+  can see — so `CanFile` is only ever "is there somebody there", which is the page's
+  answer and not the bar's. With nothing to file and nothing filed, the bar renders
+  nothing at all.
+- **The header's metadata band can now be empty**, because categories were the one thing
+  in it that everybody had. An unlisted page seen by the person holding the link has no
+  share control and no badge, so the band is not rendered rather than rendered hollow.
+
+What did not change is the direction: a page still says what it is about, and a category
+still comes into existence by being used. That is Wikipedia's model too — `[[Category:X]]`
+is written on the member, and the category page may not exist yet. What Wikipedia has
+that this does not is the category *as a page*: a body to describe the subject in, and
+its own membership in a parent category, which is how the hierarchy there is made. Here
+the hierarchy is the path, and a category has nothing to say for itself. That is a
+deliberate cost of `CategoryPath` — the prefix match is worth it — but it is the real
+gap, and it is not a UI one.
+
 ## The checks only ever saw half the app
 Blazor Auto renders on the server circuit while the WebAssembly payload downloads, and
 locally on every visit after. Those are different runtimes running different code, and

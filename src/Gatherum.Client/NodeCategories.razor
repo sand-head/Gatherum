@@ -1,0 +1,104 @@
+@inject IAppData Data
+
+@* Where a wiki keeps what a page is about: at the foot of the article, after the
+   prose and after what links here, in a box that closes the page. Between the
+   title and the first line is where the *page* says what it is — the title does
+   that — and a row of subject chips there is a row of exits placed before anyone
+   has read a word. Wikipedia's catlinks bar has always been last, and so is this. *@
+@if (categories.Count > 0 || CanFile)
+{
+    <footer class="node-categories">
+        <span class="label">Categories</span>
+        <div class="chips">
+            @foreach (var category in categories)
+            {
+                <span class="category" title="@category.Path">
+                    <a href="@CategoryUrl.Page(category.Path)">@category.Name</a>
+                    @* Filing is a signed-in gesture, so a reader who could not
+                       unfile a page is not shown the button that says they could. *@
+                    @if (CanFile)
+                    {
+                        <button title="Remove from this category"
+                                @onclick="() => RemoveAsync(category.Path)">×</button>
+                    }
+                </span>
+            }
+            @if (CanFile)
+            {
+                <input class="category-input" placeholder="+ category" list="category-suggestions-@NodeId"
+                       value="@draft" enterkeyhint="done" @oninput="OnInput"
+                       @onkeydown="OnKeyDown" @onblur="AddDraftAsync" />
+                @* Enter and blur both commit, but neither is visible, and a soft keyboard
+                   makes guessing expensive. Preventing mousedown's default keeps focus in
+                   the field, so the blur never fires and the caret is ready for the next
+                   category rather than gone. *@
+                @if (draft.Trim().Length > 0)
+                {
+                    <button class="category-add" title="Add category"
+                            @onmousedown:preventDefault @onclick="AddDraftAsync">Add</button>
+                }
+                @* A path is typed, not picked: the datalist offers whole paths so nesting an
+                   existing category under another is a matter of completing it. *@
+                <datalist id="category-suggestions-@NodeId">
+                    @foreach (var suggestion in suggestions)
+                    {
+                        <option value="@suggestion.Path" />
+                    }
+                </datalist>
+            }
+        </div>
+    </footer>
+}
+
+@code {
+    [Parameter, EditorRequired] public Guid NodeId { get; set; }
+
+    /// <summary>What the page already knows, so the prerender carries the chips instead
+    /// of the bar appearing a beat after the article. An array because this crosses an
+    /// island boundary and gets serialized to reach the interactive copy.</summary>
+    [Parameter] public CategoryRef[] Categories { get; set; } = [];
+
+    /// <summary>Whether the viewer may file and unfile. The taxonomy has no owner — any
+    /// signed-in user can file any node they can see — so this is only ever "is there
+    /// somebody there", which is the page's answer rather than this component's.</summary>
+    [Parameter] public bool CanFile { get; set; }
+
+    private string draft = "";
+    private IReadOnlyList<CategoryInfo> suggestions = [];
+    private IReadOnlyList<CategoryRef> categories = [];
+
+    protected override void OnParametersSet() => categories = Categories;
+
+    private async Task OnInput(ChangeEventArgs e)
+    {
+        draft = e.Value?.ToString() ?? "";
+        suggestions = draft.Length > 0 ? await Data.ListCategoriesAsync(draft) : [];
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await AddDraftAsync();
+    }
+
+    private async Task AddDraftAsync()
+    {
+        if (draft.Trim().Length == 0)
+            return;
+        await Data.AddCategoryAsync(NodeId, draft);
+        draft = "";
+        suggestions = [];
+        await ReloadAsync();
+    }
+
+    private async Task RemoveAsync(string path)
+    {
+        await Data.RemoveCategoryAsync(NodeId, path);
+        await ReloadAsync();
+    }
+
+    /// <summary>The bar owns its own list once it is live: it is the only thing on the
+    /// page that changes when a category is filed, and re-reading the node here saves
+    /// the whole article a round trip.</summary>
+    private async Task ReloadAsync() => categories = (await Data.GetNodeAsync(NodeId)).Categories;
+}

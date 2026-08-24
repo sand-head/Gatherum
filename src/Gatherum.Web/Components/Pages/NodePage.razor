@@ -28,7 +28,7 @@ else if (node is not null)
     <article class="node">
         <NodeHeader @rendermode="InteractiveAuto" NodeId="@node.Id" Title="@node.Title"
                     Access="@node.Access.ToString()" Owned="@(node.OwnerId == ViewerId)"
-                    OnAccessChanged="OnParametersSetAsync" Categories="@categories.ToArray()"
+                    OnAccessChanged="OnParametersSetAsync"
                     EditHref="@(editable && !Editing ? $"/nodes/{node.Id}?edit" : null)" />
 
         @* Which surface a page opens in is a product decision, and this is it: a page
@@ -66,6 +66,12 @@ else if (node is not null)
                 </ul>
             </section>
         }
+
+        @* Last on the page, under the history and under what links here — the foot of
+           a wiki article is where its subjects belong, and they are the reader's way
+           onward once the prose is done rather than a detour before it starts. *@
+        <NodeCategories @rendermode="InteractiveAuto" NodeId="@node.Id"
+                        Categories="@categories.ToArray()" CanFile="@SignedIn" />
     </article>
 }
 

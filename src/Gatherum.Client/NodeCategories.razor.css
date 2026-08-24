@@ -1,0 +1,69 @@
+/* The catlinks bar: a boxed band under everything else, which is what gives an
+   article a floor. The other foot sections (history, "Referenced by") open with
+   a rule because something follows them; nothing follows this. */
+.node-categories {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    margin-top: 28px;
+    padding: 10px 12px;
+    border: 1px solid var(--outline-dim);
+    border-radius: var(--radius-s);
+}
+
+/* "Categories" reads as a label, not a heading: the same small caps the foot of
+   the page already speaks in, on the chips' line rather than above them. */
+.label {
+    font: 500 12px/1.6 var(--font-ui);
+    color: var(--on-surface-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.chips {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-width: 0;
+}
+
+/* The "add category" affordance is a ghost chip that becomes real on entry. */
+.category-input {
+    width: 110px;
+    max-width: 100%;
+    font: 500 13px/1.5 var(--font-ui);
+    color: var(--on-surface-dim);
+    background: none;
+    border: 1px dashed var(--outline);
+    border-radius: var(--radius-full);
+    padding: 2px 10px;
+
+    &:focus-visible {
+        outline: none;
+        border: 1px solid var(--primary);
+        box-shadow: none;
+        color: var(--on-surface);
+    }
+}
+
+/* Appears only once there is something to add, so the row stays a row of chips
+   until it is doing work. */
+.category-add {
+    font: 500 13px/1.5 var(--font-ui);
+    padding: 2px 12px;
+}
+
+/* The chip's own font shorthand out-specifies app.css's coarse-pointer rule — a
+   scoped `.category-input[b-x]` beats a bare `input` — so the 16px iOS needs has
+   to be said again here, where it can win. */
+@media (pointer: coarse) {
+    .category-input { font-size: 16px; }
+}
+
+/* On a phone the label takes its own line: a bar that wraps "Categories" onto
+   the chips' second row reads as a chip that lost its box. */
+@media (max-width: 700px) {
+    .node-categories { flex-direction: column; align-items: stretch; }
+}

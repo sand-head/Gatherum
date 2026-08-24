@@ -27,11 +27,11 @@ browser sessions — including against the built container).
   runs, version history with restore (an old Markdown version previews through
   `DocumentHtmlView` — the same document as HTML rather than as a canvas, so it is
   findable with Ctrl+F, selectable, printable, and its pictures are the browser's).
-  Every interactive component — editor, tree, search box, node
-  header, categories, versions, file view, settings keys — is an Interactive Auto island in
-  `Gatherum.Client` over one `IAppData` seam (services on the server circuit, HTTP
-  under WebAssembly): the first visit renders on the server while the runtime
-  downloads, and every visit after runs fully in WebAssembly with zero websockets
+  Every interactive component — editor, tree, search box, node header, the category
+  bar at the foot of a page, versions, file view, settings keys — is an Interactive
+  Auto island in `Gatherum.Client` over one `IAppData` seam (services on the server
+  circuit, HTTP under WebAssembly): the first visit renders on the server while the
+  runtime downloads, and every visit after runs fully in WebAssembly with zero websockets
   (verified in-browser: editing, autosave, rename, categories, history, restore, search,
   keys, stale-version warning all exercised in the WASM home). The only JavaScript in
   the app is a ~30-line interop file.

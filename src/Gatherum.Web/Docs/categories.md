@@ -30,7 +30,8 @@ adding `Homelab/Podman` to a node creates `Homelab` if nothing had needed it yet
 A node can be in any number of categories, or none. Nothing is filed automatically, and
 an uncategorized node is not a problem: search still finds it, the tree still holds it.
 
-- In the UI: the category chips under a node's title, on the node page.
+- In the UI: the category bar at the foot of the node page, under the article and
+  under what links here — chips to follow, and a field to file one more.
 - Over REST: `POST /api/nodes/{id}/categories` with `{ "path": "Homelab/Podman" }`, and
   `DELETE /api/nodes/{id}/categories/{path}`.
 - Over MCP: `add_category` and `remove_category`.
