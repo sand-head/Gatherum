@@ -1087,3 +1087,48 @@ same reason — a document that can be saved has to write back the bytes it was 
 
 A test existed that nearly caught this and didn't: it asserted the reader's HTML contained
 the text `@Notebook`, which a span satisfies. The replacement asserts the anchor.
+
+## The category bar reads as a sentence, not a toolbar
+The bar at the foot of a page was a row of chips — filled pills, each with its own ×, in
+the same shape the app uses for a control you press. That is the wrong shape. These are
+the names of subjects; the row is the end of a sentence about what the page is about, and
+a chip apiece turns it into a toolbar you are meant to operate. Wikipedia's catlinks bar
+has always been plain links with a rule between them, and the reason is not restraint —
+it is that a list of names is a list of names.
+
+So: a `<ul>` of links, a hairline rule between them, "Categories:" inline at the head of
+the line. Three details are worth writing down because each of them was a wrong first
+attempt:
+
+- **The rule goes on the right of each name, not the left.** With a left rule, a line that
+  wraps starts with a stray divider hanging in front of its first name. With a right rule,
+  a wrapped line starts clean and the line above ends with a rule, which reads as
+  "continues".
+- **The list is `flex: 1 1 0`, not `auto`.** At `auto` it asks for the width its contents
+  want, cannot have it, and wraps itself onto the line below the label — so "Categories:"
+  ends up a heading over a list instead of the first two words of the sentence.
+- **Every name carries its own left padding and the list is pulled back by exactly that
+  much.** Without the negative margin the first name sits indented from the label;
+  without the padding the first name of a *wrapped* line sits flush left, out of line with
+  every other name. Both, and every line agrees.
+
+Filing is the one thing Wikipedia's bar does not have to do — its categories are edited in
+the wikitext — so the × and the plus are ours, and they are the parts that have to stay
+quiet. The × is 40% opacity until it is hovered or focused. The plus is a single glyph at
+the row's own font size doing the whole gesture: shut, it opens the field; open with
+something typed, it commits; open with nothing typed, it shuts again. It replaced a dashed
+ghost pill reading "+ category" and a separate "Add" button that appeared beside it — two
+controls and a placeholder for one act.
+
+Enter and blur still commit, and Escape cancels. The Add button existed because neither is
+visible and a soft keyboard makes guessing expensive; the plus inherits that job rather
+than dropping it, which is why it stays put while the field is open instead of being
+replaced by something else.
+
+**Touch is a different shape, and the padlock rule proves it.** A 14px × is not something a
+finger can hit, and `app.css` used to carry an exception — `.category button { min-height:
+0 }` — so the chip's × could stay small inside a pill that was big enough. There is no pill
+now, so the exception went, and with it the mobile check's matching `!el.closest(".category")`
+escape. Under a coarse pointer the line of names becomes a list of rows, each at least
+`--tap` tall, with the × at the right where a list keeps its actions. That is what the
+check was there to insist on, and it now insists on it without an exemption.

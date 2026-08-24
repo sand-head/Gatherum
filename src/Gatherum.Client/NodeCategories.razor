@@ -4,55 +4,64 @@
    prose and after what links here, in a box that closes the page. Between the
    title and the first line is where the *page* says what it is — the title does
    that — and a row of subject chips there is a row of exits placed before anyone
-   has read a word. Wikipedia's catlinks bar has always been last, and so is this. *@
+   has read a word. Wikipedia's catlinks bar has always been last, and so is this.
+
+   It reads as a sentence rather than a row of chips, for the same reason: these are
+   the names of subjects, and a chip apiece makes a toolbar out of a list. A rule
+   between them is enough. *@
 @if (categories.Count > 0 || CanFile)
 {
     <footer class="node-categories">
-        <span class="label">Categories</span>
-        <div class="chips">
+        <span class="label">Categories:</span>
+        <ul class="names">
             @foreach (var category in categories)
             {
-                <span class="category">
+                <li>
                     <a href="@CategoryUrl.Page(category.Name)">@category.Name</a>
-                    @* Filing is a signed-in gesture, so a reader who could not
-                       unfile a page is not shown the button that says they could. *@
+                    @* Filing is a signed-in gesture, so a reader who could not unfile a
+                       page is not shown the button that says they could. *@
                     @if (CanFile)
                     {
-                        <button title="Remove from this category"
+                        <button class="unfile" title="@($"Unfile from {category.Name}")"
+                                aria-label="@($"Unfile from {category.Name}")"
                                 @onclick="() => RemoveAsync(category.Name)">×</button>
                     }
-                </span>
+                </li>
             }
             @if (CanFile)
             {
-                <input class="category-input" placeholder="+ category" list="category-suggestions-@NodeId"
-                       value="@draft" enterkeyhint="done" @oninput="OnInput"
-                       @onkeydown="OnKeyDown" @onblur="AddDraftAsync" />
-                @* Enter and blur both commit, but neither is visible, and a soft keyboard
-                   makes guessing expensive. Preventing mousedown's default keeps focus in
-                   the field, so the blur never fires and the caret is ready for the next
-                   category rather than gone. *@
-                @if (draft.Trim().Length > 0)
-                {
-                    <button class="category-add" title="Add category"
-                            @onmousedown:preventDefault @onclick="AddDraftAsync">Add</button>
-                }
-                @* Names, not paths: nesting is filing a category page under another, and
-                   it happens on that page's own bar rather than here. The datalist is
-                   what keeps two spellings of one subject from becoming two subjects. *@
-                <datalist id="category-suggestions-@NodeId">
-                    @foreach (var suggestion in suggestions)
+                <li class="filing">
+                    @if (filing)
                     {
-                        <option value="@suggestion.Name" />
+                        <input class="draft" @ref="field" placeholder="category"
+                               list="category-suggestions-@NodeId" value="@draft"
+                               enterkeyhint="done" @oninput="OnInput" @onkeydown="OnKeyDown"
+                               @onblur="CommitAsync" />
                     }
-                </datalist>
+                    @* One button, one glyph, in one place: it opens the field, and then it
+                       is the visible way to commit — Enter and blur both do it too, but
+                       neither is visible, and a soft keyboard makes guessing expensive.
+                       Preventing mousedown's default keeps focus in the field, so the blur
+                       never fires and the caret is ready for the next name. *@
+                    <button class="file" title="@(filing ? "Add" : "File under a category")"
+                            aria-label="@(filing ? "Add" : "File under a category")"
+                            @onmousedown:preventDefault @onclick="PlusAsync">+</button>
+                    @* A name is typed, not picked, so the datalist is only there to stop
+                       two spellings of one subject becoming two subjects. *@
+                    <datalist id="category-suggestions-@NodeId">
+                        @foreach (var suggestion in suggestions)
+                        {
+                            <option value="@suggestion.Name" />
+                        }
+                    </datalist>
+                </li>
             }
-        </div>
+        </ul>
         @* Filing can be refused for a reason worth reading — a name too long, a category
            nested inside itself — and this is the only place that reason can be said. *@
         @if (error is { Length: > 0 })
         {
-            <p class="category-error" role="alert">@error</p>
+            <p class="error" role="alert">@error</p>
         }
     </footer>
 }
@@ -60,7 +69,7 @@
 @code {
     [Parameter, EditorRequired] public Guid NodeId { get; set; }
 
-    /// <summary>What the page already knows, so the prerender carries the chips instead
+    /// <summary>What the page already knows, so the prerender carries the names instead
     /// of the bar appearing a beat after the article. An array because this crosses an
     /// island boundary and gets serialized to reach the interactive copy.</summary>
     [Parameter] public CategoryRef[] Categories { get; set; } = [];
@@ -72,10 +81,41 @@
 
     private string draft = "";
     private string? error;
+    private bool filing;
+    private bool focusWanted;
+    private ElementReference field;
     private IReadOnlyList<CategoryInfo> suggestions = [];
     private IReadOnlyList<CategoryRef> categories = [];
 
     protected override void OnParametersSet() => categories = Categories;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!focusWanted)
+            return;
+        focusWanted = false;
+        await field.FocusAsync();
+    }
+
+    /// <summary>The plus opens the field when it is shut, and commits when there is
+    /// something to commit. Pressed on an empty field it shuts it again, so the same
+    /// glyph in the same place is the whole of the gesture.</summary>
+    private async Task PlusAsync()
+    {
+        if (!filing)
+        {
+            filing = true;
+            focusWanted = true;
+            return;
+        }
+        if (draft.Trim().Length == 0)
+        {
+            filing = false;
+            error = null;
+            return;
+        }
+        await CommitAsync();
+    }
 
     private async Task OnInput(ChangeEventArgs e)
     {
@@ -86,37 +126,53 @@
     private async Task OnKeyDown(KeyboardEventArgs e)
     {
         if (e.Key == "Enter")
-            await AddDraftAsync();
+            await CommitAsync();
+        else if (e.Key == "Escape")
+            Close();
     }
 
-    private async Task AddDraftAsync()
+    private async Task CommitAsync()
     {
         if (draft.Trim().Length == 0)
+        {
+            Close();
             return;
+        }
         var wanted = draft;
-        if (!await TryAsync(() => Data.AddCategoryAsync(NodeId, wanted)))
-            return;
-        draft = "";
-        suggestions = [];
-    }
-
-    private Task RemoveAsync(string name) =>
-        TryAsync(() => Data.RemoveCategoryAsync(NodeId, name));
-
-    private async Task<bool> TryAsync(Func<Task> change)
-    {
         error = null;
         try
         {
-            await change();
+            await Data.AddCategoryAsync(NodeId, wanted);
         }
         catch (Exception ex)
         {
             error = ex.Message;
-            return false;
+            return;
+        }
+        Close();
+        await ReloadAsync();
+    }
+
+    private async Task RemoveAsync(string name)
+    {
+        error = null;
+        try
+        {
+            await Data.RemoveCategoryAsync(NodeId, name);
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return;
         }
         await ReloadAsync();
-        return true;
+    }
+
+    private void Close()
+    {
+        draft = "";
+        suggestions = [];
+        filing = false;
     }
 
     /// <summary>The bar owns its own list once it is live: it is the only thing on the

@@ -46,8 +46,8 @@ A node can be in any number of categories, or none. Nothing is filed automatical
 uncategorized node is not a problem: search still finds it, the tree still holds it.
 
 - In the UI: the category bar at the foot of the node page, under the article and under
-  what links here — chips to follow, and a field to file one more. A category's own bar is
-  where it is nested under another.
+  what links here — the names to follow, an × to unfile, and a **+** that opens a field for
+  one more. A category's own bar is where it is nested under another.
 - Over REST: `POST /api/nodes/{id}/categories` with `{ "name": "Podman" }`, and
   `DELETE /api/nodes/{id}/categories/{name}`.
 - Over MCP: `add_category` and `remove_category`.
