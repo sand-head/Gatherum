@@ -25,9 +25,13 @@
 
 .topbar-search { width: 100%; }
 
+/* The same serif as the home page wordmark and the article titles — the
+   header is the wordmark in miniature, and setting it in the UI sans made it
+   read as a label instead. Two points larger than the sans it replaced,
+   because a serif at a shared size looks a size smaller. */
 .brand {
-    font-size: 20px;
-    letter-spacing: 0.1px;
+    font: 400 22px/1.2 var(--font-serif);
+    letter-spacing: 0.3px;
     color: var(--on-surface);
 
     &:hover { text-decoration: none; }
@@ -246,7 +250,7 @@
     .brand {
         flex: 1 1 auto;
         min-width: 0;
-        font-size: 17px;
+        font-size: 19px;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
