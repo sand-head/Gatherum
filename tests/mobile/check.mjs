@@ -41,7 +41,7 @@ async function routes(page) {
     ["home", "/"],
     ["pages", "/pages"],
     ["categories", "/categories"],
-    ["category-deep", "/categories/Homelab/Networking/VLANs"],
+    ["category-deep", "/categories/Deeper%20still"],
     ["settings", "/settings"],
     ["not-found", "/not-found"],
     ...(page1 ? [["node-read", `/nodes/${page1}`], ["node-edit", `/nodes/${page1}?edit`]] : []),

@@ -160,14 +160,14 @@ public static class ApiEndpoints
         api.MapPost("/nodes/{id:guid}/categories", async (CategoryService categories,
             HttpContext http, Guid id, CategoryRequest request) =>
         {
-            var path = await categories.AddAsync(http.User.GetUserId(), id, request.Path);
-            return Results.Ok(new { path });
+            var name = await categories.AddAsync(http.User.GetUserId(), id, request.Name);
+            return Results.Ok(new { name });
         });
 
-        api.MapDelete("/nodes/{id:guid}/categories/{**path}", async (CategoryService categories,
-            HttpContext http, Guid id, string path) =>
+        api.MapDelete("/nodes/{id:guid}/categories/{name}", async (CategoryService categories,
+            HttpContext http, Guid id, string name) =>
         {
-            await categories.RemoveAsync(http.User.GetUserId(), id, path);
+            await categories.RemoveAsync(http.User.GetUserId(), id, name);
             return Results.NoContent();
         });
 
@@ -178,34 +178,17 @@ public static class ApiEndpoints
             return Results.Ok(all.Select(CategoryDto.From));
         });
 
-        // Rename and move carry the path in the body: it is the thing being changed,
-        // and a route would have to spell it twice.
-        api.MapPost("/categories/rename", async (CategoryService categories,
-            RenameCategoryRequest request) =>
-        {
-            await categories.RenameAsync(request.Path, request.Name);
-            return Results.NoContent();
-        });
-
-        api.MapPost("/categories/move", async (CategoryService categories,
-            MoveCategoryRequest request) =>
-        {
-            await categories.MoveAsync(request.Path, request.NewParentPath);
-            return Results.NoContent();
-        });
-
-        api.MapDelete("/categories/{**path}", async (CategoryService categories, string path) =>
-        {
-            await categories.DeleteAsync(path);
-            return Results.NoContent();
-        });
-
-        // A category is a page: itself, its ancestry, its subcategories and its members
-        // — the subcategories' members too when deep asks.
-        api.MapGet("/categories/{**path}", async (CategoryService categories, HttpContext http,
-            string path, bool? deep) =>
+        // There is no rename, move or delete here any more, and that is the change rather
+        // than an omission: a category is a page, so it is renamed by PATCHing its node,
+        // re-nested by filing that node under another category, and deleted by deleting
+        // it. Three endpoints became none.
+        //
+        // A category is a page: its own body, the categories it is nested under, what is
+        // nested under it, and its members — the subcategories' members too when deep asks.
+        api.MapGet("/categories/{name}", async (CategoryService categories, HttpContext http,
+            string name, bool? deep) =>
             Results.Ok(CategoryViewDto.From(
-                await categories.GetAsync(http.User.GetUserId(), path, deep ?? false))));
+                await categories.GetAsync(http.User.GetUserId(), name, deep ?? false))));
 
         // Titles, not ids: what a [[wiki link]] has to ask before it can go anywhere.
         // Anonymous, because a public page's wiki links are read by whoever the page was

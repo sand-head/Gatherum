@@ -5,28 +5,49 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Gatherum.Core.Services;
 
-/// <summary>The taxonomy: a tree of categories laid over the tree of nodes. A node has
-/// exactly one place in the node tree but belongs to as many categories as its subject
-/// demands, and a category holds everything in the categories nested under it. They are
-/// addressed by path ("homelab/podman"), created by being used, and maintained —
-/// renamed, moved, deleted — like the rest of the wiki. The taxonomy belongs to both
-/// users: anyone who can see a node can file it, and there is no owner to ask.</summary>
-public class CategoryService(GatherumDbContext db, NodeService nodes, INodeAuthorizer authorizer,
-    NodeMetadataWriter sidecar)
+/// <summary>The taxonomy: what the wiki is about, arranged. A category is a page —
+/// an ordinary Markdown node with <see cref="Node.IsCategory"/> set — so it has a body
+/// saying what belongs in it, a version history, backlinks, and a <c>[[Homelab]]</c> that
+/// resolves to it. Filing a page under a category is an edge; filing a <em>category</em>
+/// under a category is the same edge, and that is what a subcategory is.
+///
+/// Nothing here renames, re-nests or deletes a category, because there is nothing left for
+/// it to do: a category is renamed by renaming its page, re-nested by filing it somewhere
+/// else, and deleted by deleting it. That collapse is the point of the whole design — the
+/// old model had a parallel set of verbs because a category was a path, and a path is a
+/// thing only its own service can maintain.
+///
+/// The taxonomy still belongs to both users in the sense that mattered: anyone who can
+/// edit a node can file it under anything. What is new is that a category page is a page,
+/// so who may read its lede and who may edit it are that page's own business.</summary>
+public class CategoryService(GatherumDbContext db, NodeService nodes, FileService files,
+    INodeAuthorizer authorizer, NodeMetadataWriter sidecar, TimeProvider clock)
 {
-    /// <summary>Files a node under a category, creating the category and everything it
-    /// is nested under if they are new; returns the path it landed on. The written path
-    /// decides the capitalization of the names it creates and nothing else: a category
-    /// that already exists keeps its own.</summary>
-    public async Task<string> AddAsync(Guid userId, Guid nodeId, string path,
+    /// <summary>Where a category page is created when nobody has written one yet. A
+    /// directory rather than the root of the tree, because a wiki accumulates far more
+    /// subjects than top-level pages, and because somebody reading these directories with
+    /// no Gatherum running should be able to see what the taxonomy is at a glance.</summary>
+    public const string Folder = "Categories";
+
+    /// <summary>Files a node under a category, writing the category's page if this is the
+    /// first anyone has mentioned it; returns the name it landed on. The written name
+    /// decides the capitalization only when it creates the category — one that already
+    /// exists keeps its own, because its page is called that.</summary>
+    public async Task<string> AddAsync(Guid userId, Guid nodeId, string? name,
         CancellationToken ct = default)
     {
-        var segments = ValidSegments(path);
+        var wanted = ValidName(name);
         var node = await nodes.GetWithBodyAsync(userId, nodeId, ct);
         // Filing somebody's node under a subject changes what their node says it is
         // about, and it is written to their sidecar. That is a content change.
         nodes.EnsureEditable(node, userId);
-        var category = await EnsureAsync(segments, ct);
+        var category = await EnsureAsync(userId, wanted, ct);
+
+        var taxonomy = await CategoryIndex.LoadAsync(db, ct);
+        if (category.Id == node.Id || (node.IsCategory && taxonomy.AncestorsOf(category.Id)
+            .Contains(node.Id)))
+            throw new ForbiddenException("A category cannot be nested inside itself.");
+
         if (node.Categories.All(c => c.CategoryId != category.Id))
         {
             node.Categories.Add(new NodeCategory
@@ -35,251 +56,182 @@ public class CategoryService(GatherumDbContext db, NodeService nodes, INodeAutho
                 CategoryId = category.Id,
                 Category = category,
             });
-            nodes.RefreshSearchText(node);
+            await db.SaveChangesAsync(ct);
+            await nodes.RefreshCategoryReachAsync(node, ct);
         }
-        await db.SaveChangesAsync(ct);
         await sidecar.WriteAsync(nodeId, ct);
-        return category.Path;
+        return category.Title;
     }
 
-    /// <summary>Takes a node out of one category. Nesting is untouched: a node in
-    /// "homelab/podman" was never directly in "homelab", so removing it from there
-    /// removes nothing.</summary>
-    public async Task RemoveAsync(Guid userId, Guid nodeId, string path,
+    /// <summary>Takes a node out of one category. Nesting is untouched: a node in "Podman"
+    /// was never directly in "Homelab", so removing it from there removes nothing.</summary>
+    public async Task RemoveAsync(Guid userId, Guid nodeId, string name,
         CancellationToken ct = default)
     {
-        var normalized = CategoryPath.Normalize(path);
+        var key = CategoryName.Key(name);
         var node = await nodes.GetWithBodyAsync(userId, nodeId, ct);
         nodes.EnsureEditable(node, userId);
-        var membership = node.Categories.FirstOrDefault(c => c.Category!.Path == normalized);
+        var membership = node.Categories
+            .FirstOrDefault(c => CategoryName.Key(c.Category!.Title) == key);
         if (membership is null)
             return;
         node.Categories.Remove(membership);
         db.NodeCategories.Remove(membership);
-        nodes.RefreshSearchText(node);
         await db.SaveChangesAsync(ct);
+        await nodes.RefreshCategoryReachAsync(node, ct);
         await sidecar.WriteAsync(nodeId, ct);
     }
 
-    /// <summary>The whole taxonomy as a flat, path-ordered list; callers nest it. Counts
-    /// are of what this user can see, and a category whose every member is private to
-    /// the other user is left out entirely — a category name is a description of its
-    /// members, so listing it would describe pages they can't see. An empty category is
-    /// nobody's secret and stays. <paramref name="matching"/> filters the list after the
-    /// counting, so a filtered row still knows its real size.</summary>
+    /// <summary>The category a name refers to, or null. Names are unique among categories
+    /// and spelled forgivingly, which is what lets a sidecar on disk say "Podman" and mean
+    /// something without a database to look the id up in.</summary>
+    public Task<Node?> ResolveAsync(string name, CancellationToken ct = default)
+    {
+        var key = CategoryName.Key(name);
+        return db.Nodes.FirstOrDefaultAsync(n => n.IsCategory && n.Title.ToLower() == key, ct);
+    }
+
+    /// <summary>The whole taxonomy, by name; callers nest it through
+    /// <see cref="CategorySummary.ParentIds"/>. Counts are of what this user can see, and a
+    /// category whose every member is private to somebody else is left out entirely — the
+    /// name of a category describes the pages in it, so listing it would describe pages
+    /// they can't see. An empty category is nobody's secret and stays.
+    /// <paramref name="matching"/> filters after the counting, so a filtered row still
+    /// knows its real size.</summary>
     public async Task<List<CategorySummary>> ListAsync(Guid? userId, string? matching = null,
         CancellationToken ct = default)
     {
-        var categories = await db.Categories
-            .OrderBy(c => c.Path)
-            .Select(c => new { c.Id, c.Name, c.Path })
-            .ToListAsync(ct);
+        var taxonomy = await CategoryIndex.LoadAsync(db, ct);
         var visible = (await authorizer.VisibleTo(db.Nodes, userId).Select(n => n.Id)
             .ToListAsync(ct)).ToHashSet();
+        // Subcategories are listed as subcategories, never counted as members: a category
+        // page is a node, and without this every parent would report its children twice.
         var memberships = await db.NodeCategories
-            .Select(m => new { m.NodeId, m.Category!.Path })
+            .Where(m => !m.Node!.IsCategory)
+            .Select(m => new { m.NodeId, m.CategoryId })
             .ToListAsync(ct);
+        var byCategory = memberships.ToLookup(m => m.CategoryId, m => m.NodeId);
 
         // A node can sit in a category and in one of its subcategories at once, so a
         // subtree's count is over distinct nodes, not a sum of its branches.
-        HashSet<Guid> Subtree(string path, bool visibleOnly) => memberships
-            .Where(m => m.Path == path || CategoryPath.IsDescendantOf(m.Path, path))
-            .Where(m => !visibleOnly || visible.Contains(m.NodeId))
-            .Select(m => m.NodeId)
+        HashSet<Guid> Subtree(Guid id, bool visibleOnly) => taxonomy.SubtreeOf(id)
+            .SelectMany(c => byCategory[c])
+            .Where(nodeId => !visibleOnly || visible.Contains(nodeId))
             .ToHashSet();
 
-        var filter = matching is { Length: > 0 } ? CategoryPath.Normalize(matching) : null;
-        return categories
-            .Select(c => new
+        var filter = matching is { Length: > 0 } ? CategoryName.Key(matching) : null;
+        return taxonomy.Ids
+            .Select(id => new
             {
-                c.Id, c.Name, c.Path,
-                Members = memberships
-                    .Where(m => m.Path == c.Path && visible.Contains(m.NodeId))
-                    .Select(m => m.NodeId).Distinct().Count(),
-                Visible = Subtree(c.Path, visibleOnly: true).Count,
-                Total = Subtree(c.Path, visibleOnly: false).Count,
+                Id = id,
+                Name = taxonomy.NameOf(id),
+                Members = byCategory[id].Where(visible.Contains).Distinct().Count(),
+                Visible = Subtree(id, visibleOnly: true).Count,
+                Total = Subtree(id, visibleOnly: false).Count,
             })
             .Where(c => c.Visible > 0 || c.Total == 0)
-            .Where(c => filter is null || c.Path.Contains(filter, StringComparison.Ordinal))
-            .Select(c => new CategorySummary(c.Id, c.Name, c.Path, CategoryPath.Parent(c.Path),
+            .Where(c => filter is null
+                || CategoryName.Key(c.Name).Contains(filter, StringComparison.Ordinal))
+            .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(c => new CategorySummary(c.Id, c.Name, taxonomy.ParentsOf(c.Id).ToList(),
                 c.Members, c.Visible))
             .ToList();
     }
 
-    /// <summary>One category as a page of the wiki: where it sits, what is nested under
-    /// it, and what it holds — its own members, or the whole subtree's when
-    /// <paramref name="deep"/> asks.</summary>
-    public async Task<CategoryView> GetAsync(Guid? userId, string path, bool deep = false,
+    /// <summary>One category: the categories it is nested under, what is nested under it,
+    /// and what it holds — its own members, or the whole subtree's when
+    /// <paramref name="deep"/> asks. A category can sit under more than one parent, so
+    /// this reports parents rather than a single chain up to a root; there isn't one.</summary>
+    public async Task<CategoryView> GetAsync(Guid? userId, string name, bool deep = false,
         CancellationToken ct = default)
     {
-        var normalized = CategoryPath.Normalize(path);
-        var all = (await ListAsync(userId, null, ct)).ToDictionary(c => c.Path);
-        if (!all.TryGetValue(normalized, out var category))
-            throw new NotFoundException($"Category '{normalized}' not found.");
-        var ancestors = CategoryPath.Ancestry(normalized)
-            .Where(p => p != normalized && all.ContainsKey(p))
-            .Select(p => all[p])
-            .ToList();
-        var subcategories = all.Values.Where(c => c.ParentPath == normalized).ToList();
-        return new CategoryView(category, ancestors, subcategories,
-            await GetNodesAsync(userId, normalized, deep, ct));
+        var all = (await ListAsync(userId, null, ct)).ToDictionary(c => c.Id);
+        var key = CategoryName.Key(name);
+        var category = all.Values.FirstOrDefault(c => CategoryName.Key(c.Name) == key)
+            ?? throw new NotFoundException($"Category '{name}' not found.");
+        var parents = category.ParentIds.Where(all.ContainsKey).Select(id => all[id]).ToList();
+        var subcategories = all.Values.Where(c => c.ParentIds.Contains(category.Id)).ToList();
+        return new CategoryView(category, parents, subcategories,
+            await GetNodesAsync(userId, category.Id, deep, ct));
     }
 
     /// <summary>The nodes in a category — its own members, plus its subcategories' when
     /// <paramref name="deep"/> asks, since a page about Podman is a page about the
-    /// homelab.</summary>
-    public Task<List<Node>> GetNodesAsync(Guid? userId, string path, bool deep = false,
+    /// homelab. Subcategories themselves are not members and are never in this list.</summary>
+    public async Task<List<Node>> GetNodesAsync(Guid? userId, Guid categoryId, bool deep = false,
         CancellationToken ct = default)
     {
-        var normalized = CategoryPath.Normalize(path);
-        var prefix = $"{normalized}{CategoryPath.Separator}";
-        var visible = authorizer.VisibleTo(db.Nodes, userId);
-        var members = deep
-            ? visible.Where(n => n.Categories.Any(c =>
-                c.Category!.Path == normalized || c.Category.Path.StartsWith(prefix)))
-            : visible.Where(n => n.Categories.Any(c => c.Category!.Path == normalized));
-        return members.OrderBy(n => n.Title).ToListAsync(ct);
+        var taxonomy = await CategoryIndex.LoadAsync(db, ct);
+        var wanted = (deep ? taxonomy.SubtreeOf(categoryId) : [categoryId]).ToList();
+        return await authorizer.VisibleTo(db.Nodes, userId)
+            .Where(n => !n.IsCategory && n.Categories.Any(c => wanted.Contains(c.CategoryId)))
+            .OrderBy(n => n.Title)
+            .ToListAsync(ct);
     }
 
-    /// <summary>Renames a category in place. Everything nested under it follows, because
-    /// a subcategory's path is its parent's plus its own name.</summary>
-    public async Task RenameAsync(string path, string name, CancellationToken ct = default)
+    /// <summary>The category page for a name, written if nobody has written one. Creating
+    /// it is an ordinary page creation — that is the whole claim of this design — so it
+    /// lands in the creator's own root, private until they say otherwise, with an empty
+    /// body waiting for somebody to say what belongs in it.</summary>
+    private async Task<Node> EnsureAsync(Guid userId, string name, CancellationToken ct)
     {
-        var category = await RequireAsync(path, ct);
-        if (ValidSegments(name) is not [var segment])
-            throw new ValidationException("A category is renamed to one name, not a path.");
-        category.Name = segment;
-        await RepathAsync(category, CategoryPath.Parent(category.Path), ct);
-    }
-
-    /// <summary>Moves a category — and everything under it — beneath another one, or to
-    /// the root when no new parent is named.</summary>
-    public async Task MoveAsync(string path, string? newParentPath, CancellationToken ct = default)
-    {
-        var category = await RequireAsync(path, ct);
-        var parent = newParentPath is { Length: > 0 } ? await RequireAsync(newParentPath, ct) : null;
-        if (parent is not null &&
-            (parent.Id == category.Id || CategoryPath.IsDescendantOf(parent.Path, category.Path)))
-            throw new ForbiddenException("Cannot move a category into its own subtree.");
-        category.ParentId = parent?.Id;
-        await RepathAsync(category, parent?.Path, ct);
-    }
-
-    /// <summary>Deletes a category and everything nested under it. The nodes stay — they
-    /// simply stop being about that subject.</summary>
-    public async Task DeleteAsync(string path, CancellationToken ct = default)
-    {
-        var category = await RequireAsync(path, ct);
-        var doomed = await SubtreeAsync(category, ct);
-        var members = await MembersOfAsync(doomed, ct);
-        db.Categories.RemoveRange(doomed);
+        if (await ResolveAsync(name, ct) is { } existing)
+            return existing;
+        // Only a category answers to a category name: an ordinary page called "Podman"
+        // is not quietly promoted into a subject because somebody filed something under
+        // that word. Two nodes end up sharing a title, which they always could.
+        var folder = await FolderAsync(userId, ct);
+        var page = await files.CreateTextNodeAsync(userId, folder.Id, name, "",
+            MediaTypes.Markdown, ct);
+        page.IsCategory = true;
         await db.SaveChangesAsync(ct);
-        await RefreshSearchTextAsync(members, ct);
+        await sidecar.WriteAsync(page.Id, ct);
+        return page;
     }
 
-    /// <summary>Walks the written path from the root, creating what isn't there yet.</summary>
-    private async Task<Category> EnsureAsync(IReadOnlyList<string> segments, CancellationToken ct)
+    /// <summary>The <c>Categories/</c> directory in a user's root, made on first use. The
+    /// reindex finds it again by its path like any other directory node.</summary>
+    private async Task<Node> FolderAsync(Guid userId, CancellationToken ct)
     {
-        Category? category = null;
-        var path = "";
-        foreach (var segment in segments)
+        var existing = await db.Nodes
+            .FirstOrDefaultAsync(n => n.OwnerId == userId && n.RelativePath == Folder, ct);
+        if (existing is not null)
+            return existing;
+        var now = clock.GetUtcNow();
+        var folder = new Node
         {
-            var parentId = category?.Id;
-            path = path.Length == 0
-                ? segment.ToLowerInvariant()
-                : $"{path}{CategoryPath.Separator}{segment.ToLowerInvariant()}";
-            category = await db.Categories.FirstOrDefaultAsync(c => c.Path == path, ct)
-                ?? db.Categories.Add(new Category
-                {
-                    Id = Guid.NewGuid(),
-                    Name = segment,
-                    Path = path,
-                    ParentId = parentId,
-                }).Entity;
-        }
-        return category!;
-    }
-
-    private async Task<Category> RequireAsync(string path, CancellationToken ct)
-    {
-        var normalized = CategoryPath.Normalize(path);
-        return await db.Categories.FirstOrDefaultAsync(c => c.Path == normalized, ct)
-            ?? throw new NotFoundException($"Category '{normalized}' not found.");
-    }
-
-    /// <summary>Rewrites a category's path and its descendants' after a rename or a move,
-    /// then refreshes the search text of every node underneath: a category contributes
-    /// its whole ancestry to the text its members are found by.</summary>
-    private async Task RepathAsync(Category category, string? parentPath, CancellationToken ct)
-    {
-        var subtree = await SubtreeAsync(category, ct);
-        var members = await MembersOfAsync(subtree, ct);
-        var oldPath = category.Path;
-        var newPath = parentPath is { Length: > 0 }
-            ? $"{parentPath}{CategoryPath.Separator}{category.Name.ToLowerInvariant()}"
-            : category.Name.ToLowerInvariant();
-        if (newPath != oldPath && await db.Categories.AnyAsync(c => c.Path == newPath, ct))
-            throw new ValidationException($"A category '{newPath}' already exists.");
-
-        category.Path = newPath;
-        foreach (var descendant in subtree.Where(c => c.Id != category.Id))
-            descendant.Path = newPath + descendant.Path[oldPath.Length..];
+            Id = Guid.NewGuid(),
+            Title = Folder,
+            MediaType = MediaTypes.Directory,
+            OwnerId = userId,
+            RelativePath = Folder,
+            Position = await db.Nodes.CountAsync(n => n.OwnerId == userId && n.ParentId == null, ct),
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        db.Nodes.Add(folder);
         await db.SaveChangesAsync(ct);
-        await RefreshSearchTextAsync(members, ct);
+        return folder;
     }
 
-    private async Task<List<Category>> SubtreeAsync(Category category, CancellationToken ct)
+    private static string ValidName(string? name)
     {
-        var prefix = $"{category.Path}{CategoryPath.Separator}";
-        var descendants = await db.Categories.Where(c => c.Path.StartsWith(prefix)).ToListAsync(ct);
-        return [category, .. descendants];
-    }
-
-    private Task<List<Guid>> MembersOfAsync(IReadOnlyCollection<Category> categories,
-        CancellationToken ct)
-    {
-        var ids = categories.Select(c => c.Id).ToList();
-        return db.NodeCategories
-            .Where(m => ids.Contains(m.CategoryId))
-            .Select(m => m.NodeId)
-            .Distinct()
-            .ToListAsync(ct);
-    }
-
-    private async Task RefreshSearchTextAsync(IReadOnlyCollection<Guid> nodeIds,
-        CancellationToken ct)
-    {
-        if (nodeIds.Count == 0)
-            return;
-        var affected = await db.Nodes
-            .Where(n => nodeIds.Contains(n.Id))
-            .Include(n => n.File!).ThenInclude(f => f.Versions)
-            .Include(n => n.Categories).ThenInclude(c => c.Category)
-            .ToListAsync(ct);
-        foreach (var node in affected)
-            nodes.RefreshSearchText(node);
-        await db.SaveChangesAsync(ct);
-    }
-
-    private static List<string> ValidSegments(string path)
-    {
-        var segments = CategoryPath.Segments(path);
-        if (segments.Count == 0)
+        var collapsed = CategoryName.Collapse(name ?? "");
+        if (collapsed.Length == 0)
             throw new ValidationException("A category needs a name.");
-        if (segments.Count > CategoryPath.MaxDepth)
-            throw new ValidationException($"Categories nest at most {CategoryPath.MaxDepth} deep.");
-        if (segments.Any(segment => segment.Length > CategoryPath.MaxSegmentLength))
+        if (collapsed.Length > CategoryName.MaxLength)
             throw new ValidationException(
-                $"A category name is at most {CategoryPath.MaxSegmentLength} characters.");
-        return segments;
+                $"A category name is at most {CategoryName.MaxLength} characters.");
+        return collapsed;
     }
 }
 
-/// <summary>A category and how much it holds: <c>Members</c> is what sits in it
-/// directly, <c>SubtreeMembers</c> counts the subcategories' too — both of them only
-/// what the asking user is allowed to see.</summary>
-public record CategorySummary(Guid Id, string Name, string Path, string? ParentPath,
+/// <summary>A category and how much it holds: <c>Members</c> is what sits in it directly,
+/// <c>SubtreeMembers</c> counts the subcategories' too — both of them only what the asking
+/// user is allowed to see, and neither of them counting the subcategories themselves.
+/// <c>ParentIds</c> is a list because a subject can belong under more than one.</summary>
+public record CategorySummary(Guid Id, string Name, IReadOnlyList<Guid> ParentIds,
     int Members, int SubtreeMembers);
 
-public record CategoryView(CategorySummary Category, IReadOnlyList<CategorySummary> Ancestors,
+public record CategoryView(CategorySummary Category, IReadOnlyList<CategorySummary> Parents,
     IReadOnlyList<CategorySummary> Subcategories, IReadOnlyList<Node> Nodes);

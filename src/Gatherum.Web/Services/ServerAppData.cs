@@ -215,8 +215,8 @@ public sealed class ServerAppData(
             : null;
         return new NodeInfo(node.Id, node.Title, node.Access.ToString(),
             node.Categories
-                .Select(c => new CategoryRef(c.Category!.Path, c.Category.Name))
-                .OrderBy(c => c.Path)
+                .Select(c => new CategoryRef(c.CategoryId, c.Category!.Title))
+                .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
                 .ToList(),
             file);
     }
@@ -233,31 +233,22 @@ public sealed class ServerAppData(
         var userId = await ViewerIdAsync();
         var categories = await ops.Categories(s => s.ListAsync(userId, matching));
         return categories
-            .Select(c => new CategoryInfo(c.Path, c.Name, c.ParentPath, c.Members,
+            .Select(c => new CategoryInfo(c.Id, c.Name, c.ParentIds, c.Members,
                 c.SubtreeMembers))
             .ToList();
     }
 
-    public async Task<string> AddCategoryAsync(Guid nodeId, string path)
+    public async Task<string> AddCategoryAsync(Guid nodeId, string name)
     {
         var userId = await UserIdAsync();
-        return await ops.Categories(s => s.AddAsync(userId, nodeId, path));
+        return await ops.Categories(s => s.AddAsync(userId, nodeId, name));
     }
 
-    public async Task RemoveCategoryAsync(Guid nodeId, string path)
+    public async Task RemoveCategoryAsync(Guid nodeId, string name)
     {
         var userId = await UserIdAsync();
-        await ops.Categories(s => s.RemoveAsync(userId, nodeId, path));
+        await ops.Categories(s => s.RemoveAsync(userId, nodeId, name));
     }
-
-    public Task RenameCategoryAsync(string path, string name) =>
-        ops.Categories(s => s.RenameAsync(path, name));
-
-    public Task MoveCategoryAsync(string path, string? newParentPath) =>
-        ops.Categories(s => s.MoveAsync(path, newParentPath));
-
-    public Task DeleteCategoryAsync(string path) =>
-        ops.Categories(s => s.DeleteAsync(path));
 
     public async Task<IReadOnlyList<VersionInfo>> GetVersionsAsync(Guid nodeId)
     {

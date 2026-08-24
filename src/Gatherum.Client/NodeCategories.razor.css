@@ -67,3 +67,10 @@
 @media (max-width: 700px) {
     .node-categories { flex-direction: column; align-items: stretch; }
 }
+
+.category-error {
+    flex-basis: 100%;
+    margin: 0;
+    font: 400 13px/1.5 var(--font-ui);
+    color: var(--danger);
+}

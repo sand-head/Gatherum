@@ -10,7 +10,6 @@ public class GatherumDbContext(DbContextOptions<GatherumDbContext> options)
     public DbSet<Node> Nodes => Set<Node>();
     public DbSet<FileBody> FileBodies => Set<FileBody>();
     public DbSet<FileVersion> FileVersions => Set<FileVersion>();
-    public DbSet<Category> Categories => Set<Category>();
     public DbSet<NodeCategory> NodeCategories => Set<NodeCategory>();
     public DbSet<NodeLink> NodeLinks => Set<NodeLink>();
     public DbSet<NodeGrant> NodeGrants => Set<NodeGrant>();
@@ -38,6 +37,9 @@ public class GatherumDbContext(DbContextOptions<GatherumDbContext> options)
             node.Property(n => n.Title).HasMaxLength(500);
             node.Property(n => n.MediaType).HasMaxLength(255);
             node.Ignore(n => n.Kind);
+            // Every taxonomy read starts by pulling the categories, so they are worth
+            // finding without a scan even in a wiki this size.
+            node.HasIndex(n => n.IsCategory);
             node.HasOne(n => n.Parent).WithMany(n => n.Children)
                 .HasForeignKey(n => n.ParentId).OnDelete(DeleteBehavior.Cascade);
             node.HasOne(n => n.Owner).WithMany().HasForeignKey(n => n.OwnerId);
@@ -82,21 +84,16 @@ public class GatherumDbContext(DbContextOptions<GatherumDbContext> options)
             version.HasIndex(v => new { v.NodeId, v.Number }).IsUnique();
         });
 
-        model.Entity<Category>(category =>
-        {
-            category.Property(c => c.Name).HasMaxLength(CategoryPath.MaxSegmentLength);
-            category.Property(c => c.Path).HasMaxLength(1000);
-            category.HasIndex(c => c.Path).IsUnique();
-            category.HasOne(c => c.Parent).WithMany(c => c.Children)
-                .HasForeignKey(c => c.ParentId).OnDelete(DeleteBehavior.Cascade);
-        });
-
+        // The taxonomy: one self-referencing many-to-many over Nodes. A membership and a
+        // nesting are the same row, which is why there is no Categories table left to map.
         model.Entity<NodeCategory>(membership =>
         {
             membership.HasKey(m => new { m.NodeId, m.CategoryId });
             membership.HasOne(m => m.Node).WithMany(n => n.Categories)
                 .HasForeignKey(m => m.NodeId).OnDelete(DeleteBehavior.Cascade);
-            membership.HasOne(m => m.Category).WithMany(c => c.Nodes)
+            // Deleting a category page unfiles everything that was in it and leaves the
+            // pages alone, which is what deleting a category has always meant here.
+            membership.HasOne(m => m.Category).WithMany(n => n.Members)
                 .HasForeignKey(m => m.CategoryId).OnDelete(DeleteBehavior.Cascade);
         });
 

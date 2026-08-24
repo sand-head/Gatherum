@@ -24,7 +24,8 @@ public class ReindexTests(PostgresFixture postgres) : IAsyncLifetime
 
     private Reindexer NewReindexer(ServiceHarness host) => new(
         host.Db, host.Storage, host.Metadata, host.Roots, host.Nodes, host.Access,
-        host.Categories, [new Gatherum.Infrastructure.Extraction.PlainTextExtractor()],
+        host.Files, host.Sidecar,
+        [new Gatherum.Infrastructure.Extraction.PlainTextExtractor()],
         host.Clock, NullLogger<Reindexer>.Instance);
 
     [Fact]
@@ -33,7 +34,9 @@ public class ReindexTests(PostgresFixture postgres) : IAsyncLifetime
         var homelab = await harness.Files.CreateTextNodeAsync(jess, null, "Homelab", "the rack");
         var podman = await harness.Files.CreateTextNodeAsync(jess, homelab.Id, "Podman",
             "quadlets, mostly");
-        await harness.Categories.AddAsync(jess, podman.Id, "Homelab/Containers");
+        await harness.Categories.AddAsync(jess, podman.Id, "Containers");
+        var containers = await harness.Categories.ResolveAsync("Containers");
+        await harness.Categories.AddAsync(jess, containers!.Id, "Homelab subjects");
         await harness.Access.GrantAsync(jess, homelab.Id, sam, AccessRole.Editor);
 
         var published = await harness.Files.CreateTextNodeAsync(jess, null, "Published", "hello");
@@ -70,9 +73,19 @@ public class ReindexTests(PostgresFixture postgres) : IAsyncLifetime
         // So did the content.
         Assert.Equal("quadlets, mostly", await rebuilt.Files.GetTextAsync(jessAgain, podman.Id));
 
-        // And the categories.
+        // And the categories — which are pages of their own now, so recovering them is
+        // recovering the pages plus the names their members wrote down.
         var body = await rebuilt.Nodes.GetWithBodyAsync(jessAgain, podman.Id);
-        Assert.Equal(["homelab/containers"], body.Categories.Select(c => c.Category!.Path));
+        Assert.Equal(["Containers"], body.Categories.Select(c => c.Category!.Title));
+
+        var recoveredContainers = await rebuilt.Categories.ResolveAsync("Containers");
+        Assert.NotNull(recoveredContainers);
+        Assert.True(recoveredContainers.IsCategory);
+        Assert.Equal(containers.Id, recoveredContainers.Id);
+
+        // Including the nesting, which lives on the category's own page and nowhere else.
+        var nested = await rebuilt.Nodes.GetWithBodyAsync(jessAgain, recoveredContainers.Id);
+        Assert.Equal(["Homelab subjects"], nested.Categories.Select(c => c.Category!.Title));
 
         // And — the one that would be unsafe to get wrong — the sharing.
         Assert.Contains(await rebuilt.Nodes.GetTreeAsync(samAgain), n => n.Id == podman.Id);

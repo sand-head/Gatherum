@@ -1,4 +1,8 @@
 @page "/nodes/{Id:guid}"
+@* A category is a page, so this is the page that renders one — there is no second
+   article view to keep in step. The readable route is here rather than redirecting to
+   the guid because a category name is the one address in this wiki a reader types. *@
+@page "/categories/{Name}"
 @inherits GatherumComponent
 @using Microsoft.AspNetCore.Authorization
 @* A node can be public or unlisted, so this page has to answer somebody with no session.
@@ -11,7 +15,14 @@
 @if (notFound)
 {
     <PageTitle>Not found — Gatherum</PageTitle>
-    <h1 class="node-missing">This node doesn't exist (or is private to someone else).</h1>
+    @if (Name is null)
+    {
+        <h1 class="node-missing">This node doesn't exist (or is private to someone else).</h1>
+    }
+    else
+    {
+        <h1 class="node-missing">Nothing here is about that (or it is private to someone else).</h1>
+    }
 }
 else if (node is not null)
 {
@@ -52,6 +63,13 @@ else if (node is not null)
             <FileView @rendermode="InteractiveAuto" NodeId="@node.Id" />
         }
 
+        @* A category's members go between its prose and its history: they are what the
+           page is for, and the history of the lede is a footnote beside them. *@
+        @if (category is not null)
+        {
+            <CategoryListing View="@category" Deep="@Deep" />
+        }
+
         <VersionPanel @rendermode="InteractiveAuto" NodeId="@node.Id" />
 
         @if (backlinks.Count > 0)
@@ -78,6 +96,13 @@ else if (node is not null)
 @code {
     [Parameter] public Guid Id { get; set; }
 
+    /// <summary>A category by name, from the readable route. Names are unique among
+    /// categories, which is what makes the route resolvable at all.</summary>
+    [Parameter] public string? Name { get; set; }
+
+    /// <summary>Whether a category is listing its subcategories' pages too.</summary>
+    [SupplyParameterFromQuery] public bool Deep { get; set; }
+
     /// <summary>Presence, not a value: Blazor binds a bool query parameter through
     /// bool.TryParse, which rejects "1" — and the URL wants to read as ?edit anyway.</summary>
     [SupplyParameterFromQuery(Name = "edit")]
@@ -86,6 +111,7 @@ else if (node is not null)
     private bool Editing => Edit is not null;
 
     private Node? node;
+    private CategoryView? category;
     private List<CategoryRef> categories = [];
     private List<Node> backlinks = [];
     private string fileName = "";
@@ -97,12 +123,24 @@ else if (node is not null)
     {
         try
         {
-            node = await Ops.Nodes(s => s.GetWithBodyAsync(ViewerId, Id));
+            var id = Id;
+            if (Name is not null)
+            {
+                // Resolving the name is not a visibility decision — that is the node
+                // read's job, exactly as it is for a guid somebody was handed.
+                var named = await Ops.Categories(s => s.ResolveAsync(Name))
+                    ?? throw new Gatherum.Core.NotFoundException($"No category '{Name}'.");
+                id = named.Id;
+            }
+            node = await Ops.Nodes(s => s.GetWithBodyAsync(ViewerId, id));
             categories = node.Categories
-                .Select(c => new CategoryRef(c.Category!.Path, c.Category.Name))
-                .OrderBy(c => c.Path)
+                .Select(c => new CategoryRef(c.CategoryId, c.Category!.Title))
+                .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
                 .ToList();
-            backlinks = await Ops.Nodes(s => s.GetBacklinksAsync(ViewerId, Id));
+            category = node.IsCategory
+                ? await Ops.Categories(s => s.GetAsync(ViewerId, node.Title, Deep))
+                : null;
+            backlinks = await Ops.Nodes(s => s.GetBacklinksAsync(ViewerId, node.Id));
             fileName = node.File is { Versions.Count: > 0 } file ? file.Current.FileName : "";
             // What the document surfaces can open at all — a page, a source file, a docx.
             // Reading one is what publishing a page means, so this asks nothing about who
@@ -118,6 +156,7 @@ else if (node is not null)
         catch (Gatherum.Core.NotFoundException)
         {
             node = null;
+            category = null;
             notFound = true;
         }
     }

@@ -165,16 +165,28 @@ public class AppIntegrationTests(PostgresFixture postgres) : IAsyncLifetime
             .GetProperty("id").GetGuid();
 
         var filed = await client.PostAsJsonAsync($"/api/nodes/{pageId}/categories",
-            new { path = "Homelab/Podman" });
+            new { name = "Podman" });
         filed.EnsureSuccessStatusCode();
-        Assert.Equal("homelab/podman",
-            (await filed.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("path").GetString());
+        Assert.Equal("Podman",
+            (await filed.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("name").GetString());
 
-        // The parent category holds it only when asked to look into its subcategories.
+        // Nesting is filing the category's own page under another category — the same
+        // call, pointed at the subject instead of at a page about one.
+        var podman = await client.GetFromJsonAsync<JsonElement>("/api/categories/Podman");
+        var podmanId = podman.GetProperty("category").GetProperty("id").GetGuid();
+        (await client.PostAsJsonAsync($"/api/nodes/{podmanId}/categories",
+            new { name = "Homelab" })).EnsureSuccessStatusCode();
+
+        // A category is a node, so its page is a page: it has a body and a version.
+        var asNode = await client.GetFromJsonAsync<JsonElement>($"/api/nodes/{podmanId}");
+        Assert.Equal("Category", asNode.GetProperty("kind").GetString());
+        Assert.Equal("Podman", asNode.GetProperty("title").GetString());
+
+        // The parent holds the page only when asked to look into its subcategories.
         var shallow = await client.GetFromJsonAsync<JsonElement>("/api/categories/homelab");
         Assert.Empty(shallow.GetProperty("nodes").EnumerateArray());
-        Assert.Equal("homelab/podman",
-            shallow.GetProperty("subcategories")[0].GetProperty("path").GetString());
+        Assert.Equal("Podman",
+            shallow.GetProperty("subcategories")[0].GetProperty("name").GetString());
 
         var deep = await client.GetFromJsonAsync<JsonElement>("/api/categories/homelab?deep=true");
         Assert.Contains(deep.GetProperty("nodes").EnumerateArray(),
@@ -185,9 +197,21 @@ public class AppIntegrationTests(PostgresFixture postgres) : IAsyncLifetime
         Assert.Contains(results.EnumerateArray(), r => r.GetProperty("id").GetGuid() == pageId);
 
         var browsed = await CallMcpToolAsync("browse_category",
-            new { path = "Homelab", deep = true });
+            new { name = "Homelab", deep = true });
         Assert.Contains(browsed.GetProperty("nodes").EnumerateArray(),
             n => n.GetProperty("id").GetGuid() == pageId);
+
+        // And a category is addressed by name in a browser, because that is the one
+        // address in this wiki a reader types. Published so a stranger can be the one
+        // who reads it: the readable route is not a signed-in convenience.
+        foreach (var id in new[] { pageId, podmanId })
+            (await client.PostAsJsonAsync($"/api/nodes/{id}/access", new { access = "Public" }))
+                .EnsureSuccessStatusCode();
+
+        using var anonymous = factory.CreateClient();
+        var browser = await anonymous.GetAsync("/categories/Podman");
+        Assert.Equal(HttpStatusCode.OK, browser.StatusCode);
+        Assert.Contains("Quadlet notes", await browser.Content.ReadAsStringAsync());
     }
 
     [Fact]

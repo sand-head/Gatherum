@@ -34,11 +34,17 @@ public class SearchService(
         // something to agree about where the two lists overlap.
         var depth = Math.Clamp(limit * 4, limit, 200);
 
+        // A search box is asked for the thing about X, and every filed page has a
+        // same-named subject standing beside it, so a default search would answer half
+        // in headings. Categories are pages and are indexed like pages — they are just
+        // not what an unqualified search is for, and kind: category asks for them.
         var visible = authorizer.VisibleTo(db.Nodes, userId)
-            .Where(n => kind == null ||
-                (kind == NodeKind.Page
-                    ? n.MediaType == MediaTypes.Markdown
-                    : n.MediaType != MediaTypes.Markdown));
+            .Where(n => kind == NodeKind.Category
+                ? n.IsCategory
+                : !n.IsCategory && (kind == null ||
+                    (kind == NodeKind.Page
+                        ? n.MediaType == MediaTypes.Markdown
+                        : n.MediaType != MediaTypes.Markdown)));
 
         var lexical = mode == SearchMode.Semantic
             ? []
@@ -66,7 +72,7 @@ public class SearchService(
         {
             var extra = await db.Nodes
                 .Where(n => missing.Contains(n.Id))
-                .Select(n => new LexicalHit(n.Id, n.Title, n.MediaType, n.SearchText))
+                .Select(n => new LexicalHit(n.Id, n.Title, n.MediaType, n.IsCategory, n.SearchText))
                 .ToListAsync(ct);
             foreach (var hit in extra)
                 found[hit.Id] = hit;
@@ -75,7 +81,8 @@ public class SearchService(
         return ranked
             .Where(found.ContainsKey)
             .Select(id => new SearchResult(id, found[id].Title,
-                found[id].MediaType == MediaTypes.Markdown ? NodeKind.Page : NodeKind.File,
+                found[id].IsCategory ? NodeKind.Category
+                    : found[id].MediaType == MediaTypes.Markdown ? NodeKind.Page : NodeKind.File,
                 // A node the full-text half found contains the words that were typed, so
                 // its snippet is windowed around them. One only the vector half found may
                 // contain none of them, and the passage that matched says far more about
@@ -93,7 +100,7 @@ public class SearchService(
             .OrderByDescending(n =>
                 n.SearchVector.Rank(EF.Functions.WebSearchToTsQuery("english", query)))
             .Take(depth)
-            .Select(n => new LexicalHit(n.Id, n.Title, n.MediaType, n.SearchText))
+            .Select(n => new LexicalHit(n.Id, n.Title, n.MediaType, n.IsCategory, n.SearchText))
             .ToListAsync(ct);
 
     /// <summary>Nodes in nearest-first order — the order *is* the ranking, so it is a
@@ -135,7 +142,8 @@ public class SearchService(
         return (start > 0 ? "…" : "") + flattened[start..end] + (end < flattened.Length ? "…" : "");
     }
 
-    private record LexicalHit(Guid Id, string Title, string MediaType, string SearchText);
+    private record LexicalHit(Guid Id, string Title, string MediaType, bool IsCategory,
+        string SearchText);
 
     private record SemanticHit(Guid NodeId, string Passage);
 }

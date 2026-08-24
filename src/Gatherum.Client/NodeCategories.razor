@@ -12,14 +12,14 @@
         <div class="chips">
             @foreach (var category in categories)
             {
-                <span class="category" title="@category.Path">
-                    <a href="@CategoryUrl.Page(category.Path)">@category.Name</a>
+                <span class="category">
+                    <a href="@CategoryUrl.Page(category.Name)">@category.Name</a>
                     @* Filing is a signed-in gesture, so a reader who could not
                        unfile a page is not shown the button that says they could. *@
                     @if (CanFile)
                     {
                         <button title="Remove from this category"
-                                @onclick="() => RemoveAsync(category.Path)">×</button>
+                                @onclick="() => RemoveAsync(category.Name)">×</button>
                     }
                 </span>
             }
@@ -37,16 +37,23 @@
                     <button class="category-add" title="Add category"
                             @onmousedown:preventDefault @onclick="AddDraftAsync">Add</button>
                 }
-                @* A path is typed, not picked: the datalist offers whole paths so nesting an
-                   existing category under another is a matter of completing it. *@
+                @* Names, not paths: nesting is filing a category page under another, and
+                   it happens on that page's own bar rather than here. The datalist is
+                   what keeps two spellings of one subject from becoming two subjects. *@
                 <datalist id="category-suggestions-@NodeId">
                     @foreach (var suggestion in suggestions)
                     {
-                        <option value="@suggestion.Path" />
+                        <option value="@suggestion.Name" />
                     }
                 </datalist>
             }
         </div>
+        @* Filing can be refused for a reason worth reading — a name too long, a category
+           nested inside itself — and this is the only place that reason can be said. *@
+        @if (error is { Length: > 0 })
+        {
+            <p class="category-error" role="alert">@error</p>
+        }
     </footer>
 }
 
@@ -64,6 +71,7 @@
     [Parameter] public bool CanFile { get; set; }
 
     private string draft = "";
+    private string? error;
     private IReadOnlyList<CategoryInfo> suggestions = [];
     private IReadOnlyList<CategoryRef> categories = [];
 
@@ -85,16 +93,30 @@
     {
         if (draft.Trim().Length == 0)
             return;
-        await Data.AddCategoryAsync(NodeId, draft);
+        var wanted = draft;
+        if (!await TryAsync(() => Data.AddCategoryAsync(NodeId, wanted)))
+            return;
         draft = "";
         suggestions = [];
-        await ReloadAsync();
     }
 
-    private async Task RemoveAsync(string path)
+    private Task RemoveAsync(string name) =>
+        TryAsync(() => Data.RemoveCategoryAsync(NodeId, name));
+
+    private async Task<bool> TryAsync(Func<Task> change)
     {
-        await Data.RemoveCategoryAsync(NodeId, path);
+        error = null;
+        try
+        {
+            await change();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
         await ReloadAsync();
+        return true;
     }
 
     /// <summary>The bar owns its own list once it is live: it is the only thing on the

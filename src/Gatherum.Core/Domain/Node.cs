@@ -2,12 +2,15 @@ using NpgsqlTypes;
 
 namespace Gatherum.Core.Domain;
 
-/// <summary>How a node presents: a Page is simply a node whose file is Markdown.
-/// The distinction is a lens over <see cref="Node.MediaType"/>, not stored state.</summary>
+/// <summary>How a node presents. Page and File are a lens over
+/// <see cref="Node.MediaType"/>; Category is the one that is stored, because a category
+/// page is a Markdown file in every other respect and nothing about its bytes says what
+/// it is for.</summary>
 public enum NodeKind
 {
     Page,
     File,
+    Category,
 }
 
 public class Node
@@ -19,7 +22,16 @@ public class Node
     /// rendering and kind filtering never need a join.</summary>
     public string MediaType { get; set; } = MediaTypes.Binary;
 
-    public NodeKind Kind => MediaType == MediaTypes.Markdown ? NodeKind.Page : NodeKind.File;
+    /// <summary>Whether this node is a subject rather than a page about one. A category
+    /// is an ordinary Markdown page that has been marked as one: it has a body to say
+    /// what belongs in it, a history, backlinks, and its own categories — which are the
+    /// categories it is nested under. Carried on disk in the sidecar, so the taxonomy
+    /// survives the database like everything else does.</summary>
+    public bool IsCategory { get; set; }
+
+    public NodeKind Kind => IsCategory
+        ? NodeKind.Category
+        : MediaType == MediaTypes.Markdown ? NodeKind.Page : NodeKind.File;
 
     public Guid? ParentId { get; set; }
     public Node? Parent { get; set; }
@@ -76,7 +88,13 @@ public class Node
     public List<NodeGrant> Grants { get; init; } = [];
     public List<NodeAccessEntry> AccessEntries { get; init; } = [];
     public FileBody? File { get; set; }
+    /// <summary>The categories this node is filed under. On a category node these are
+    /// the categories it is nested under — its parents in the taxonomy.</summary>
     public List<NodeCategory> Categories { get; init; } = [];
+
+    /// <summary>What is filed under this node, when it is a category. Empty for
+    /// everything else.</summary>
+    public List<NodeCategory> Members { get; init; } = [];
     public List<NodeLink> OutboundLinks { get; init; } = [];
     public List<NodeLink> InboundLinks { get; init; } = [];
     public List<NodeEmbedding> Embeddings { get; init; } = [];

@@ -61,15 +61,10 @@ public interface IAppData
     Task<IReadOnlyList<RelatedInfo>> GetSimilarAsync(Guid nodeId, int limit);
     Task<IReadOnlyList<CategoryInfo>> ListCategoriesAsync(string? matching = null);
 
-    /// <summary>Files the node under a category path, creating it and its ancestors if
+    /// <summary>Files the node under a category, writing its page if nothing is called
     /// they are new; answers with the path it landed on.</summary>
-    Task<string> AddCategoryAsync(Guid nodeId, string path);
-    Task RemoveCategoryAsync(Guid nodeId, string path);
-
-    // Maintaining the taxonomy itself: a category follows its subcategories around.
-    Task RenameCategoryAsync(string path, string name);
-    Task MoveCategoryAsync(string path, string? newParentPath);
-    Task DeleteCategoryAsync(string path);
+    Task<string> AddCategoryAsync(Guid nodeId, string name);
+    Task RemoveCategoryAsync(Guid nodeId, string name);
     Task<IReadOnlyList<VersionInfo>> GetVersionsAsync(Guid nodeId);
     Task<string> GetVersionTextAsync(Guid nodeId, int number);
     Task RestoreVersionAsync(Guid nodeId, int number);
@@ -106,10 +101,10 @@ public record FileFacts(string FileName, string MediaType, long SizeBytes, int V
 }
 public record VersionInfo(int Number, string FileName, string MediaType, long SizeBytes,
     DateTimeOffset UploadedAt, bool IsText);
-/// <summary>A category as a node wears it: the path is what it is, the name is what
+/// <summary>A category as a node wears it: the id is the page it is, the name is what
 /// the chip says.</summary>
-public record CategoryRef(string Path, string Name);
-public record CategoryInfo(string Path, string Name, string? ParentPath, int Members,
+public record CategoryRef(Guid Id, string Name);
+public record CategoryInfo(Guid Id, string Name, IReadOnlyList<Guid> ParentIds, int Members,
     int SubtreeMembers);
 public record RelatedInfo(Guid Id, string Kind, string Title);
 public record KeyInfo(Guid Id, string Name, string Prefix, DateTimeOffset CreatedAt,
@@ -251,27 +246,16 @@ public sealed class HttpAppData(HttpClient http) : IAppData
         return await http.GetFromJsonAsync<List<CategoryInfo>>(url) ?? [];
     }
 
-    public async Task<string> AddCategoryAsync(Guid nodeId, string path)
+    public async Task<string> AddCategoryAsync(Guid nodeId, string name)
     {
-        var response = await http.PostAsJsonAsync($"/api/nodes/{nodeId}/categories", new { path });
+        var response = await http.PostAsJsonAsync($"/api/nodes/{nodeId}/categories", new { name });
         await EnsureAsync(response);
-        return (await response.Content.ReadFromJsonAsync<CategoryPlacement>())?.Path ?? path;
+        return (await response.Content.ReadFromJsonAsync<CategoryPlacement>())?.Name ?? name;
     }
 
-    public async Task RemoveCategoryAsync(Guid nodeId, string path) =>
+    public async Task RemoveCategoryAsync(Guid nodeId, string name) =>
         await EnsureAsync(await http.DeleteAsync(
-            $"/api/nodes/{nodeId}/categories/{CategoryUrl.For(path)}"));
-
-    public async Task RenameCategoryAsync(string path, string name) =>
-        await EnsureAsync(await http.PostAsJsonAsync("/api/categories/rename",
-            new { path, name }));
-
-    public async Task MoveCategoryAsync(string path, string? newParentPath) =>
-        await EnsureAsync(await http.PostAsJsonAsync("/api/categories/move",
-            new { path, newParentPath }));
-
-    public async Task DeleteCategoryAsync(string path) =>
-        await EnsureAsync(await http.DeleteAsync($"/api/categories/{CategoryUrl.For(path)}"));
+            $"/api/nodes/{nodeId}/categories/{CategoryUrl.For(name)}"));
 
     public async Task<IReadOnlyList<VersionInfo>> GetVersionsAsync(Guid nodeId) =>
         await http.GetFromJsonAsync<List<VersionInfo>>($"/api/nodes/{nodeId}/versions") ?? [];
@@ -329,6 +313,6 @@ public sealed class HttpAppData(HttpClient http) : IAppData
     }
 
     private record SaveResult(int Version);
-    private record CategoryPlacement(string Path);
+    private record CategoryPlacement(string Name);
     private record ApiProblem(string? Error, string? Detail);
 }
