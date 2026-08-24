@@ -1,5 +1,6 @@
 @inherits LayoutComponentBase
 @using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.Sections
 
 <div class="shell">
     <header class="topbar">
@@ -87,15 +88,26 @@
            the UA's [popover] display:none and the aside sits in flow as before. *@
         <aside id="nav-drawer" popover class="sidebar">
             @* Reading context, not a file manager: the article's contents, similar
-               articles, and recent visits. The full tree lives at /pages. *@
-            <AuthorizeView>
-                <Authorized>
-                    <SidebarPanels @rendermode="InteractiveAuto" />
-                </Authorized>
-            </AuthorizeView>
+               articles, and recent visits. The full tree lives at /pages.
+
+               A page with reading context of its own puts it here through the section
+               — the manual does — rather than the layout learning which routes have
+               any. It renders for a signed-out visitor too, who has no panels below
+               but may well be reading something. *@
+            @* One scroll container for both groups: two, each taking a share of the
+               height, would clip the longer one. *@
+            <div class="rail">
+                <SectionOutlet SectionName="@SidebarSection" />
+                <AuthorizeView>
+                    <Authorized>
+                        <SidebarPanels @rendermode="InteractiveAuto" />
+                    </Authorized>
+                </AuthorizeView>
+            </div>
             <nav class="sidebar-foot">
                 <NavLink href="/pages">All pages</NavLink>
                 <NavLink href="/categories">Categories</NavLink>
+                <NavLink href="/docs">Documentation</NavLink>
             </nav>
         </aside>
         <main class="content">
@@ -103,3 +115,8 @@
         </main>
     </div>
 </div>
+
+@code {
+    /// <summary>The sidebar slot a page fills with its own reading context.</summary>
+    public const string SidebarSection = "sidebar";
+}

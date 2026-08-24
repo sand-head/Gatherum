@@ -1,0 +1,58 @@
+@inject DocsLibrary Docs
+@* The manual's reading context, in the rail the wiki keeps its own in: where you are
+   in this page, what else the manual holds, and the links you hand a model. A page of
+   documentation is an article, and an article's outline belongs beside it — the
+   difference from SidebarPanels is only that these headings are real anchors, so an
+   entry is a link rather than a button asking a canvas to scroll. *@
+
+<div class="panels">
+    @if (Page is { Sections.Count: > 1 })
+    {
+        <section class="panel">
+            <h2>Contents</h2>
+            <ol class="contents">
+                @foreach (var section in Page.Sections)
+                {
+                    @* The whole path, not a bare "#id": App.razor sets <base href="/">,
+                       and a fragment-only href resolves against the document's base URL
+                       — which sends every one of these to the site root. *@
+                    <li>
+                        <a href="@($"{DocsLibrary.Root}/{Page.Slug}#{section.Id}")"
+                           title="@section.Title">@section.Title</a>
+                    </li>
+                }
+            </ol>
+        </section>
+    }
+
+    <section class="panel">
+        <h2>Documentation</h2>
+        <ul class="links">
+            @foreach (var entry in Docs.Pages)
+            {
+                <li>
+                    <a href="@($"{DocsLibrary.Root}/{entry.Slug}")" title="@entry.Title"
+                       class="@(entry.Slug == Page?.Slug ? "current" : null)">@entry.Title</a>
+                </li>
+            }
+        </ul>
+    </section>
+
+    <section class="panel">
+        <h2>For a model</h2>
+        <ul class="links">
+            @if (Page is not null)
+            {
+                <li><a href="@($"{DocsLibrary.Root}/{Page.Slug}.md")">This page as Markdown</a></li>
+            }
+            <li><a href="@($"{DocsLibrary.Root}/all.md")">The whole manual (.md)</a></li>
+            <li><a href="@($"{DocsLibrary.Root}/llms.txt")">llms.txt</a></li>
+        </ul>
+    </section>
+</div>
+
+@code {
+    /// <summary>The page being read, or null when the slug named nothing.</summary>
+    [Parameter]
+    public DocPage? Page { get; set; }
+}

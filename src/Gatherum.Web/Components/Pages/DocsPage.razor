@@ -1,0 +1,43 @@
+@page "/docs"
+@page "/docs/{Slug}"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Sections
+@inject DocsLibrary Docs
+@* The manual describes the software, not the knowledge base, and is the same in every
+   install — so it answers whoever asks. It is also the thing you hand a model, which
+   holds no session. *@
+@attribute [AllowAnonymous]
+
+<PageTitle>@(page?.Title ?? "Documentation") — Gatherum</PageTitle>
+
+@* Contents, the rest of the manual, and the raw links go in the rail, where a wiki
+   page's own outline goes. The article gets the column to itself. *@
+<SectionContent SectionName="@MainLayout.SidebarSection">
+    <DocsPanels Page="page" />
+</SectionContent>
+
+@if (page is null)
+{
+    <h1>No such page</h1>
+    <p>There is no documentation page called “@Slug”. Everything the manual holds is
+       listed beside this.</p>
+}
+else
+{
+    <article class="docs-article">
+        @((MarkupString)page.Html)
+        <footer class="docs-source">
+            This page as Markdown:
+            <a href="@($"{DocsLibrary.Root}/{page.Slug}.md")">@($"{DocsLibrary.Root}/{page.Slug}.md")</a>
+        </footer>
+    </article>
+}
+
+@code {
+    [Parameter]
+    public string? Slug { get; set; }
+
+    private DocPage? page;
+
+    protected override void OnParametersSet() => page = Docs.Find(Slug);
+}
