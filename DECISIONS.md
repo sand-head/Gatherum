@@ -1048,3 +1048,42 @@ One thing was fixed on the way past because the design made it load-bearing:
 `NodeService.RenameAsync` never wrote the sidecar, so a title override lived in the index
 alone and the next reindex would quietly undo it. Harmless-looking until a category's name
 is what its members write on disk.
+
+## A mention was never a link
+`[@Podman](node://id)` rendered, in the read view, as a `<span>`. It had the link's colour
+and the link's underline and did nothing at all when clicked — no target, nothing to open
+in a new tab, nothing to copy, nothing for the status bar to preview. The wiki link beside
+it worked, which is what made it look like a styling problem rather than a missing anchor.
+
+The cause is one line and worth writing down because it will happen again: the read view
+hands `RichHtmlWriter` an allow-list of URL schemes, and anything outside it is written as
+a styled span rather than an `<a>` — the sanitizer doing exactly its job. `wikilink:` is on
+that list because slopedit put it there; `locked:` is on it because we did, deliberately,
+so a padlocked link has an element to hang the padlock on. `node://` was on nobody's list.
+It is Gatherum's own scheme and it never needed to be a *browser's* URL — the canvas
+resolves it by hit-testing, and the canvas is where mentions were designed.
+
+The fix is not to add `node` to the allow-list. `node://id` is not something a browser can
+do anything with either: Ctrl-click would open a tab on a scheme it cannot resolve, and
+"copy link address" would yield a string that means nothing outside this app. slopedit's
+own note on why the read-only view emits real anchors says it plainly — a plain left click
+comes back to the host, and *every other click is the browser's*. A link that only answers
+one of those is half a link. So the read view addresses a mention as `/nodes/id`, which is
+where it goes, and which every one of those gestures already understands.
+
+Where that rewrite happens is the part that matters. It belongs inside the pass that
+already asks the server which of a page's links this reader may follow, and nowhere
+earlier — because a mention that has not been vouched for must stay inert. Do it up front,
+before the answer comes back, and a page whose reachability call fails or gets rate-limited
+ships live links into other people's private nodes; do it in the same pass, and the three
+outcomes are one decision in one place: reachable becomes `/nodes/id`, unreachable becomes
+`locked:id`, and unanswered stays `node://id` — which the sanitizer draws as no link at
+all. `NodeLinks.Seal` became `NodeLinks.Address` because that is now what it does: it gives
+every node link in the document the address it should have *for this reader*.
+
+The stored bytes never change. A mention is written `node://id`, saved `node://id`, and
+round-trips `node://id`; the addressing is the read view's, like the padlock, and for the
+same reason — a document that can be saved has to write back the bytes it was read from.
+
+A test existed that nearly caught this and didn't: it asserted the reader's HTML contained
+the text `@Notebook`, which a span satisfies. The replacement asserts the anchor.
