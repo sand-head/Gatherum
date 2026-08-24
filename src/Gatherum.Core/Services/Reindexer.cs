@@ -66,12 +66,14 @@ public class Reindexer(
         }
 
         await db.SaveChangesAsync(ct);
+        // The taxonomy is wired in one pass after every root, because it is the one thing
+        // on disk that points at other nodes: a page filed under "Podman" cannot be joined
+        // up until whichever root holds Podman's own page has been walked. Access is
+        // recomputed after it rather than before, so a category page written here — one
+        // only a sidecar knew about — gets its reach computed in the same run it appeared.
+        await WireTaxonomyAsync(filings, report, ct);
         await access.RecomputeAsync(ct);
         await db.SaveChangesAsync(ct);
-        // The taxonomy is wired last, in one pass, because it is the one thing on disk
-        // that points at other nodes: a page filed under "Podman" cannot be joined up
-        // until whichever root holds Podman's own page has been walked.
-        await WireTaxonomyAsync(filings, report, ct);
         logger.LogInformation(
             "Reindex complete: {Added} added, {Updated} updated, {Removed} removed.",
             report.Added, report.Updated, report.Removed);
