@@ -335,6 +335,13 @@ public class AppIntegrationTests(PostgresFixture postgres) : IAsyncLifetime
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         }
 
+        // The page's outline reaches the sidebar rail, where a wiki page's own outline
+        // goes — through a section, which has to resolve in static SSR for a signed-out
+        // visitor. And it carries the whole path: App.razor sets <base href="/">, which
+        // sends a fragment-only href to the site root instead of down the page.
+        var article = await anonymous.GetStringAsync("/docs/markdown");
+        Assert.Contains("\"/docs/markdown#", article, StringComparison.Ordinal);
+
         // The dialect as its own source: what you actually paste into a model.
         var source = await anonymous.GetAsync("/docs/markdown.md");
         Assert.Equal(HttpStatusCode.OK, source.StatusCode);

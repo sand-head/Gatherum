@@ -1,55 +1,12 @@
-/* Three columns where there is room: what the manual contains, the page, and where
-   you are in it. The middle one is the only one that matters, so it is the one that
-   survives when the room runs out. */
-.docs {
-    display: grid;
-    grid-template-columns: 190px minmax(0, 1fr) 170px;
-    gap: 40px;
-    align-items: start;
-}
-
-.docs-nav, .docs-toc {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    position: sticky;
-    top: 0;
-    font-size: 13.5px;
-}
-
-.docs-nav-title {
-    font: 500 11px/1.6 var(--font-ui);
-    letter-spacing: 0.6px;
-    text-transform: uppercase;
-    color: var(--on-surface-dim);
-    margin: 14px 0 4px;
-}
-
-.docs-nav-title:first-child { margin-top: 0; }
-
-.docs-nav a, .docs-toc a {
-    color: var(--on-surface);
-    padding: 4px 10px;
-    border-radius: var(--radius-full);
-    text-decoration: none;
-}
-
-.docs-nav a:hover, .docs-toc a:hover { background: var(--hover); }
-
-.docs-nav a.current {
-    background: var(--chip-bg);
-    color: var(--on-chip);
-    font-weight: 500;
-}
-
-.docs-toc a { color: var(--on-surface-dim); }
-
-/* The article's own measure. Prose wants a column, and the manual is prose even where
-   it is a table of environment variables. */
+/* The manual is an article like any other page here, so it takes the article's
+   measure and nothing else takes the room. Its contents, the rest of the manual and
+   the raw-Markdown links live in the sidebar rail — see DocsPanels. */
 .docs-article {
     max-width: 760px;
     line-height: 1.62;
 }
+
+.docs-article ::deep :is(h2, h3) { scroll-margin-top: 16px; }
 
 .docs-article ::deep h2 {
     font: 400 21px/1.3 var(--font-ui);
@@ -172,26 +129,7 @@
 .docs-article ::deep .markdown-alert-warning { --accent: var(--warn); }
 .docs-article ::deep .markdown-alert-caution { --accent: var(--danger); }
 
-@media (max-width: 1240px) {
-    .docs { grid-template-columns: 180px minmax(0, 1fr); }
-    .docs-toc { display: none; }
-}
-
-@media (max-width: 900px) {
-    .docs { grid-template-columns: minmax(0, 1fr); gap: 20px; }
-
-    /* Above the article rather than beside it, and not sticky — a column of links
-       pinned to a phone's viewport is a column of links you scroll past. */
-    .docs-nav {
-        position: static;
-        flex-flow: row wrap;
-        gap: 6px;
-        padding-bottom: 12px;
-        border-bottom: 1px solid var(--outline-dim);
-    }
-
-    .docs-nav-title { display: none; }
-    .docs-nav a { background: var(--surface-dim); }
-
+@media (max-width: 700px) {
+    /* A 280px card floated inside a phone's column leaves prose nowhere to wrap. */
     .docs-article ::deep :is(.infobox, .figure) { float: none; width: auto; margin: 0 0 16px; }
 }

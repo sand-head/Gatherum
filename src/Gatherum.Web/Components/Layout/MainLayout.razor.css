@@ -159,6 +159,13 @@
     padding: 6px 12px 8px;
 }
 
+.rail {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+}
+
 .sidebar-foot {
     margin-top: auto;
     display: flex;

@@ -134,8 +134,10 @@ browser sessions — including against the built container).
   configuration. Also served as their own source — `/docs/<page>.md`, `/docs/all.md`,
   `/docs/llms.txt` — because the dialect is syntax no model has seen and a link is how
   you teach it one. Unauthenticated (it describes the software, not the instance) and
-  under the anonymous read budget. `DocsTests` checks every internal link lands and that
-  the dialect page still names every callout kind and aside the code implements.
+  under the anonymous read budget. Each page's outline goes in the sidebar rail through
+  a layout section, beside the rest of the manual, the way a wiki page's contents do.
+  `DocsTests` checks every internal link lands and that the dialect page still names
+  every callout kind and aside the code implements.
 
 ## Stubbed / not shipped (tracked in PLAN.md)
 

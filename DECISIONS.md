@@ -830,3 +830,30 @@ What keeps it honest is `DocsTests`: every page has a title, every `/docs/…` l
 the manual lands on something served, and the dialect page has to name every callout kind
 in `CalloutExtension.Kinds` and both aside names in `BlockTags`. Adding a construct
 without documenting it fails the suite.
+
+## The manual's outline goes in the rail, like every other article's
+The first cut of the docs page carried its own furniture: a nav column on the left, a
+table of contents on the right, the article squeezed between them — while the app's own
+sidebar, three feet to the left, sat empty. A page of documentation is an article, and
+this app already has a place where an article's contents go.
+
+So the sidebar takes it. `MainLayout` grew a `SectionOutlet`, and a page that has reading
+context of its own fills it — the manual does, through `DocsPanels`: contents, the rest
+of the manual, and the raw-Markdown links, in the same panels `SidebarPanels` renders for
+a wiki page. A section rather than the layout learning which routes have panels, and it
+sits outside the `AuthorizeView` so a signed-out reader gets it too. The article gets the
+column to itself.
+
+Two things this cost, both found by clicking rather than by reading:
+
+The rail is now one scroll container holding two panel groups, because two — each
+`flex: 1` inside the sidebar's column — split the height between them and clipped the
+longer one. `.panels` moved to app.css at the same time: two components in two projects
+wear the same rail, and CSS isolation cannot be shared, so the alternative was two copies
+that drift.
+
+And a contents entry has to name its whole path, not a bare `#id`. `App.razor` sets
+`<base href="/">`, a fragment-only href resolves against the *document base URL* rather
+than the current URL, and every entry quietly navigated to the site root. It is the kind
+of thing that looks right in the markup, renders right, and is wrong the moment anybody
+clicks it — so the integration test asserts the anchor carries its path.
