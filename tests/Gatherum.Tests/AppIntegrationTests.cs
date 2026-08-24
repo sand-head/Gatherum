@@ -431,6 +431,55 @@ public class AppIntegrationTests(PostgresFixture postgres) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_page_is_prerendered_in_the_mode_the_browser_is_already_showing()
+    {
+        // The read view is real HTML in the first response, and slopedit bakes the
+        // theme's colors into the stylesheet it emits — so a server that assumes light
+        // hands a dark reader a white article that stays white until the island goes
+        // interactive. gatherum.js publishes the mode it resolved as a cookie for this.
+        var page = (await (await client.PostAsJsonAsync("/api/pages",
+            new { title = "After dark", markdown = "the closet gets hot" }))
+            .Content.ReadFromJsonAsync<NodeDto>())!;
+        await client.PostAsJsonAsync($"/api/nodes/{page.Id}/access", new { access = "Public" });
+
+        using var anonymous = factory.CreateClient(
+            new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        // EditorThemes.Dark.Background and .Light.Background, which are --surface's two
+        // halves: change a token there and this is what says so.
+        Assert.Contains("background:#1e1f20",
+            await ReadPageAsync(anonymous, page.Id, "gatherum-mode=dark"));
+        Assert.Contains("background:#ffffff",
+            await ReadPageAsync(anonymous, page.Id, "gatherum-mode=light"));
+    }
+
+    [Fact]
+    public async Task A_first_visit_is_asked_what_the_OS_prefers()
+    {
+        // Nothing has written the cookie yet on a browser's first ever request, so the
+        // page asks for the client hint — and Critical-CH is what makes the answer
+        // arrive on that navigation rather than the one after it.
+        using var anonymous = factory.CreateClient(
+            new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        var request = new HttpRequestMessage(HttpMethod.Get, "/docs");
+        request.Headers.Accept.ParseAdd("text/html");
+
+        var response = await anonymous.SendAsync(request);
+
+        Assert.Contains("Sec-CH-Prefers-Color-Scheme", response.Headers.GetValues("Accept-CH"));
+        Assert.Contains("Sec-CH-Prefers-Color-Scheme", response.Headers.GetValues("Critical-CH"));
+    }
+
+    private static async Task<string> ReadPageAsync(HttpClient http, Guid id, string cookie)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, $"/nodes/{id}");
+        request.Headers.Add("Cookie", cookie);
+        var response = await http.SendAsync(request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        return await response.Content.ReadAsStringAsync();
+    }
+
+    [Fact]
     public async Task An_unlisted_page_opens_from_its_link_and_appears_in_no_index()
     {
         var unlisted = (await (await client.PostAsJsonAsync("/api/pages",

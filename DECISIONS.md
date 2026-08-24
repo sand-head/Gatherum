@@ -857,3 +857,41 @@ And a contents entry has to name its whole path, not a bare `#id`. `App.razor` s
 than the current URL, and every entry quietly navigated to the site root. It is the kind
 of thing that looks right in the markup, renders right, and is wrong the moment anybody
 clicks it — so the integration test asserts the anchor carries its path.
+
+## The reader tells the server which mode to prerender in
+The read view is real HTML in the first response, and slopedit's HTML writer bakes a
+theme's colors into the stylesheet it emits — `background:#ffffff` or `background:#1e1f20`,
+not a CSS variable — because the canvas half of the same document has no variables to
+read. So the prerender is painted in whichever mode the server assumed, and the server
+assumed light: `ThemeState.IsDark` starts false and only becomes true once `watchTheme`
+answers, which is after the island goes interactive. A reader in dark mode got a white
+article for as long as that took, and then it snapped.
+
+Nothing in a request said which mode was in effect. The explicit choice is a `data-theme`
+attribute set by `initChrome` from localStorage, and the fallback is an OS preference
+that never leaves the browser — so the fix is to send the answer. `gatherum.js` now folds
+the two into a color and writes it to a `gatherum-mode` cookie, on load, on every toggle,
+and whenever the OS preference moves; `BrowserTheme` reads it back and seeds `ThemeState`
+for the render that cannot ask.
+
+The cookie carries the *color*, not the choice: "system" is not something a prerender can
+paint, and which of the two the reader picked is none of the server's business. It is a
+cookie rather than localStorage's existing key for the obvious reason — localStorage does
+not travel with a request — and the two coexist because they answer different questions.
+
+That leaves the visit with no cookie yet, which is the one the complaint was actually
+about. `Accept-CH` asks for `Sec-CH-Prefers-Color-Scheme` and `Critical-CH` makes the
+answer arrive on *that* navigation rather than the next one: a browser that has not been
+asked before retries the request once with the hint attached. Only Chromium answers;
+everywhere else the cookie covers every load after the first, and a first load with
+neither falls back to light exactly as before. A cookie beats the hint when both arrive —
+the hint is the OS preference, the cookie is what the reader chose, and a choice outranks
+a preference.
+
+What was tempting and wrong: rendering `data-theme` on `<html>` from the same cookie, so
+the whole first frame agreed. The cookie cannot tell "system, currently dark" from
+"explicitly dark", so a reader on system would have had the mode pinned — visible
+immediately as the wrong toggle icon, and needing a reconciliation pass in JS to unpin.
+It also buys nothing: `light-dark()` already resolves against the OS preference at first
+paint, and `initChrome` wins the race against the render-blocking stylesheets for the
+case where it does not. The article was the only thing that could not resolve itself.
