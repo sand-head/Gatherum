@@ -1,7 +1,9 @@
 # Search
 
-`Ctrl`/`⌘`+`K` anywhere opens the search box. Behind it are two searches that answer
-different questions, and both work out of the box.
+There is one search box, at the top of every page. `Ctrl`/`⌘`+`K` anywhere puts the
+caret in it, matches appear under it as you type — `↑`/`↓` and `Enter` to open one,
+`Esc` to dismiss the list. Behind it are two searches that answer different questions,
+and both work out of the box.
 
 ## The two halves
 

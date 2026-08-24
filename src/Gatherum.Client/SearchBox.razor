@@ -1,0 +1,165 @@
+@inject IAppData Data
+@inject NavigationManager Navigation
+@inject IJSRuntime Js
+@implements IAsyncDisposable
+
+@* One search box, and it is this one. Clicking it does not summon a second box:
+   the matches hang under the field as a floating list, and Ctrl/⌘-K only puts
+   the caret here. The field is a <label>, so the whole pill — including the
+   collapsed icon the narrow layout leaves of it — focuses the input by itself. *@
+<div class="search" @onfocusout="OnFocusOut">
+    <label class="search-field" title="Search (Ctrl+K)">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <circle cx="11" cy="11" r="7" />
+            <path d="m21 21-4.35-4.35" />
+        </svg>
+        <input @ref="input" type="text" autocomplete="off" spellcheck="false"
+               placeholder="Search pages, files, categories…" aria-label="Search"
+               role="combobox" aria-controls="search-results" aria-autocomplete="list"
+               aria-expanded="@(Open ? "true" : "false")"
+               aria-activedescendant="@(Open && results.Count > 0 ? $"search-hit-{selected}" : null)"
+               value="@query" @oninput="OnInput" @onkeydown="OnKeyDown" @onfocus="OnFocus" />
+        <kbd>⌘K</kbd>
+    </label>
+
+    @if (Open)
+    {
+        @* mousedown is what moves focus, and losing it is what closes this list — so a
+           click anywhere in here refuses that default. The caret stays in the field and
+           the click lands on the hit it was aimed at. *@
+        <div class="search-results" id="search-results" role="listbox" aria-label="Search results"
+             @onmousedown:preventDefault>
+            @foreach (var (hit, index) in results.Select((h, i) => (h, i)))
+            {
+                <button type="button" id="search-hit-@index" role="option"
+                        aria-selected="@(index == selected ? "true" : "false")"
+                        class="search-hit @(index == selected ? "selected" : "")"
+                        @onclick="() => Go(hit.Id)">
+                    <span class="kind-badge @(hit.Kind == "Page" ? "page" : "file")">@hit.Kind</span>
+                    <span class="hit-title">@hit.Title</span>
+                    <span class="hit-snippet">@hit.Snippet</span>
+                </button>
+            }
+            @if (results.Count == 0)
+            {
+                <div class="search-note">@(searching ? "Searching…" : "No matches.")</div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    /// <summary>A header dropdown, not a results page: enough to recognize the one you meant.</summary>
+    private const int Limit = 8;
+
+    private string query = "";
+    private IReadOnlyList<SearchHit> results = [];
+    private int selected;
+    private bool searching;
+    private bool focused;
+    private bool dismissed;
+    private ElementReference input;
+    private System.Threading.Timer? debounce;
+    private IJSObjectReference? module;
+
+    /// <summary>Nothing to float under an empty field, and Escape closes the list without leaving it.</summary>
+    private bool Open => focused && !dismissed && query.Length > 0;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        module = await Js.InvokeAsync<IJSObjectReference>("import", "./js/gatherum.js");
+        // The shortcut hands the element straight to JS: a round trip through .NET to
+        // call FocusAsync would drop whatever the user types in the meantime.
+        await module.InvokeVoidAsync("registerSearchShortcut", input);
+    }
+
+    private void OnFocus()
+    {
+        focused = true;
+        dismissed = false;
+    }
+
+    private void OnFocusOut()
+    {
+        focused = false;
+    }
+
+    private void OnInput(ChangeEventArgs e)
+    {
+        query = e.Value?.ToString() ?? "";
+        dismissed = false;
+        selected = 0;
+        // Pending from the keystroke, not from the request: the debounce is part of the
+        // wait, and "No matches." for the 200 ms before asking would be a lie.
+        searching = true;
+        debounce?.Dispose();
+        debounce = new System.Threading.Timer(_ => _ = InvokeAsync(RunSearch), null, 200, Timeout.Infinite);
+    }
+
+    private async Task RunSearch()
+    {
+        var current = query;
+        if (current.Length == 0)
+        {
+            results = [];
+            searching = false;
+            StateHasChanged();
+            return;
+        }
+
+        var found = await Data.SearchAsync(current, Limit);
+        // A later keystroke owns the box now; its own answer is on the way.
+        if (current != query) return;
+
+        results = found;
+        selected = 0;
+        searching = false;
+        StateHasChanged();
+    }
+
+    private void OnKeyDown(KeyboardEventArgs e)
+    {
+        switch (e.Key)
+        {
+            // Escape closes the list; with nothing left to close it empties the field.
+            case "Escape":
+                if (Open) dismissed = true;
+                else { query = ""; results = []; searching = false; }
+                break;
+            case "ArrowDown" when results.Count > 0:
+                dismissed = false;
+                selected = Math.Min(selected + 1, results.Count - 1);
+                break;
+            case "ArrowUp" when results.Count > 0:
+                selected = Math.Max(selected - 1, 0);
+                break;
+            case "Enter" when Open && results.Count > 0:
+                Go(results[Math.Clamp(selected, 0, results.Count - 1)].Id);
+                break;
+        }
+    }
+
+    /// <summary>The query survives the jump — coming back to the box shows the same list.</summary>
+    private void Go(Guid id)
+    {
+        dismissed = true;
+        Navigation.NavigateTo($"/nodes/{id}");
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        debounce?.Dispose();
+        if (module is null) return;
+        try
+        {
+            await module.InvokeVoidAsync("registerSearchShortcut", (object?)null);
+            await module.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit is already gone; so is the listener.
+        }
+    }
+}

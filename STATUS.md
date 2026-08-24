@@ -27,7 +27,7 @@ browser sessions — including against the built container).
   runs, version history with restore (an old Markdown version previews through
   `DocumentHtmlView` — the same document as HTML rather than as a canvas, so it is
   findable with Ctrl+F, selectable, printable, and its pictures are the browser's).
-  Every interactive component — editor, tree, search palette, node
+  Every interactive component — editor, tree, search box, node
   header, categories, versions, file view, settings keys — is an Interactive Auto island in
   `Gatherum.Client` over one `IAppData` seam (services on the server circuit, HTTP
   under WebAssembly): the first visit renders on the server while the runtime
@@ -65,8 +65,9 @@ browser sessions — including against the built container).
   tree; the chips in a node's header file and unfile it. Tags are gone: the migration
   carries every tag over as a root category.
 - **Tree + search** — sidebar tree mixing all nodes (create, rename, delete, menu
-  move up/down/move-to, drag-drop upload), Ctrl/⌘-K palette with kind badges and
-  snippets, Postgres FTS with `websearch_to_tsquery`, title ranked above body; a
+  move up/down/move-to, drag-drop upload), one header search box — Ctrl/⌘-K puts the
+  caret in it and the matches float under it, with kind badges and
+  snippets — Postgres FTS with `websearch_to_tsquery`, title ranked above body; a
   photo or a recording is findable by what a model read, heard, or made of it.
 - **Semantic search** — on out of the box: a 23 MB int8 MiniLM ships with the app and
   runs in-process on the CPU (~6 ms a passage), so nothing has to be stood up for search

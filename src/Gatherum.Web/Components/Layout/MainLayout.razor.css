@@ -252,7 +252,21 @@
         white-space: nowrap;
     }
 
-    .topbar-search { width: auto; }
+    /* The search keeps only its icon here (see SearchBox.razor.css) until it
+       holds the caret, and then it needs a width no flex row can spare: it takes
+       the bar instead, over the brand and the icons, for as long as someone is
+       typing in it. The sticky .topbar is the containing block. */
+    .topbar-search {
+        width: auto;
+        flex: none;
+
+        &:focus-within {
+            position: absolute;
+            inset: 6px 8px;
+            z-index: 30;
+        }
+    }
+
     .topbar-actions { gap: 2px; }
     .nav-toggle, .theme-toggle, .account-button { width: 40px; height: 40px; }
 

@@ -1,7 +1,7 @@
 # Icons
 
 Gatherum's icons are [Lucide](https://lucide.dev) — ISC, and already the app's house
-style: the inline `<svg>`s in `TreeItem`, `HeaderActions`, `SearchPalette` and
+style: the inline `<svg>`s in `TreeItem`, `HeaderActions`, `SearchBox` and
 `NodeHeader` are Lucide shapes drawn straight into the markup, which is the right way to
 do it when there is markup to draw into. `LICENSE` beside this file is the pack's, kept
 here because the icons in this folder are redistributed with the app.

@@ -857,3 +857,33 @@ And a contents entry has to name its whole path, not a bare `#id`. `App.razor` s
 than the current URL, and every entry quietly navigated to the site root. It is the kind
 of thing that looks right in the markup, renders right, and is wrong the moment anybody
 clicks it — so the integration test asserts the anchor carries its path.
+
+## One search box, and the results hang under it
+Clicking the header's search pill used to open a command palette: a modal over a dimmed
+page with a *second* input in it, which the first input then had to hand its caret to.
+Two boxes for one search, and the page you were reading covered up while you decided
+whether the match was the one you wanted.
+
+`SearchPalette` is now `SearchBox`, and the pill is the input. Matches float under it in
+a dropdown anchored to the field, so the page stays visible behind them and the query
+stays visible above them. `Ctrl`/`⌘`-K no longer *opens* anything — it focuses the field
+and selects what is in it, which is also why the shortcut now focuses the element from
+JavaScript instead of calling back into .NET: on a first visit the island is still on the
+server circuit, and a round trip there swallows whatever you type in the meantime.
+
+Three things fall out of the field being real rather than a trigger:
+
+The field is a `<label>`. Below the shell breakpoint it keeps only the magnifier it
+already led with — five labelled controls do not fit 360px — and a tap on that icon
+focuses the input inside it with no JavaScript and no second element. The caret is what
+expands it, `:focus-within` is what draws the expansion, and `MainLayout` lets it take
+the whole bar while it holds one, over the brand and the icons.
+
+Losing focus is what closes the list, so a click on a match would close it before the
+click landed. The hits refuse `mousedown`'s default instead: focus never leaves the
+field, and `focusout` keeps its plain meaning of "the user is done here".
+
+The list shows eight, where the palette showed fifteen. A dropdown under a header is for
+recognizing the page you meant, not for reading a result set — and eight is what fits
+without the keyboard walking the selection out of view, which is the only reason the
+palette's scroller was ever needed.
