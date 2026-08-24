@@ -1,10 +1,22 @@
-export function registerSearchShortcut(dotnet) {
-  document.addEventListener('keydown', (e) => {
+// There is one search box, so there is one listener: registering replaces it, and
+// registering nothing removes it. The shortcut focuses the field directly rather
+// than calling back into .NET — on a server circuit the round trip is long enough
+// to swallow the first characters typed after it.
+let searchHotkey;
+
+export function registerSearchShortcut(input) {
+  if (searchHotkey) document.removeEventListener('keydown', searchHotkey);
+  searchHotkey = null;
+  if (!input) return;
+
+  searchHotkey = (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
       e.preventDefault();
-      dotnet.invokeMethodAsync('Open');
+      input.focus();
+      input.select();
     }
-  });
+  };
+  document.addEventListener('keydown', searchHotkey);
 }
 
 export function initDropZone(element, dotnet) {
