@@ -58,6 +58,12 @@ public static class GatherumMarkdown
     /// changes or the blocks move.</summary>
     public static void Dress(RichDocument document, bool isDark)
     {
+        // The encyclopedia's dress: the hairline under h1 and h2 and the breath
+        // around every section title. Presentation, so it is said here rather than
+        // stored in the file — and worn by both renderers, canvas and HTML alike,
+        // because the layout is what spends it.
+        document.HeadingRuleLevels = 2;
+        document.HeadingSpacing = 1.5f;
         EditorThemes.ApplyInk(document, isDark);
         DocumentChrome.Apply(document, isDark);
     }

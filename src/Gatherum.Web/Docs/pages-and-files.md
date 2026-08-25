@@ -51,6 +51,15 @@ Editing autosaves. Presence shows who else has the document open, and if someone
 while you were typing the editor says so — your next save makes a new version and theirs
 stays in history either way.
 
+## Reading
+
+A page's own URL is the read view: real HTML, so find-in-page, native selection,
+printing and screen readers all work, and every link is a real link. Top-level and
+second-level headings wear a hairline rule, the way an encyclopedia's do. On a narrow
+screen — a phone, or a squeezed window — each `##` section folds behind its heading:
+tap the heading band to close and open it, the way Wikipedia's mobile skin folds an
+article. Jumping to a heading from the Contents panel unfolds whatever is in the way.
+
 ## Versions
 
 Every save is a version. Saves by the same author within five minutes collapse into the

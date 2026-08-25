@@ -44,8 +44,14 @@ export function initDropZone(element, dotnet) {
 // native way to reach the nth descendant of an element and scroll it into view,
 // which is the only reason this is here rather than in C#.
 export function scrollToHeading(container, index) {
-  const headings = container?.querySelectorAll('h1, h2, h3, h4, h5, h6');
-  headings?.[index]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const heading = container?.querySelectorAll('h1, h2, h3, h4, h5, h6')?.[index];
+  if (!heading) return;
+  // On a narrow page the read view folds each h2 section into a <details>, and an
+  // element inside a closed one has no box to scroll to — so a jump unfolds the
+  // sections on its way, which is also what the reader asked for.
+  for (let fold = heading.closest('details'); fold; fold = fold.parentElement?.closest('details'))
+    fold.open = true;
+  heading.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // Which mode is in effect: the explicit choice when there is one, the OS

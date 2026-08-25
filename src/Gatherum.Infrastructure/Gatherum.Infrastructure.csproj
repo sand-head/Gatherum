@@ -16,7 +16,7 @@
     <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.29.0" />
     <PackageReference Include="Microsoft.ML.Tokenizers" Version="2.0.0" />
     <PackageReference Include="PdfPig" Version="0.1.15" />
-    <PackageReference Include="SlopEdit.Docx" Version="2.2.0" />
+    <PackageReference Include="SlopEdit.Docx" Version="2.5.0" />
   </ItemGroup>
 
   <!-- The packaged embedding model. Twenty-three megabytes of weights don't belong in

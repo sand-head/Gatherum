@@ -925,3 +925,21 @@ The list shows eight, where the palette showed fifteen. A dropdown under a heade
 recognizing the page you meant, not for reading a result set — and eight is what fits
 without the keyboard walking the selection out of view, which is the only reason the
 palette's scroller was ever needed.
+
+## slopedit 2.5: the encyclopedia's dress, and sections that fold on a phone
+Two upstream features, adopted the day they landed because both were built for this
+wiki. `Dress` now gives every document `HeadingRuleLevels = 2` and
+`HeadingSpacing = 1.5` — Wikipedia's hairline under h1 and h2 and its breath around
+section titles, spent by the layout so the canvas and the HTML place every gap alike.
+Presentation, not model: nothing about a saved page changes.
+
+The read view also passes `CollapseSectionsBelow` to `DocumentHtmlView`: under the
+floor each h2 section folds behind its heading band, Minerva-style — `<details open>`,
+no script, find-in-page still reaches folded text. The floor is 480, app.css's own
+"tables stop being tables" number, and it is a floor on the *article's measure* rather
+than the viewport (slopedit's float-collapse doctrine): a phone folds, and so does the
+pane beside the sidebar in a squeezed window, because a 440px column is cramped for the
+same reason wherever it comes from. Read-tab chrome only — the editor never hides the
+text the caret lives in — and `scrollToHeading` opens the `<details>` on its way so a
+Contents jump cannot land on a heading with no box. Both packages (and Infrastructure's
+`SlopEdit.Docx`, which had drifted to 2.2.0) now pin 2.5.0.
