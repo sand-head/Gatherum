@@ -943,3 +943,9 @@ same reason wherever it comes from. Read-tab chrome only — the editor never hi
 text the caret lives in — and `scrollToHeading` opens the `<details>` on its way so a
 Contents jump cannot land on a heading with no box. Both packages (and Infrastructure's
 `SlopEdit.Docx`, which had drifted to 2.2.0) now pin 2.5.0.
+
+A third feature landed quietly, in the API rather than the README: `FloatedRun` grew
+`TopMarginPx`/`BottomMarginPx`, part of the derived zone the body wraps around.
+`DocumentChrome` gives asides 8px of each — Wikipedia's `margin: 0.5em 0 0.5em 1em`,
+whose 1em was already the 20px gutter — so an infobox no longer touches the heading
+above it or the prose that clears it.

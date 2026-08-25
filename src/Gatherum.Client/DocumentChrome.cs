@@ -71,7 +71,11 @@ public static class DocumentChrome
                 width = Math.Min(given, 640f);
         }
 
-        floats.Add(new FloatedRun(first, count, side, width, GutterPx: 20f));
+        // Wikipedia gives an infobox `margin: 0.5em 0 0.5em 1em`: the 1em is the
+        // gutter, and the 0.5em of air above and below — so the card touches neither
+        // the heading over it nor the prose that clears it — is the margins.
+        floats.Add(new FloatedRun(first, count, side, width, GutterPx: 20f,
+            TopMarginPx: 8f, BottomMarginPx: 8f));
         boxes.Add(new BlockDecoration(first, count, Background: ink.CardFill,
             Border: ink.CardBorder, BorderWidth: 1f, PadPx: 8f));
         if (kind != BlockTags.Infobox)

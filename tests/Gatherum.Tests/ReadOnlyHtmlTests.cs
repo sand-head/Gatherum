@@ -41,6 +41,9 @@ public class ReadOnlyHtmlTests
         // An aside leaves the flow, and the card and header band it is dressed with come
         // with it — chrome derived from block tags, not anything slopedit ships.
         Assert.Contains("<aside style=\"float:right", html);
+        // The 0.5em of air Wikipedia keeps above an infobox; the bottom half rides
+        // the aside's margin-bottom, folded into the paragraph gap.
+        Assert.Contains("margin-top:8px", html);
         Assert.Contains("data-tag=\"infobox", html);
         Assert.Contains("data-tag=\"callout warning", html);
         Assert.Contains("Rootless containers need lingering.", html);
