@@ -925,3 +925,44 @@ The list shows eight, where the palette showed fifteen. A dropdown under a heade
 recognizing the page you meant, not for reading a result set — and eight is what fits
 without the keyboard walking the selection out of view, which is the only reason the
 palette's scroller was ever needed.
+
+## slopedit 2.5: the encyclopedia's dress, and sections that fold on a phone
+Two upstream features, adopted the day they landed because both were built for this
+wiki. `Dress` now gives every document `HeadingRuleLevels = 2` and
+`HeadingSpacing = 1.5` — Wikipedia's hairline under h1 and h2 and its breath around
+section titles, spent by the layout so the canvas and the HTML place every gap alike.
+Presentation, not model: nothing about a saved page changes.
+
+The read view also passes `CollapseSectionsBelow` to `DocumentHtmlView`: under the
+floor each h2 section folds behind its heading band, Minerva-style — `<details open>`,
+no script, find-in-page still reaches folded text. The floor is 480, app.css's own
+"tables stop being tables" number, and it is a floor on the *article's measure* rather
+than the viewport (slopedit's float-collapse doctrine): a phone folds, and so does the
+pane beside the sidebar in a squeezed window, because a 440px column is cramped for the
+same reason wherever it comes from. Read-tab chrome only — the editor never hides the
+text the caret lives in — and `scrollToHeading` opens the `<details>` on its way so a
+Contents jump cannot land on a heading with no box. Both packages (and Infrastructure's
+`SlopEdit.Docx`, which had drifted to 2.2.0) now pin 2.5.0.
+
+A third feature landed quietly, in the API rather than the README: `FloatedRun` grew
+`TopMarginPx`/`BottomMarginPx`, part of the derived zone the body wraps around.
+`DocumentChrome` gives asides 8px of each — Wikipedia's `margin: 0.5em 0 0.5em 1em`,
+whose 1em was already the 20px gutter — so an infobox no longer touches the heading
+above it or the prose that clears it.
+
+## Footnotes and scripts came with the container, so the wiki's job was the chrome
+slopedit 2.5 also made Pandoc's footnotes (`[^key]` / `[^key]: note`) and scripts
+(`^sup^`, `~sub~`) native to the Markdown container — not extensions, so Gatherum's
+parse/serialize/render path picked them up the moment the package bumped, wiki
+extensions and all (pinned by round-trip and read-view tests). What was Gatherum's to
+add: a **Footnote** item in the editor's Insert menu — a real document op
+(`InsertFootnote()`), one undoable edit with the caret landing in the new note, unlike
+the fence constructs' write-out-and-reread, and document-mode only because picking an
+unused key is the model's job — plus the manual's word on all three, enforced by
+`DocsTests` beside the callout kinds.
+
+Looked at and left: `RichHtmlOptions.HeadingAnchors` (Wikipedia-style heading ids for
+`#Section` deep links) has no `DocumentHtmlView` parameter yet, so the reader cannot
+turn it on without going around the component — revisit when slopedit exposes it.
+`GetOutline()` duplicates what `PublishOutline` already walks, but Gatherum's walk
+skips asides' own headings (`Tag: null`), which the model's outline has no word for.
