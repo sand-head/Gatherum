@@ -121,6 +121,24 @@ public class ReadOnlyHtmlTests
             RichHtmlWriter.WriteBody(doc, reader));
     }
 
+    [Fact]
+    public void A_footnote_reads_as_a_superscript_link_and_its_note_links_back()
+    {
+        var html = Html("""
+            The NAS reboots nightly.[^why]
+
+            [^why]: The controller wedges; see [[Homelab]].
+            """);
+
+        // The marker is an anchor down to the note; the note carries the id it lands
+        // on and its number is the anchor back up. All slopedit's own plumbing — what
+        // is Gatherum's is that it arrives with the wiki's extensions active.
+        Assert.Contains("class=\"se-fnref\"", html);
+        Assert.Contains("class=\"se-t se-fn\"", html);
+        Assert.Contains("class=\"se-marker se-fnmark\"", html);
+        Assert.Contains("href=\"wikilink:Homelab\"", html);
+    }
+
     /// <summary>Fixed hand-picked widths, the way slopedit's own layout tests measure:
     /// enough for the emitter to lay out in pixels without a font engine anywhere.</summary>
     private sealed class FakeMeasurer : ITextMeasurer

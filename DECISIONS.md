@@ -949,3 +949,20 @@ A third feature landed quietly, in the API rather than the README: `FloatedRun` 
 `DocumentChrome` gives asides 8px of each — Wikipedia's `margin: 0.5em 0 0.5em 1em`,
 whose 1em was already the 20px gutter — so an infobox no longer touches the heading
 above it or the prose that clears it.
+
+## Footnotes and scripts came with the container, so the wiki's job was the chrome
+slopedit 2.5 also made Pandoc's footnotes (`[^key]` / `[^key]: note`) and scripts
+(`^sup^`, `~sub~`) native to the Markdown container — not extensions, so Gatherum's
+parse/serialize/render path picked them up the moment the package bumped, wiki
+extensions and all (pinned by round-trip and read-view tests). What was Gatherum's to
+add: a **Footnote** item in the editor's Insert menu — a real document op
+(`InsertFootnote()`), one undoable edit with the caret landing in the new note, unlike
+the fence constructs' write-out-and-reread, and document-mode only because picking an
+unused key is the model's job — plus the manual's word on all three, enforced by
+`DocsTests` beside the callout kinds.
+
+Looked at and left: `RichHtmlOptions.HeadingAnchors` (Wikipedia-style heading ids for
+`#Section` deep links) has no `DocumentHtmlView` parameter yet, so the reader cannot
+turn it on without going around the component — revisit when slopedit exposes it.
+`GetOutline()` duplicates what `PublishOutline` already walks, but Gatherum's walk
+skips asides' own headings (`Tag: null`), which the model's outline has no word for.

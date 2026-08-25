@@ -75,6 +75,11 @@ public class DocsTests
         Assert.Contains("/api/files/", dialect, StringComparison.Ordinal);
         Assert.All(CalloutExtension.Kinds.Keys, kind =>
             Assert.Contains($"[!{kind.ToUpperInvariant()}]", dialect, StringComparison.Ordinal));
+        // The container's own additions in slopedit 2.5, which the page owes a reader
+        // just the same: footnotes and Pandoc's scripts.
+        Assert.Contains("[^key]", dialect, StringComparison.Ordinal);
+        Assert.Contains("x^2^", dialect, StringComparison.Ordinal);
+        Assert.Contains("H~2~O", dialect, StringComparison.Ordinal);
     }
 
     [Fact]

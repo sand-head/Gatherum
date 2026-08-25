@@ -39,6 +39,8 @@ can, including inside an aside or a callout.
 | --- | --- |
 | Headings | `# H1` through `###### H6` |
 | Emphasis | `**bold**`, `*italic*`, `~~strikethrough~~`, `` `code` `` |
+| Scripts | `x^2^` superscript, `H~2~O` subscript — Pandoc's spelling, no unescaped spaces inside; one tilde, two are strikethrough |
+| Footnote | `[^key]` in prose, `[^key]: The note` on a line of its own — see [Footnotes](#footnotes) |
 | Links | `[label](https://example.org)` |
 | Images | `![alt text](url)` on a line of its own |
 | Bulleted list | `- item`, nested by indentation |
@@ -218,16 +220,40 @@ Each renders as a tinted card in its kind's accent, with the title line inked to
 - **An unknown kind stays a plain quote.** `> [!nope] …` is a block quote that happens
   to start with a bracket, which is exactly what it looks like.
 
+## Footnotes
+
+Pandoc's footnotes: a superscript marker in prose, and the note on a line of its own —
+anywhere, though the end of the page is where they read best.
+
+```markdown
+The NAS reboots nightly.[^why]
+
+[^why]: The controller wedges after a day; see [[Homelab]].
+```
+
+- The key (`why`) binds marker to note and never shows. Readers see a **number, derived
+  from marker order** — reorder the prose and the numbers follow, whatever the keys say.
+- A note is ordinary Markdown: links, wiki links and emphasis in one all work.
+- Reading, the marker is a superscript link down to its note, and the note's number
+  links back up to the first place it was cited.
+- The halves are allowed to dangle: a marker whose note was deleted still shows its
+  number, and a note nobody cites still renders, trailing the cited ones — an
+  authoring mistake you can see is one you can fix.
+- **Insert… → Footnote** drops a marker at the caret and lands the caret in a fresh
+  note at the end of the page, as one undoable edit.
+
 ## Writing all this by hand
 
 You do not have to. In the editor, **Insert…** writes the fences for you — an infobox
-skeleton, a figure around a file you pick, a callout of each kind, and a wiki link with
-a search box behind it. **Link node…** inserts a mention. The **Source** toggle swaps the
+skeleton, a figure around a file you pick, a footnote, a callout of each kind, and a
+wiki link with a search box behind it. **Link node…** inserts a mention. `Ctrl+.` and
+`Ctrl+,` toggle superscript and subscript at the caret, beside the usual `Ctrl+B`/`I`/
+`E` for bold, italic and code. The **Source** toggle swaps the
 document editor for the raw Markdown, which is the same file either way.
 
 One thing to know if you type one anyway: these constructs are read out of the source,
-and an open document is past that point. A `[[wiki link]]` or a `:::` fence typed
-straight into the document editor stays the text you typed until the page is read again
+and an open document is past that point. A `[[wiki link]]`, a `[^footnote]` marker or a
+`:::` fence typed straight into the document editor stays the text you typed until the page is read again
 — so use the Insert menu, type it in Source mode, or simply reopen the page and it will
 be the real thing.
 
@@ -290,4 +316,8 @@ The caption
 
 > [!NOTE] Optional title              a callout: note, tip, important, warning, caution
 > The body.
+
+x^2^  H~2~O                           superscript, subscript
+Prose.[^key]                          a footnote marker — readers see a derived number
+[^key]: The note                      its note, on a line of its own
 ```

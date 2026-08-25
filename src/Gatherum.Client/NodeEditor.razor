@@ -34,6 +34,10 @@
                         <button @onclick="() => OpenPicker(Picker.WikiLink)">Wiki link…</button>
                         <button @onclick="InsertInfoboxAsync">Infobox</button>
                         <button @onclick="() => OpenPicker(Picker.Figure)">Figure…</button>
+                        @if (!sourceMode)
+                        {
+                            <button @onclick="InsertFootnoteAsync">Footnote</button>
+                        }
                         <div class="insert-group">Callout</div>
                         @foreach (var (kind, name) in CalloutExtension.Kinds)
                         {
@@ -585,6 +589,22 @@
             richDoc.Execute(EditorCommand.MoveLeft, extend: true);
         richDoc.SetLink(url);
         richDoc.Execute(EditorCommand.MoveRight, extend: false);
+    }
+
+    /// <summary>A footnote is a document op, not a fence: the model owns the key and
+    /// the numbering, so this is one undoable edit rather than a write-out-and-reread —
+    /// which is why it survives with the undo stack the fence constructs give up. The
+    /// caret lands in the new note, ready to type. Document mode only: in source the
+    /// marker is just text, and picking an unused key is the model's job, not a snippet's.</summary>
+    private async Task InsertFootnoteAsync()
+    {
+        insertOpen = false;
+        if (richDoc is null || docView is null)
+            return;
+        richDoc.InsertFootnote();
+        OnChanged("");
+        await docView.FocusAsync();
+        docView.RevealCaret();
     }
 
     private Task InsertInfoboxAsync() => InsertConstructAsync($"""
