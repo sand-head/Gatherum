@@ -39,7 +39,8 @@ auto-login. Migrations: `dotnet ef migrations add <Name> -p src/Gatherum.Infrast
 - `src/Gatherum.Core` — domain entities, `GatherumDbContext`, **application services**
   (`Services/`) where every business rule lives (`NodeService` = tree/links/title
   resolution, `CategoryService` = the taxonomy and what is filed in it,
-  `FileService` = bodies/versions/text editing), `Markdown/MarkdownContent`
+  `FileService` = bodies/versions/text editing, `BookmarkService` = a URL captured as
+  a file node and captured again on demand), `Markdown/MarkdownContent`
   and `Markdown/WikiLinkSyntax` (the link conventions, read server-side), the seam
   interfaces in `Abstractions/`, `Services/MediaAnalysisQueue` — the hand-off from
   an upload to the background analyzer — and search's two halves: `SearchService` fuses
@@ -47,7 +48,9 @@ auto-login. Migrations: `dotnet ef migrations add <Name> -p src/Gatherum.Infrast
   with `TextChunker`, `RankFusion` and `QueryEmbeddingCache` beside it.
 - `src/Gatherum.Infrastructure` — implementations with real dependencies: filesystem
   storage, text extractors, media analysis (`Analysis/` — the OpenAI-compatible client,
-  ffmpeg, and the background worker), embeddings (`Embedding/` — the packaged
+  ffmpeg, and the background worker), bookmark capture (`Bookmarks/` — the HTTP
+  archiver and the snapshot transform that makes a fetched page inert and
+  self-contained), embeddings (`Embedding/` — the packaged
   in-process model, the client for an endpoint of your own, and the sweep worker), EF
   migrations and `Data/EmbeddingSchema` (which sizes the vector
   column to the configured model at startup).
@@ -116,14 +119,18 @@ fresh DI scope via `Services/AppOperations`.
 - MCP and REST stay thin adapters over the same application services. No logic in
   endpoints, tools, or components.
 - Storage (`IFileStorage`), extraction (`ITextExtractor`), analysis (`IMediaAnalyzer`),
-  embedding (`IEmbedder`), and authorization (`INodeAuthorizer`) are the only abstraction
-  seams. Don't add interfaces without a stated second implementation.
+  embedding (`IEmbedder`), authorization (`INodeAuthorizer`), and page capture
+  (`IPageArchiver` — `HttpPageArchiver` today, a browser-driving archiver is the stated
+  second) are the only abstraction seams. Don't add interfaces without a stated second
+  implementation.
 - Extraction is exact, cheap, and runs inside the upload request; analysis asks a model,
   takes minutes, and runs on a background worker. Never put one on the other's path —
   an upload must return before any model is consulted. Embedding is a third tempo again:
   a background sweep for indexing, and one bounded call on the search path — which must
   time out into a full-text answer rather than make anyone wait. A search never fails
-  because a model is unreachable.
+  because a model is unreachable. A bookmark capture is a fourth tempo: bounded and
+  inside the request that asked, because the capture *is* the node's content — and never
+  on any schedule. Nothing in Gatherum fetches the web unasked.
 - An embedding is a function of its text and nothing else. The packaged model is
   quantized, so batching several passages into one tensor would make each one's vector
   depend on its neighbours — and a search box, always alone, systematically unlike the

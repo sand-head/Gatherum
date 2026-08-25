@@ -31,9 +31,33 @@ file moves on disk.
 | A page from a red link | Click a `[[wiki link]]` that resolves to nothing and accept the offer |
 | A file | Drag it onto the tree, use the picker, or `POST /api/files` |
 | A new version of a file | Re-upload onto the existing node |
+| A bookmark | **Bookmark a page** in the New menu, or `POST /api/bookmarks`, or the `bookmark_page` MCP tool |
 
 Uploads go anywhere in the tree, and the file keeps its name — the node's title starts
 as the filename and can be renamed independently afterwards.
+
+## Bookmarks
+
+A bookmark is a web page kept the way an archive keeps one, not the way a browser does:
+paste a URL and Gatherum fetches the page **once, now**, and saves what came back as a
+file node. The capture is one self-contained HTML file — stylesheets and images folded
+in, scripts stripped, every remaining link made absolute — whose first line records
+where and when it was taken. It is searchable by what the page said and by its address,
+and it still reads after the original changes, moves, or disappears.
+
+- The node's title is the page's own; the file lands wherever in the tree you asked.
+- The page renders inline on the node — sandboxed, so nothing in it runs — with the
+  source address beside it, one click from the live page.
+- **Capture again** (on the node, or the `capture_bookmark` MCP tool, or
+  `POST /api/bookmarks/{id}/capture`) fetches the URL again and keeps the result as a
+  new version. Old captures stay in history, like an archive's older crawls.
+- A URL that serves a document rather than a page — a PDF, an image — is kept as that
+  document, source address and all.
+
+Nothing is fetched on a schedule and nothing is re-fetched behind your back: a capture
+happens when you ask, and that is the whole of it. The capture is what the server serves
+to a polite request — a page that only exists once scripts have run may capture thinner
+than it looks in a browser.
 
 ## Editing
 

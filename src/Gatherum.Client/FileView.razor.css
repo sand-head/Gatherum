@@ -18,6 +18,10 @@
         border-radius: var(--radius);
     }
 
+    /* A snapshot is a web page and expects a light canvas; the frame supplies one so a
+       page that never states a background stays readable in dark mode. */
+    & iframe.snapshot { background: #fff; }
+
     & audio { width: 100%; }
 }
 
@@ -46,6 +50,7 @@
     & dt { color: var(--on-surface-dim); }
     & dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
     & .hash { font-family: var(--font-mono); font-size: 12px; word-break: break-all; }
+    & .capture-error { color: var(--danger); font-size: 13px; }
 }
 
 .file-actions {

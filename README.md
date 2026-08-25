@@ -27,6 +27,13 @@ C#/Blazor — the only JavaScript is a ~65-line interop file.
   (plain text/markdown/code verbatim, PDF via PdfPig, docx as its Markdown rendering,
   image metadata) feeds search — and see **Multimedia** below for what a model adds to
   that on top.
+- **Bookmarks**: paste a URL and Gatherum keeps the page the way an archive would —
+  fetched once, on request, never on a schedule — as one self-contained HTML file:
+  stylesheets and images folded in, scripts stripped, the source address and capture
+  time stamped on the first line. It renders inline (sandboxed), searches by what the
+  page said and by where it came from, and "capture again" records a fresh fetch as a
+  new version with every old capture kept, like an archive's older crawls. A URL that
+  serves a document — a PDF, an image — is kept as that document.
 - **Multimedia**: point `Gatherum__Analysis__Endpoint` at a model you run — llama.cpp's
   server, or anything else speaking the OpenAI API — and uploads that carry no text of
   their own get some. Still images are read (the writing on a photographed whiteboard),

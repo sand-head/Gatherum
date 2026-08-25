@@ -15,6 +15,16 @@
             {
                 <iframe src="@contentUrl" title="@file.FileName"></iframe>
             }
+            else if (file.MediaType == "text/html")
+            {
+                @* A bookmark's snapshot — or any saved page — reads as the page it was.
+                   Doubly inert: the capture had its scripts stripped, the response is
+                   served with a sandboxing policy, and the frame is sandboxed too. *@
+                @* Pinned to the version so a fresh capture shows up: the bare content
+                   URL never changes, and the frame would happily keep the cached page. *@
+                <iframe class="snapshot" src="@($"{contentUrl}?version={file.Version}")"
+                        title="@file.FileName" sandbox></iframe>
+            }
             else if (file.MediaType.StartsWith("video/"))
             {
                 <video src="@contentUrl" controls></video>
@@ -69,6 +79,12 @@
         }
 
         <dl class="file-facts">
+            @if (file.SourceUrl is { } sourceUrl)
+            {
+                <dt>Saved from</dt>
+                <dd class="source-url"><a href="@sourceUrl" target="_blank"
+                       rel="noopener noreferrer">@sourceUrl</a></dd>
+            }
             <dt>File</dt><dd>@file.FileName</dd>
             <dt>Type</dt><dd>@file.MediaType</dd>
             <dt>Size</dt><dd>@FormatSize(file.SizeBytes)</dd>
@@ -80,7 +96,18 @@
                     Upload new version
                     <InputFile OnChange="UploadVersionAsync" />
                 </label>
+                @if (file.SourceUrl is not null)
+                {
+                    <button @onclick="CaptureAgainAsync" disabled="@capturing">
+                        @(capturing ? "Capturing…" : "Capture again")
+                    </button>
+                }
             </dd>
+            @if (captureError is { Length: > 0 })
+            {
+                <dt></dt>
+                <dd class="capture-error" role="alert">@captureError</dd>
+            }
         </dl>
 
         <section class="file-description">
@@ -98,6 +125,8 @@
 
     private NodeInfo? node;
     private string description = "";
+    private bool capturing;
+    private string? captureError;
     private CancellationTokenSource? watching;
 
     protected override async Task OnParametersSetAsync()
@@ -158,6 +187,27 @@
 
     private static string TranscriptLabel(string mediaType) =>
         mediaType.StartsWith("image/") ? "Text in the image" : "Transcript";
+
+    /// <summary>Fetches the bookmark's URL again; the capture lands as a new version,
+    /// so the one being read stays in history either way.</summary>
+    private async Task CaptureAgainAsync()
+    {
+        capturing = true;
+        captureError = null;
+        try
+        {
+            await Data.CaptureBookmarkAsync(NodeId);
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            captureError = ex.Message;
+        }
+        finally
+        {
+            capturing = false;
+        }
+    }
 
     private async Task SaveDescriptionAsync()
     {

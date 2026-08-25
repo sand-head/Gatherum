@@ -27,7 +27,7 @@ claude mcp add --transport http gatherum http://localhost:5140/mcp \
   --header "Authorization: Bearer gk_…"
 ```
 
-`/mcp` inside Claude Code should then list the `gatherum` server with eleven tools.
+`/mcp` inside Claude Code should then list the `gatherum` server with thirteen tools.
 
 ## The tools
 
@@ -38,6 +38,8 @@ claude mcp add --transport http gatherum http://localhost:5140/mcp \
 | `list_children` | `id?` (omit for roots) | Children in tree order |
 | `create_page` | `title`, `markdown`, `parentId?` | The created node |
 | `update_page` | `id`, `markdown`, `title?` | The updated node; a new version is recorded |
+| `bookmark_page` | `url`, `parentId?` | The captured page as a new file node |
+| `capture_bookmark` | `id` | The bookmark, with a fresh capture as its newest version |
 | `move_node` | `id`, `newParentId?`, `position?` | Confirmation |
 | `add_category` | `id`, `path` (e.g. `Homelab/Podman`) | The path it landed on |
 | `remove_category` | `id`, `path` | Confirmation |
@@ -62,6 +64,10 @@ Media that a model has analyzed comes back from `get_node` with `transcript` and
   match.
 - **Links earn backlinks.** A mention or wiki link is recorded in both directions the
   moment the page is saved; a bare title in prose is not.
+- **A bookmark is a capture, not a link.** `bookmark_page` fetches the URL once, now,
+  and keeps a self-contained snapshot as a file node — searchable by what the page said
+  and by its address. Nothing is fetched again unless `capture_bookmark` asks, and each
+  capture is a version. See [Bookmarks](/docs/pages-and-files#bookmarks).
 - **Private is private.** A key sees exactly what its owner sees. Another user's private
   subtree does not appear in `search`, `get_node` or `list_children` — it behaves as if
   it does not exist.

@@ -3,6 +3,7 @@ using Gatherum.Core.Abstractions;
 using Gatherum.Core.Data;
 using Gatherum.Core.Services;
 using Gatherum.Infrastructure.Analysis;
+using Gatherum.Infrastructure.Bookmarks;
 using Gatherum.Infrastructure.Embedding;
 using Gatherum.Infrastructure.Extraction;
 using Gatherum.Infrastructure.Storage;
@@ -28,6 +29,9 @@ public static class GatherumServiceCollectionExtensions
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<INodeAuthorizer, DefaultNodeAuthorizer>();
         services.AddSingleton<IFileStorage, FileSystemStorage>();
+        // Html before PlainText: the first extractor that claims a file wins, and an
+        // HTML file is text — it should be searchable by its words, not its tags.
+        services.AddSingleton<ITextExtractor, HtmlTextExtractor>();
         services.AddSingleton<ITextExtractor, PlainTextExtractor>();
         services.AddSingleton<ITextExtractor, PdfTextExtractor>();
         services.AddSingleton<ITextExtractor, DocxTextExtractor>();
@@ -35,6 +39,20 @@ public static class GatherumServiceCollectionExtensions
 
         AddAnalysis(services, configuration);
         AddEmbedding(services, configuration);
+
+        // Bookmarks need nothing configured — capturing a page is an HTTP fetch. The
+        // client dresses as a browser because plenty of servers refuse a bare one.
+        services.AddHttpClient<IPageArchiver, HttpPageArchiver>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(30);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd(
+                "Mozilla/5.0 (compatible; Gatherum/1.0)");
+            client.DefaultRequestHeaders.Accept.ParseAdd(
+                "text/html,application/xhtml+xml,*/*;q=0.8");
+        }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+        {
+            AutomaticDecompression = System.Net.DecompressionMethods.All,
+        });
 
         services.AddSingleton<INodeMetadataStore, JsonNodeMetadataStore>();
         services.AddScoped<AccessService>();
@@ -44,6 +62,7 @@ public static class GatherumServiceCollectionExtensions
         services.AddScoped<NodeService>();
         services.AddScoped<CategoryService>();
         services.AddScoped<FileService>();
+        services.AddScoped<BookmarkService>();
         services.AddScoped<SearchService>();
         services.AddScoped<EmbeddingService>();
         services.AddScoped<UserService>();

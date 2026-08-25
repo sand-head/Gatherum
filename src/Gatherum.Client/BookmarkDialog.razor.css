@@ -1,0 +1,17 @@
+.bookmark-hint {
+    margin: 0 0 12px;
+    color: var(--on-surface-dim);
+    font-size: 13px;
+}
+
+input {
+    width: 100%;
+    margin: 4px 0 0;
+}
+
+.bookmark-error {
+    margin: 10px 0 0;
+    color: var(--danger);
+    font-size: 13px;
+    overflow-wrap: anywhere;
+}

@@ -20,6 +20,11 @@ public record NodeMetadata
     public string? Title { get; init; }
 
     public string Description { get; init; } = "";
+
+    /// <summary>Where a bookmark's snapshot was captured from, and null for everything
+    /// else. Recorded here because "capture this again" has to survive the database.</summary>
+    public string? SourceUrl { get; init; }
+
     public IReadOnlyList<string> Categories { get; init; } = [];
     public AccessMode Access { get; init; } = AccessMode.Private;
     public bool Inherit { get; init; } = true;

@@ -966,3 +966,33 @@ Looked at and left: `RichHtmlOptions.HeadingAnchors` (Wikipedia-style heading id
 turn it on without going around the component — revisit when slopedit exposes it.
 `GetOutline()` duplicates what `PublishOutline` already walks, but Gatherum's walk
 skips asides' own headings (`Tag: null`), which the model's outline has no word for.
+
+## Bookmarks capture what the server serves, through a seam a browser could fill
+"Index the rendered page à la the Internet Archive" became a sixth abstraction seam:
+`IPageArchiver`, with `HttpPageArchiver` fetching what one polite HTTP request gets and
+`PageSnapshot` folding it into a single inert HTML file — scripts, frames and handlers
+stripped, stylesheets and images inlined under a byte purse, every remaining reference
+absolutized, the source URL and capture time stamped in a first-line comment. That is
+not what a browser paints for a script-rendered page, and the seam is the honest
+admission: a browser-driving archiver is the stated second implementation, slotting in
+without touching `BookmarkService`. The snapshot is one file so the acceptance test
+keeps its meaning — a bookmark on disk reads with `cat`, Gatherum or no Gatherum.
+
+Three judgment calls beside it. The fetch runs inside the request rather than on a
+worker: unlike analysis, the capture *is* the node's content, so there is nothing
+sensible to show until it exists — the dialog waits with a progress note, bounded at
+thirty seconds. The source URL lives on `FileBody` and in `meta.json` (and redundantly
+in the snapshot itself), so "capture again" survives losing the database like everything
+else. And nothing blocks fetching private addresses: the server sits on a homelab where
+bookmarking one's own dashboards is a first-class use, and every caller is one of the
+two authenticated users.
+
+## Stored HTML renders, and is therefore served sandboxed
+A bookmark's snapshot should read as the page it captured, so `text/html` nodes render
+in the file view instead of opening as source in the code editor — which also demoted
+HTML from "editable text" on the node page, a fair trade since editing a capture is not
+a thing. Serving stored markup inline on the app's origin is stored XSS by construction
+(upload was already such a door, before bookmarks widened it), so the content endpoint
+now sends `Content-Security-Policy: sandbox` for HTML and SVG, the preview iframe adds
+its own `sandbox`, and the capture had its scripts stripped at save — three fences,
+any one of which is sufficient, none of which is trusted alone.

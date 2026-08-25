@@ -5,6 +5,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="AngleSharp" Version="1.7.2" />
     <PackageReference Include="MetadataExtractor" Version="2.9.3" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.11" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.0" />
@@ -37,14 +38,9 @@
   <!-- Before AssignTargetPaths, not BeforeBuild: the Content items below are declared
        inside this target because on a cold build the files they point at do not exist
        yet at evaluation time, and AssignTargetPaths is the last moment they can join. -->
-  <Target Name="FetchEmbeddingModel" BeforeTargets="AssignTargetPaths"
-          Condition="'$(FetchEmbeddingModel)' == 'true'">
-    <DownloadFile SourceUrl="$(EmbeddingModelUrl)" DestinationFolder="$(EmbeddingModelDirectory)"
-                  DestinationFileName="model.onnx" Retries="3" SkipUnchangedFiles="true"
-                  Condition="!Exists('$(EmbeddingModelDirectory)model.onnx')" />
-    <DownloadFile SourceUrl="$(EmbeddingVocabularyUrl)" DestinationFolder="$(EmbeddingModelDirectory)"
-                  DestinationFileName="vocab.txt" Retries="3" SkipUnchangedFiles="true"
-                  Condition="!Exists('$(EmbeddingModelDirectory)vocab.txt')" />
+  <Target Name="FetchEmbeddingModel" BeforeTargets="AssignTargetPaths" Condition="'$(FetchEmbeddingModel)' == 'true'">
+    <DownloadFile SourceUrl="$(EmbeddingModelUrl)" DestinationFolder="$(EmbeddingModelDirectory)" DestinationFileName="model.onnx" Retries="3" SkipUnchangedFiles="true" Condition="!Exists('$(EmbeddingModelDirectory)model.onnx')" />
+    <DownloadFile SourceUrl="$(EmbeddingVocabularyUrl)" DestinationFolder="$(EmbeddingModelDirectory)" DestinationFileName="vocab.txt" Retries="3" SkipUnchangedFiles="true" Condition="!Exists('$(EmbeddingModelDirectory)vocab.txt')" />
 
     <GetFileHash Files="$(EmbeddingModelDirectory)model.onnx" Algorithm="SHA256" HashEncoding="hex">
       <Output TaskParameter="Hash" PropertyName="FetchedModelHash" />
@@ -52,16 +48,12 @@
     <GetFileHash Files="$(EmbeddingModelDirectory)vocab.txt" Algorithm="SHA256" HashEncoding="hex">
       <Output TaskParameter="Hash" PropertyName="FetchedVocabularyHash" />
     </GetFileHash>
-    <Error Condition="'$(FetchedModelHash)' != '$(EmbeddingModelHash)'"
-           Text="The embedding model at $(EmbeddingModelDirectory)model.onnx hashes to $(FetchedModelHash), not $(EmbeddingModelHash). Delete it to fetch again." />
-    <Error Condition="'$(FetchedVocabularyHash)' != '$(EmbeddingVocabularyHash)'"
-           Text="The embedding vocabulary at $(EmbeddingModelDirectory)vocab.txt hashes to $(FetchedVocabularyHash), not $(EmbeddingVocabularyHash). Delete it to fetch again." />
+    <Error Condition="'$(FetchedModelHash)' != '$(EmbeddingModelHash)'" Text="The embedding model at $(EmbeddingModelDirectory)model.onnx hashes to $(FetchedModelHash), not $(EmbeddingModelHash). Delete it to fetch again." />
+    <Error Condition="'$(FetchedVocabularyHash)' != '$(EmbeddingVocabularyHash)'" Text="The embedding vocabulary at $(EmbeddingModelDirectory)vocab.txt hashes to $(FetchedVocabularyHash), not $(EmbeddingVocabularyHash). Delete it to fetch again." />
 
     <ItemGroup>
-      <Content Include="$(EmbeddingModelDirectory)model.onnx"
-               Link="models/all-MiniLM-L6-v2/model.onnx" CopyToOutputDirectory="PreserveNewest" />
-      <Content Include="$(EmbeddingModelDirectory)vocab.txt"
-               Link="models/all-MiniLM-L6-v2/vocab.txt" CopyToOutputDirectory="PreserveNewest" />
+      <Content Include="$(EmbeddingModelDirectory)model.onnx" Link="models/all-MiniLM-L6-v2/model.onnx" CopyToOutputDirectory="PreserveNewest" />
+      <Content Include="$(EmbeddingModelDirectory)vocab.txt" Link="models/all-MiniLM-L6-v2/vocab.txt" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
   </Target>
 
