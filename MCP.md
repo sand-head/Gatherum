@@ -63,11 +63,14 @@ still answers from full-text search: a search never fails because a model is dow
 
 ### Bookmarks
 
-`bookmark_page` fetches the URL once, at the moment of the call, and keeps what came
-back as a file node: for a web page, one self-contained sanitized HTML snapshot (styles
-and images folded in, scripts stripped, the source URL and capture time stamped in a
+`bookmark_page` captures the URL once, at the moment of the call, and keeps what came
+back as a file node: for a web page, one self-contained sanitized HTML snapshot of the
+document *after* a headless browser has let its scripts run and settle (styles, images
+and fonts folded in from the responses the page rendered with, scripts dropped once
+their output is the DOM being saved, the source URL and capture time stamped in a
 comment on the first line); for a URL that serves a document — a PDF, an image — the
-document itself. The node is searchable by the page's words and by its address, and
+document itself. An instance with no browser captures what the server serves a plain
+fetch. The node is searchable by the page's words and by its address, and
 `get_node` reports the address as `sourceUrl` in the file metadata. Nothing is ever
 re-fetched on a schedule; `capture_bookmark` fetches again on demand and records the
 result as a new version, so old captures read back like an archive's older crawls. A

@@ -64,10 +64,11 @@ Media that a model has analyzed comes back from `get_node` with `transcript` and
   match.
 - **Links earn backlinks.** A mention or wiki link is recorded in both directions the
   moment the page is saved; a bare title in prose is not.
-- **A bookmark is a capture, not a link.** `bookmark_page` fetches the URL once, now,
-  and keeps a self-contained snapshot as a file node — searchable by what the page said
-  and by its address. Nothing is fetched again unless `capture_bookmark` asks, and each
-  capture is a version. See [Bookmarks](/docs/pages-and-files#bookmarks).
+- **A bookmark is a capture, not a link.** `bookmark_page` renders the URL in a
+  headless browser once, now — scripts run and settle first — and keeps a
+  self-contained snapshot as a file node, searchable by what the page said and by its
+  address. Nothing is fetched again unless `capture_bookmark` asks, and each capture is
+  a version. See [Bookmarks](/docs/pages-and-files#bookmarks).
 - **Private is private.** A key sees exactly what its owner sees. Another user's private
   subtree does not appear in `search`, `get_node` or `list_children` — it behaves as if
   it does not exist.

@@ -39,11 +39,14 @@ as the filename and can be renamed independently afterwards.
 ## Bookmarks
 
 A bookmark is a web page kept the way an archive keeps one, not the way a browser does:
-paste a URL and Gatherum fetches the page **once, now**, and saves what came back as a
-file node. The capture is one self-contained HTML file — stylesheets and images folded
-in, scripts stripped, every remaining link made absolute — whose first line records
-where and when it was taken. It is searchable by what the page said and by its address,
-and it still reads after the original changes, moves, or disappears.
+paste a URL and Gatherum captures the page **once, now**, and saves it as a file node.
+A headless browser loads the page and lets its scripts run and settle — what gets kept
+is the document as it stands afterwards, the page you actually saw, not the stub the
+server sent to build it from. The capture is one self-contained HTML file — the
+stylesheets, images and fonts the page rendered with folded in, every remaining link
+made absolute — whose first line records where and when it was taken. It is searchable
+by what the page said and by its address, and it still reads after the original
+changes, moves, or disappears.
 
 - The node's title is the page's own; the file lands wherever in the tree you asked.
 - The page renders inline on the node — sandboxed, so nothing in it runs — with the
@@ -55,9 +58,12 @@ and it still reads after the original changes, moves, or disappears.
   document, source address and all.
 
 Nothing is fetched on a schedule and nothing is re-fetched behind your back: a capture
-happens when you ask, and that is the whole of it. The capture is what the server serves
-to a polite request — a page that only exists once scripts have run may capture thinner
-than it looks in a browser.
+happens when you ask, and that is the whole of it. The page's scripts run once, at
+capture time, and do not ride along in the file — their output is what the snapshot
+*is*, and stored markup that could execute is a page that could act as its reader. On
+an instance with no browser installed (a bare `dotnet run`, say — see
+[Configuration](/docs/configuration)), the capture degrades to what the server serves
+a plain fetch.
 
 ## Editing
 

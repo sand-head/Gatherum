@@ -30,6 +30,18 @@ With no authority configured the app signs anyone in as a local development user
 is fine on a laptop and an open door anywhere else, so **outside
 `ASPNETCORE_ENVIRONMENT=Development` the app refuses to start** rather than be one.
 
+## Bookmarks
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `Gatherum__Bookmarks__BrowserPath` | *(empty)* | Chromium executable that renders a bookmarked page before capture. Empty looks in the usual Playwright locations; the container image sets it to its own browser |
+
+With a browser, a bookmark captures the page as it stands once its scripts have run and
+settled. Without one — none installed and nothing configured — the capture is what the
+server serves to a plain fetch, so a bare `dotnet run` still bookmarks, only without
+rendering. A browser that fails to load a page degrades to the plain fetch too, with a
+warning in the log.
+
 ## Publishing
 
 | Variable | Default | Purpose |

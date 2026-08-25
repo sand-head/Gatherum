@@ -28,12 +28,16 @@ C#/Blazor — the only JavaScript is a ~65-line interop file.
   image metadata) feeds search — and see **Multimedia** below for what a model adds to
   that on top.
 - **Bookmarks**: paste a URL and Gatherum keeps the page the way an archive would —
-  fetched once, on request, never on a schedule — as one self-contained HTML file:
-  stylesheets and images folded in, scripts stripped, the source address and capture
-  time stamped on the first line. It renders inline (sandboxed), searches by what the
-  page said and by where it came from, and "capture again" records a fresh fetch as a
-  new version with every old capture kept, like an archive's older crawls. A URL that
-  serves a document — a PDF, an image — is kept as that document.
+  fetched once, on request, never on a schedule. A headless Chromium (in the container
+  image) loads the page, its scripts run and settle, lazy-loaded images are scrolled
+  into existence, and the document as it stands is captured as one self-contained HTML
+  file — stylesheets, images and fonts folded in from the very responses the page
+  rendered with, the source address and capture time stamped on the first line. It
+  renders inline (sandboxed), searches by what the page said and by where it came
+  from, and "capture again" records a fresh capture as a new version with every old
+  one kept, like an archive's older crawls. A URL that serves a document — a PDF, an
+  image — is kept as that document; with no browser to be found, the capture degrades
+  to what the server serves a plain fetch.
 - **Multimedia**: point `Gatherum__Analysis__Endpoint` at a model you run — llama.cpp's
   server, or anything else speaking the OpenAI API — and uploads that carry no text of
   their own get some. Still images are read (the writing on a photographed whiteboard),
@@ -189,6 +193,7 @@ that reason. If you publish the port more widely than that, set
 | `Gatherum__Analysis__MaxBytes` | `268435456` | Largest file sent for analysis; bigger ones upload and store as before |
 | `Gatherum__Analysis__TimeoutSeconds` | `900` | Ceiling on one analysis call |
 | `Gatherum__Analysis__FfmpegPath` | `ffmpeg` | How to invoke ffmpeg, which splits video into audio and frames |
+| `Gatherum__Bookmarks__BrowserPath` | *(empty; `/usr/bin/chromium` in the container)* | Chromium that renders a bookmarked page before capture. Empty looks in the usual Playwright places and, finding nothing, captures what the server serves instead |
 | `Gatherum__Embedding__Endpoint` | *(empty)* | Base URL of an OpenAI-compatible embeddings API (e.g. `http://localhost:8090/v1`); set, it replaces the packaged model |
 | `Gatherum__Embedding__Model` | *(empty)* | The embedding model at that endpoint |
 | `Gatherum__Embedding__Local` | `true` | Use the packaged MiniLM when no endpoint is set; `false` with no endpoint leaves search full-text only |

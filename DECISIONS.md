@@ -996,3 +996,31 @@ a thing. Serving stored markup inline on the app's origin is stored XSS by const
 now sends `Content-Security-Policy: sandbox` for HTML and SVG, the preview iframe adds
 its own `sandbox`, and the capture had its scripts stripped at save — three fences,
 any one of which is sufficient, none of which is trusted alone.
+
+## The browser is the archiver, and the plain fetch is what it degrades to
+The owner wanted "Webpage, Complete": the page after its scripts have run, assets and
+all. So `BrowserPageArchiver` fills the seam the HTTP archiver left stated: Playwright
+drives the container's own Chromium (Debian's build, one apt layer for both
+architectures, `Gatherum__Bookmarks__BrowserPath` to point anywhere else), waits for
+network-idle within a bound, scrolls so lazy loading asks for its images, records every
+response off the wire, and hands the settled DOM to the same `PageSnapshot` transform —
+whose fetcher now answers from the recorded responses first, so the snapshot folds in
+the very bytes the page rendered with. `PageSnapshot` also learned to inline what CSS
+names — fonts and background images — and to drop `loading="lazy"`, since the scroll
+already happened.
+
+Deliberate departures from Chrome's version of the gesture. Scripts do not ride along:
+by capture time their output *is* the DOM being saved, replaying them against it
+rebuilds or blanks what they made, and the sandbox the snapshot is served under would
+refuse them anyway — completeness here means what the scripts did, not what they were.
+And the capture stays one file rather than a page-plus-folder, because a bookmark on
+disk should read with `cat`.
+
+Failure tilts toward keeping something: a URL serving a document, an instance with no
+browser (a bare `dotnet run`), and a browser that cannot load or finish a page all
+degrade to the plain HTTP capture with a logged reason; only the site's own answer — a
+404, a 500 — fails a bookmark, because it would fail either way. Chromium runs with its
+own sandbox off (`--no-sandbox`, `--disable-dev-shm-usage`): the rootless container is
+the sandbox, and Chromium's wants privileges it does not have. The browser is told
+about `HTTPS_PROXY`/`NO_PROXY` explicitly, since unlike `HttpClient` it does not honor
+them on its own.

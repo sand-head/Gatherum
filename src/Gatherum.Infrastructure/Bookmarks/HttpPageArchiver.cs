@@ -20,8 +20,8 @@ public class HttpPageArchiver(HttpClient http, TimeProvider clock) : IPageArchiv
     private static readonly TimeSpan CaptureBudget = TimeSpan.FromSeconds(30);
     private const long MaxPageBytes = 10 * 1024 * 1024;
     private const long MaxDocumentBytes = 128L * 1024 * 1024;
-    private const long MaxAssetBytes = 4 * 1024 * 1024;
-    private const long AssetPurseBytes = 24 * 1024 * 1024;
+    internal const long MaxAssetBytes = 4 * 1024 * 1024;
+    internal const long AssetPurseBytes = 24 * 1024 * 1024;
 
     public async Task<ArchivedPage> ArchiveAsync(Uri url, CancellationToken ct = default)
     {
@@ -83,15 +83,18 @@ public class HttpPageArchiver(HttpClient http, TimeProvider clock) : IPageArchiv
             return fetched;
         }, clock.GetUtcNow(), ct);
 
-        var fileName = NodePaths.FileNameFor(snapshot.Title, ".html")
+        return new ArchivedPage(snapshot.Title, HtmlFileName(snapshot.Title, url),
+            "text/html", snapshot.Content);
+    }
+
+    internal static string HtmlFileName(string title, Uri url) =>
+        NodePaths.FileNameFor(title, ".html")
             ?? NodePaths.FileNameFor(url.Host, ".html")
             ?? "bookmark.html";
-        return new ArchivedPage(snapshot.Title, fileName, "text/html", snapshot.Content);
-    }
 
     /// <summary>One asset, best-effort: anything wrong with it — unreachable, refused,
     /// over its ceiling — leaves the snapshot pointing at the live URL instead.</summary>
-    private async Task<FetchedAsset?> FetchAssetAsync(Uri url, long cap, CancellationToken ct)
+    internal async Task<FetchedAsset?> FetchAssetAsync(Uri url, long cap, CancellationToken ct)
     {
         try
         {

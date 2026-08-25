@@ -80,6 +80,37 @@ public class PageSnapshotTests
     }
 
     [Fact]
+    public async Task What_a_stylesheet_points_at_folds_in_too()
+    {
+        var result = await BuildAsync("""
+            <html><head>
+              <link rel="stylesheet" href="/css/type.css">
+              <style>h1 { background: url(/img/band.png); }</style>
+            </head><body>hi</body></html>
+            """,
+            new Dictionary<string, FetchedAsset>
+            {
+                ["https://example.org/css/type.css"] = new("text/css",
+                    "@font-face{src:url('serif.woff2')}"u8.ToArray()),
+                ["https://example.org/css/serif.woff2"] = new("font/woff2", [9, 9]),
+                ["https://example.org/img/band.png"] = new("image/png", [7]),
+            });
+
+        var html = Text(result);
+        Assert.Contains($"src:url('data:font/woff2;base64,{Convert.ToBase64String([9, 9])}')",
+            html);
+        Assert.Contains($"url(data:image/png;base64,{Convert.ToBase64String([7])})", html);
+    }
+
+    [Fact]
+    public async Task Lazy_loading_is_dropped_because_the_scroll_already_happened()
+    {
+        var result = await BuildAsync(
+            """<html><body><img src="https://example.org/late.png" loading="lazy"></body></html>""");
+        Assert.DoesNotContain("loading=", Text(result));
+    }
+
+    [Fact]
     public async Task Images_fold_in_as_data_uris_and_a_dead_one_stays_a_live_link()
     {
         var result = await BuildAsync("""

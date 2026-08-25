@@ -48,9 +48,9 @@ auto-login. Migrations: `dotnet ef migrations add <Name> -p src/Gatherum.Infrast
   with `TextChunker`, `RankFusion` and `QueryEmbeddingCache` beside it.
 - `src/Gatherum.Infrastructure` — implementations with real dependencies: filesystem
   storage, text extractors, media analysis (`Analysis/` — the OpenAI-compatible client,
-  ffmpeg, and the background worker), bookmark capture (`Bookmarks/` — the HTTP
-  archiver and the snapshot transform that makes a fetched page inert and
-  self-contained), embeddings (`Embedding/` — the packaged
+  ffmpeg, and the background worker), bookmark capture (`Bookmarks/` — the headless
+  Chromium archiver, the plain-HTTP one it falls back to, and the snapshot transform
+  that makes a captured page inert and self-contained), embeddings (`Embedding/` — the packaged
   in-process model, the client for an endpoint of your own, and the sweep worker), EF
   migrations and `Data/EmbeddingSchema` (which sizes the vector
   column to the configured model at startup).
@@ -120,9 +120,9 @@ fresh DI scope via `Services/AppOperations`.
   endpoints, tools, or components.
 - Storage (`IFileStorage`), extraction (`ITextExtractor`), analysis (`IMediaAnalyzer`),
   embedding (`IEmbedder`), authorization (`INodeAuthorizer`), and page capture
-  (`IPageArchiver` — `HttpPageArchiver` today, a browser-driving archiver is the stated
-  second) are the only abstraction seams. Don't add interfaces without a stated second
-  implementation.
+  (`IPageArchiver` — `BrowserPageArchiver` renders in headless Chromium where one is
+  found, `HttpPageArchiver` is the plain fetch it degrades to) are the only abstraction
+  seams. Don't add interfaces without a stated second implementation.
 - Extraction is exact, cheap, and runs inside the upload request; analysis asks a model,
   takes minutes, and runs on a background worker. Never put one on the other's path —
   an upload must return before any model is consulted. Embedding is a third tempo again:

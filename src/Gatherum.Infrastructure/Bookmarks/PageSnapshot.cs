@@ -37,6 +37,7 @@ public static partial class PageSnapshot
         RemoveActiveContent(document);
         AbsolutizeReferences(document, baseUri);
         await InlineStylesheetsAsync(document, fetchAsset, ct);
+        await InlineStyleElementsAsync(document, fetchAsset, ct);
         await InlineImagesAsync(document, fetchAsset, ct);
         DeclareUtf8(document);
         Stamp(document, url, capturedAt);
@@ -116,6 +117,9 @@ public static partial class PageSnapshot
                 element.SetAttribute("srcset", AbsolutizeSrcset(baseUri, srcset));
             if (element.GetAttribute("style") is { } style)
                 element.SetAttribute("style", AbsolutizeCss(baseUri, style));
+            // A capture is read all at once; lazy loading would leave its images
+            // waiting for a scroll that already happened.
+            element.RemoveAttribute("loading");
         }
         foreach (var style in document.QuerySelectorAll("style"))
             style.TextContent = AbsolutizeCss(baseUri, style.TextContent);
@@ -137,9 +141,46 @@ public static partial class PageSnapshot
             if (link.GetAttribute("media") is { } media)
                 style.SetAttribute("media", media);
             // The sheet's own relative references resolve against the sheet, not the page.
-            style.TextContent = AbsolutizeCss(href, Encoding.UTF8.GetString(asset.Content));
+            style.TextContent = await InlineCssAssetsAsync(
+                AbsolutizeCss(href, Encoding.UTF8.GetString(asset.Content)), fetchAsset, ct);
             link.Parent?.ReplaceChild(style, link);
         }
+    }
+
+    /// <summary>Styles the page carries in its own body — hand-written or, in a rendered
+    /// capture, put there by the scripts that ran — get their fonts and background
+    /// images folded in like a linked sheet's. Their references are already absolute:
+    /// <see cref="AbsolutizeReferences"/> went first.</summary>
+    private static async Task InlineStyleElementsAsync(IDocument document,
+        Func<Uri, CancellationToken, Task<FetchedAsset?>> fetchAsset, CancellationToken ct)
+    {
+        foreach (var style in document.QuerySelectorAll("style"))
+            style.TextContent = await InlineCssAssetsAsync(style.TextContent, fetchAsset, ct);
+    }
+
+    /// <summary>Folds what a stylesheet points at — fonts, background images — into
+    /// data: URIs, so type and texture survive the site. Every reference is fetched at
+    /// most once, and one that cannot be had stays a live URL, like a dead image.</summary>
+    private static async Task<string> InlineCssAssetsAsync(string css,
+        Func<Uri, CancellationToken, Task<FetchedAsset?>> fetchAsset, CancellationToken ct)
+    {
+        var inlined = new Dictionary<string, string>();
+        foreach (var reference in CssUrl().Matches(css)
+            .Select(match => match.Groups["url"].Value).Distinct())
+        {
+            if (!Uri.TryCreate(reference, UriKind.Absolute, out var target)
+                || target.Scheme is not ("http" or "https"))
+                continue;
+            if (await fetchAsset(target, ct) is { } asset)
+                inlined[reference] =
+                    $"data:{asset.MediaType};base64,{Convert.ToBase64String(asset.Content)}";
+        }
+        if (inlined.Count == 0)
+            return css;
+        return CssUrl().Replace(css, match =>
+            inlined.TryGetValue(match.Groups["url"].Value, out var data)
+                ? $"url({match.Groups["q"].Value}{data}{match.Groups["q"].Value})"
+                : match.Value);
     }
 
     private static async Task InlineImagesAsync(IDocument document,
