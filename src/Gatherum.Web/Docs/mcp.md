@@ -69,6 +69,9 @@ Media that a model has analyzed comes back from `get_node` with `transcript` and
   self-contained snapshot as a file node, searchable by what the page said and by its
   address. Nothing is fetched again unless `capture_bookmark` asks, and each capture is
   a version. See [Bookmarks](/docs/pages-and-files#bookmarks).
+- **A bookmark reads as Markdown.** `get_node` returns the captured page rendered as
+  Markdown in `extractedText` — headings, lists, links, tables and code, no markup —
+  the same convention docx files follow. Read the bookmark, not the HTML.
 - **Private is private.** A key sees exactly what its owner sees. Another user's private
   subtree does not appear in `search`, `get_node` or `list_children` — it behaves as if
   it does not exist.

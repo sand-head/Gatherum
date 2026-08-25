@@ -23,38 +23,23 @@ public class HtmlTextExtractorTests
     }
 
     [Fact]
-    public async Task Words_survive_and_markup_scripts_and_styles_do_not()
+    public async Task A_page_extracts_as_its_markdown_rendering_led_by_its_title()
     {
         var text = await ExtractAsync("""
             <html><head><title>Closet thermals</title>
             <style>body { color: red; }</style>
             <script>console.log("boot")</script></head>
-            <body><h1>Summer</h1><p>the closet runs <b>hot</b></p></body></html>
+            <body><h2>Summer</h2><p>the closet runs <b>hot</b></p></body></html>
             """);
 
-        Assert.Contains("Closet thermals", text);
-        Assert.Contains("the closet runs hot", text);
-        Assert.Contains("Summer", text);
-        Assert.DoesNotContain("<", text);
-        Assert.DoesNotContain("color: red", text);
-        Assert.DoesNotContain("console.log", text);
+        Assert.Equal("# Closet thermals\n\n## Summer\n\nthe closet runs **hot**", text);
     }
 
     [Fact]
-    public async Task A_minified_page_still_reads_as_words_not_word_soup()
+    public async Task A_page_that_opens_with_its_own_title_does_not_say_it_twice()
     {
         var text = await ExtractAsync(
-            "<html><body><h1>Closet thermals</h1><p>runs hot</p><ul><li>add</li><li>fans</li></ul></body></html>");
-        Assert.Contains("Closet thermals\nruns hot", text);
-        Assert.Contains("add\nfans", text);
-    }
-
-    [Fact]
-    public async Task Markup_whitespace_collapses_instead_of_indexing_as_gaps()
-    {
-        var text = await ExtractAsync(
-            "<html><body>\n    <p>one\n        two</p>\n\n\n<p>three</p>\n  </body></html>");
-        Assert.Contains("one\ntwo", text);
-        Assert.DoesNotContain("  ", text);
+            "<html><head><title>Thermals</title></head><body><h1>Thermals</h1><p>hot</p></body></html>");
+        Assert.Equal("# Thermals\n\nhot", text);
     }
 }

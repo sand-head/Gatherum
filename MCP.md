@@ -70,7 +70,14 @@ and fonts folded in from the responses the page rendered with, scripts dropped o
 their output is the DOM being saved, the source URL and capture time stamped in a
 comment on the first line); for a URL that serves a document — a PDF, an image — the
 document itself. An instance with no browser captures what the server serves a plain
-fetch. The node is searchable by the page's words and by its address, and
+fetch.
+
+A bookmark's `extractedText` is the captured page rendered as Markdown — headings,
+lists, links, tables, quotes and code, with inlined images reduced to their alt text —
+the same convention docx follows, so `get_node` hands a model the page as structured
+prose rather than a wall of HTML. Every capture is a version; the current one is what
+`get_node` reads, and older ones stay retrievable over REST
+(`GET /api/files/{id}/content?version=N`). The node is searchable by the page's words and by its address, and
 `get_node` reports the address as `sourceUrl` in the file metadata. Nothing is ever
 re-fetched on a schedule; `capture_bookmark` fetches again on demand and records the
 result as a new version, so old captures read back like an archive's older crawls. A

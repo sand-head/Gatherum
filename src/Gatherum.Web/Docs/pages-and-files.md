@@ -49,13 +49,19 @@ by what the page said and by its address, and it still reads after the original
 changes, moves, or disappears.
 
 - The node's title is the page's own; the file lands wherever in the tree you asked.
-- The page renders inline on the node — sandboxed, so nothing in it runs — with the
-  source address beside it, one click from the live page.
-- **Capture again** (on the node, or the `capture_bookmark` MCP tool, or
+- The page renders inline on the node — sandboxed, so nothing in it runs — under a bar
+  naming where it was saved from, one click from the live page.
+- **Capture again** (the button on that bar, the `capture_bookmark` MCP tool, or
   `POST /api/bookmarks/{id}/capture`) fetches the URL again and keeps the result as a
-  new version. Old captures stay in history, like an archive's older crawls.
+  new version — and the bar's capture picker pages back through the older ones, each
+  rendered as the page stood then, like an archive's calendar of crawls. The History
+  panel below restores or downloads any of them.
 - A URL that serves a document rather than a page — a PDF, an image — is kept as that
   document, source address and all.
+- To search — and to an agent reading it over MCP — a bookmark is its **Markdown
+  rendering**: headings, lists, links and tables as structured prose, the same
+  convention docx files follow, so a model processes the page without wading through
+  its markup.
 
 Nothing is fetched on a schedule and nothing is re-fetched behind your back: a capture
 happens when you ask, and that is the whole of it. The page's scripts run once, at

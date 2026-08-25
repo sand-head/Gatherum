@@ -1024,3 +1024,23 @@ own sandbox off (`--no-sandbox`, `--disable-dev-shm-usage`): the rootless contai
 the sandbox, and Chromium's wants privileges it does not have. The browser is told
 about `HTTPS_PROXY`/`NO_PROXY` explicitly, since unlike `HttpClient` it does not honor
 them on its own.
+
+## A bookmark reads as Markdown, on the convention docx already set
+"Convert these webpages to Markdown for LLM processing over MCP" needed no new surface:
+docx had already established that a rich format's *extracted text* is its canonical
+Markdown rendering, and `get_node` already hands extracted text to agents. So
+`HtmlMarkdown` renders a captured page's whole body — headings, lists, links, tables,
+quotes, fenced code — and `HtmlTextExtractor` stores that as the version's text, which
+makes search index prose instead of tags and MCP serve Markdown without a tool being
+added. The whole body, deliberately: guessing at "main content" is the reader's
+judgment call, not an extractor's. Inlined images are the one loss — a snapshot carries
+them as data: URIs megabytes long, so they reduce to their alt text. Nothing escapes
+Markdown metacharacters in prose; the rendering is for reading and searching, not for
+round-tripping. Unlike docx, the rendering does not feed link resolution: a captured
+page's links are the web's, and resolving them as wiki titles would fabricate backlinks.
+
+Capture history needed no new storage either — captures were already versions. What it
+got is a face: the bookmark bar over the preview names the source, holds the Capture
+again button, and pages the sandboxed frame back through older captures via the version
+the content URL already accepted, an archive's calendar in one select. Restore and
+download stay the History panel's; the bar only decides which past the frame shows.

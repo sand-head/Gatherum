@@ -103,8 +103,14 @@ browser sessions — including against the built container).
   fresh capture as a new version. Non-HTML URLs (a PDF) are kept as the document they
   serve, and a missing or failing browser degrades to `HttpPageArchiver`'s plain fetch
   with a logged reason — never to a failure the browser alone caused. The source URL
-  lives on `FileBody` and in `meta.json`, so it survives a reindex. New:
-  `POST /api/bookmarks`, `POST /api/bookmarks/{id}/capture`, MCP
+  lives on `FileBody` and in `meta.json`, so it survives a reindex. The node wears a
+  bookmark bar: source link, a Capture again button, and a capture picker that pages
+  the sandboxed frame back through older captures (restore/download stay in the History
+  panel). To search and to MCP a bookmark is its Markdown rendering — `HtmlMarkdown`
+  converts the whole captured body (headings, lists, links, tables, quotes, fenced
+  code; inlined images reduce to alt text) and `HtmlTextExtractor` stores it as the
+  version's text, the convention docx set — so `get_node` hands agents structured prose.
+  New: `POST /api/bookmarks`, `POST /api/bookmarks/{id}/capture`, MCP
   `bookmark_page`/`capture_bookmark`, and `text/html` served inline is CSP-sandboxed.
 - **Multimedia analysis** — optional, off unless `Gatherum__Analysis__Endpoint` names an
   OpenAI-compatible model you run. Still images are read (OCR), audio and video are
@@ -135,7 +141,7 @@ browser sessions — including against the built container).
   exercised against a postgres container, editor verified in-browser against the
   containerized app), compose.yaml, Podman Quadlets, `/healthz`, JSON console logs
   outside Development, migrations on startup with opt-out.
-- **Tests** — 222 passing: the Markdown dialect (infobox/figure/callout round trips,
+- **Tests** — 229 passing: the Markdown dialect (infobox/figure/callout round trips,
   wiki-link spellings, extension composition, derived chrome, red-link inking, in-app
   URL shapes) and the same dialect as read-only HTML (the aside and its card, a
   callout's tint, a wiki link's URL, a mention that keeps its look and loses its
