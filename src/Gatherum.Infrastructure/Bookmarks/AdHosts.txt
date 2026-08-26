@@ -2,6 +2,12 @@
 # document, and — in a rendered capture — never allowed to load at all. One entry
 # per line; an entry covers every host under it. Curated by hand, newest last in
 # each group: a capture should hold the page, not the auction that paid for it.
+#
+# This packaged list is the seed and the safety net, not the whole blocker: the
+# community list at Gatherum__Bookmarks__AdHostsUrl is fetched just in time and
+# unioned on top, and captures fall back to this alone when it cannot be had. Keep
+# it to the registrable domains of networks that matter — breadth is the fetched
+# list's job.
 
 # Google advertising and measurement
 doubleclick.net

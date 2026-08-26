@@ -198,7 +198,8 @@ that reason. If you publish the port more widely than that, set
 | `Gatherum__Analysis__TimeoutSeconds` | `900` | Ceiling on one analysis call |
 | `Gatherum__Analysis__FfmpegPath` | `ffmpeg` | How to invoke ffmpeg, which splits video into audio and frames |
 | `Gatherum__Bookmarks__BrowserPath` | *(empty; `/usr/bin/chromium` in the container)* | Chromium that renders a bookmarked page before capture. Empty looks in the usual Playwright places and, finding nothing, captures what the server serves instead |
-| `Gatherum__Bookmarks__BlockAds` | `true` | Keep ads and trackers out of captures: their hosts are refused before a rendered page's scripts run, and stripped from the snapshot either way. The list ships embedded — nothing is fetched to stay current |
+| `Gatherum__Bookmarks__BlockAds` | `true` | Keep ads and trackers out of captures: their hosts are refused before a rendered page's scripts run, and stripped from the snapshot either way |
+| `Gatherum__Bookmarks__AdHostsUrl` | *(StevenBlack hosts)* | Community blocklist fetched just in time for a capture and kept for a day; hosts-file, bare-domain and `\|\|host^` formats all work. Empty blocks with the small packaged list alone, which is also the fallback when the fetch fails |
 | `Gatherum__Embedding__Endpoint` | *(empty)* | Base URL of an OpenAI-compatible embeddings API (e.g. `http://localhost:8090/v1`); set, it replaces the packaged model |
 | `Gatherum__Embedding__Model` | *(empty)* | The embedding model at that endpoint |
 | `Gatherum__Embedding__Local` | `true` | Use the packaged MiniLM when no endpoint is set; `false` with no endpoint leaves search full-text only |

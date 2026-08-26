@@ -6,19 +6,21 @@ namespace Gatherum.Infrastructure.Bookmarks;
 /// before their scripts can draw, and the snapshot strips what points at them so the
 /// file carries no live wires back to the auction it was saved away from.
 ///
-/// The list ships embedded, a curated set of the networks that matter rather than a
-/// live filter list: nothing in Gatherum fetches the web unasked, and a blocklist
-/// fetched on a schedule would be the first exception. An entry blocks its whole
-/// subtree — <c>doubleclick.net</c> is also <c>ad.doubleclick.net</c> — and
-/// <see cref="Match"/> says which entry claimed a host, so a capture can spare the one
-/// case where an "ad host" is the content: somebody bookmarked the ad company.</summary>
+/// Instances of this are immutable sets of hosts; where a list *comes from* is
+/// <see cref="AdBlocklistProvider"/>'s question — normally a community-maintained list
+/// fetched just in time for a capture, with the small packaged list as the seed and the
+/// fallback. An entry blocks its whole subtree — <c>doubleclick.net</c> is also
+/// <c>ad.doubleclick.net</c> — and <see cref="Match"/> says which entry claimed a host,
+/// so a capture can spare the one case where an "ad host" is the content: somebody
+/// bookmarked the ad company.</summary>
 public class AdBlocklist
 {
     public static readonly AdBlocklist None = new([]);
 
     private readonly HashSet<string> hosts;
 
-    /// <summary>One entry per line; blank lines and <c>#</c> comments pass through.</summary>
+    /// <summary>One host per entry, taken as given (minus <c>#</c> comments). For text
+    /// in the wild, use <see cref="Parse"/>, which knows the formats lists come in.</summary>
     public AdBlocklist(IEnumerable<string> lines) =>
         hosts = lines
             .Select(line => line.Split('#')[0].Trim().ToLowerInvariant())
@@ -27,7 +29,50 @@ public class AdBlocklist
 
     public bool IsEmpty => hosts.Count == 0;
 
-    /// <summary>The packaged list, embedded beside this class.</summary>
+    /// <summary>Reads the formats community lists actually come in: a hosts file
+    /// (<c>0.0.0.0 host</c>), bare domains, wildcard domains (<c>*.host</c>), and
+    /// Adblock-style host rules (<c>||host^</c>) — so the source URL can point at any
+    /// of the usual lists. Anything fancier (exception rules, path filters, cosmetic
+    /// selectors) is beyond a host blocker and skipped, as are the <c>localhost</c>
+    /// entries hosts files carry, which is what requiring a dot quietly does.</summary>
+    public static AdBlocklist Parse(IEnumerable<string> lines) =>
+        new(lines.Select(ParseLine).Where(host => host.Contains('.')));
+
+    private static string ParseLine(string line)
+    {
+        var hash = line.IndexOf('#');
+        if (hash >= 0)
+        {
+            // A '#' mid-token is Adblock cosmetic syntax ("example.com##.ad"), and a
+            // cosmetic rule read as a host would block the very site it decorates; only
+            // a '#' opening the line or following whitespace is a comment.
+            if (hash > 0 && !char.IsWhiteSpace(line[hash - 1]))
+                return "";
+            line = line[..hash];
+        }
+        var text = line.Trim();
+        if (text.StartsWith('!') || text.StartsWith("@@", StringComparison.Ordinal))
+            return "";
+        if (text.StartsWith("||", StringComparison.Ordinal))
+        {
+            var end = text.IndexOfAny(['^', '$', '/']);
+            text = end < 0 ? text[2..] : text[2..end];
+        }
+        var parts = text.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries);
+        text = parts.Length switch
+        {
+            1 => parts[0],
+            2 when parts[0] is "0.0.0.0" or "127.0.0.1" or "::1" or "::" => parts[1],
+            _ => "",
+        };
+        if (text.StartsWith("*.", StringComparison.Ordinal))
+            text = text[2..];
+        return text.Contains('*') || text.Contains('/') ? "" : text;
+    }
+
+    /// <summary>The packaged list, embedded beside this class — the seed a fresh
+    /// instance blocks with until the community list has been fetched, and the fallback
+    /// when it cannot be.</summary>
     public static AdBlocklist Packaged()
     {
         using var stream = typeof(AdBlocklist).Assembly.GetManifestResourceStream(
@@ -40,22 +85,29 @@ public class AdBlocklist
         return new AdBlocklist(lines);
     }
 
-    /// <summary>The entry a host falls under — itself or a parent domain — or null when
-    /// the list has nothing to say about it. "notdoubleclick.net" matches nothing:
-    /// containment is by label, never by substring.</summary>
+    /// <summary>This list and another as one. The packaged registrable domains ride
+    /// along under a fetched list of exact hosts, so an update never narrows what is
+    /// blocked — and the broad entry is then what <see cref="Match"/> answers with,
+    /// which is what keeps the first-party exemption whole when a community list names
+    /// a site's subdomains one by one.</summary>
+    public AdBlocklist Union(AdBlocklist other) => new(hosts.Concat(other.hosts));
+
+    /// <summary>The most general entry a host falls under — a parent domain over the
+    /// host itself — or null when the list has nothing to say about it.
+    /// "notdoubleclick.net" matches nothing: containment is by label, never by
+    /// substring. Most general on purpose: two hosts of one outfit answer with the same
+    /// entry even when the list also names them exactly, and equal answers are how the
+    /// first-party exemption recognizes a page's own things.</summary>
     public string? Match(string host)
     {
         if (hosts.Count == 0)
             return null;
-        var candidate = host.ToLowerInvariant().TrimEnd('.');
-        while (candidate.Length > 0)
+        var labels = host.ToLowerInvariant().TrimEnd('.').Split('.');
+        for (var i = labels.Length - 1; i >= 0; i--)
         {
-            if (hosts.Contains(candidate))
-                return candidate;
-            var dot = candidate.IndexOf('.');
-            if (dot < 0)
-                return null;
-            candidate = candidate[(dot + 1)..];
+            var suffix = string.Join('.', labels[i..]);
+            if (hosts.Contains(suffix))
+                return suffix;
         }
         return null;
     }

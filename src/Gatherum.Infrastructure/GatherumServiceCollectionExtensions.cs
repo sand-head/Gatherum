@@ -79,14 +79,32 @@ public static class GatherumServiceCollectionExtensions
             AutomaticDecompression = System.Net.DecompressionMethods.All,
         });
 
+        // The blocklist's own client: a list fetch is not a page fetch, and a page's
+        // 30-second patience would be an absurd thing to spend on one.
+        services.AddHttpClient(AdBlocklistProvider.ClientName, client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(15);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd(
+                "Mozilla/5.0 (compatible; Gatherum/1.0)");
+        }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+        {
+            AutomaticDecompression = System.Net.DecompressionMethods.All,
+        });
+
         var bookmarks = configuration
             .GetSection($"{GatherumOptions.Section}:{nameof(GatherumOptions.Bookmarks)}")
             .Get<BookmarkOptions>() ?? new BookmarkOptions();
-        services.AddSingleton(bookmarks.BlockAds ? AdBlocklist.Packaged() : AdBlocklist.None);
+        services.AddSingleton(provider =>
+            !bookmarks.BlockAds ? new AdBlocklistProvider(AdBlocklist.None)
+            : bookmarks.AdHostsUrl.Length == 0 ? new AdBlocklistProvider(AdBlocklist.Packaged())
+            : new AdBlocklistProvider(bookmarks.AdHostsUrl,
+                provider.GetRequiredService<IHttpClientFactory>(),
+                provider.GetRequiredService<TimeProvider>(),
+                provider.GetRequiredService<ILogger<AdBlocklistProvider>>()));
         if (BrowserPageArchiver.ResolveBrowser(bookmarks.BrowserPath) is { } browser)
             services.AddScoped<IPageArchiver>(provider => new BrowserPageArchiver(browser,
                 provider.GetRequiredService<HttpPageArchiver>(),
-                provider.GetRequiredService<AdBlocklist>(),
+                provider.GetRequiredService<AdBlocklistProvider>(),
                 provider.GetRequiredService<TimeProvider>(),
                 provider.GetRequiredService<ILogger<BrowserPageArchiver>>()));
         else

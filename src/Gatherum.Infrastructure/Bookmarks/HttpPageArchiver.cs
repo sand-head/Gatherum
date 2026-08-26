@@ -15,7 +15,7 @@ namespace Gatherum.Infrastructure.Bookmarks;
 /// for assets overall. Blowing the page's own bounds fails the capture with a sentence
 /// for the person who pasted the URL; a failed or oversized asset just stays a link to
 /// the live web.</summary>
-public class HttpPageArchiver(HttpClient http, TimeProvider clock, AdBlocklist ads)
+public class HttpPageArchiver(HttpClient http, TimeProvider clock, AdBlocklistProvider ads)
     : IPageArchiver
 {
     private static readonly TimeSpan CaptureBudget = TimeSpan.FromSeconds(30);
@@ -82,7 +82,7 @@ public class HttpPageArchiver(HttpClient http, TimeProvider clock, AdBlocklist a
             if (fetched is not null)
                 purse -= fetched.Content.Length;
             return fetched;
-        }, clock.GetUtcNow(), ads, ct);
+        }, clock.GetUtcNow(), await ads.CurrentAsync(ct), ct);
 
         return new ArchivedPage(snapshot.Title, HtmlFileName(snapshot.Title, url),
             "text/html", snapshot.Content);

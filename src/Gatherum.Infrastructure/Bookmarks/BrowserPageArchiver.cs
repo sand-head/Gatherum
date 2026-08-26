@@ -24,7 +24,8 @@ namespace Gatherum.Infrastructure.Bookmarks;
 /// failure the browser alone caused. Only the site's own answer fails a capture: a 404
 /// is a 404 however it is fetched.</summary>
 public class BrowserPageArchiver(string executablePath, HttpPageArchiver fallback,
-    AdBlocklist ads, TimeProvider clock, ILogger<BrowserPageArchiver> logger) : IPageArchiver
+    AdBlocklistProvider ads, TimeProvider clock, ILogger<BrowserPageArchiver> logger)
+    : IPageArchiver
 {
     /// <summary>Roomier than the plain fetch's budget: a render pays for a browser
     /// launch, script execution, and the settle waits on top of the network.</summary>
@@ -102,6 +103,7 @@ public class BrowserPageArchiver(string executablePath, HttpPageArchiver fallbac
 
     private async Task<ArchivedPage> RenderAsync(Uri url, CancellationToken ct)
     {
+        var blocklist = await ads.CurrentAsync(ct);
         using var playwright = await Playwright.CreateAsync();
         await using var browser = await playwright.Chromium.LaunchAsync(new()
         {
@@ -126,7 +128,7 @@ public class BrowserPageArchiver(string executablePath, HttpPageArchiver fallbac
         var loaded = new ConcurrentQueue<IResponse>();
         var page = await context.NewPageAsync();
         page.Response += (_, response) => loaded.Enqueue(response);
-        await RefuseAdsAsync(page, url);
+        await RefuseAdsAsync(page, url, blocklist);
 
         IResponse? arrival;
         try
@@ -173,7 +175,7 @@ public class BrowserPageArchiver(string executablePath, HttpPageArchiver fallbac
                     return found;
                 }
                 return null;
-            }, clock.GetUtcNow(), ads, ct);
+            }, clock.GetUtcNow(), blocklist, ct);
 
         return new ArchivedPage(snapshot.Title,
             HttpPageArchiver.HtmlFileName(snapshot.Title, finalUrl), "text/html",
@@ -187,18 +189,18 @@ public class BrowserPageArchiver(string executablePath, HttpPageArchiver fallbac
     /// document is never refused, redirects included: the person asked for that page,
     /// wherever it lives — which is also the exemption for a page on a listed host,
     /// whose own resources load so the bookmark of the ad company is still a page.</summary>
-    private async Task RefuseAdsAsync(IPage page, Uri url)
+    private static async Task RefuseAdsAsync(IPage page, Uri url, AdBlocklist blocklist)
     {
-        if (ads.IsEmpty)
+        if (blocklist.IsEmpty)
             return;
-        var own = ads.Match(url.Host);
+        var own = blocklist.Match(url.Host);
         await page.RouteAsync("**/*", async route =>
         {
             var asked = route.Request.IsNavigationRequest
                 && route.Request.Frame == page.MainFrame;
             if (!asked
                 && Uri.TryCreate(route.Request.Url, UriKind.Absolute, out var target)
-                && ads.Match(target.Host) is { } entry && entry != own)
+                && blocklist.Match(target.Host) is { } entry && entry != own)
                 await route.AbortAsync();
             else
                 await route.ContinueAsync();

@@ -47,9 +47,9 @@ public sealed class BrowserPageArchiverTests : IDisposable
         var browser = BrowserPageArchiver.ResolveBrowser("");
         if (browser is null)
             return null;
-        ads ??= AdBlocklist.None;
-        var fallback = new HttpPageArchiver(new HttpClient(), TimeProvider.System, ads);
-        return new BrowserPageArchiver(browser, fallback, ads, TimeProvider.System,
+        var provider = new AdBlocklistProvider(ads ?? AdBlocklist.None);
+        var fallback = new HttpPageArchiver(new HttpClient(), TimeProvider.System, provider);
+        return new BrowserPageArchiver(browser, fallback, provider, TimeProvider.System,
             Microsoft.Extensions.Logging.Abstractions.NullLogger<BrowserPageArchiver>.Instance);
     }
 
