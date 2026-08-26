@@ -94,6 +94,7 @@
                 Upload file inside
                 <InputFile OnChange="e => Tree.UploadAsync(e, Node.Id)" multiple />
             </label>
+            <button @onclick="() => Tree.BeginBookmark(Node.Id)">Bookmark a page inside</button>
             <button @onclick="() => Tree.MoveBy(Node, -1)">Move up</button>
             <button @onclick="() => Tree.MoveBy(Node, +1)">Move down</button>
             <button @onclick="() => Tree.BeginMove(Node)">Move to…</button>

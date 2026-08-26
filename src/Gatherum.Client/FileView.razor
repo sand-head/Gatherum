@@ -6,6 +6,46 @@
     var contentUrl = $"/api/files/{NodeId}/content";
 
     <div class="file-view">
+        @if (file.SourceUrl is { } sourceUrl)
+        {
+            @* The bookmark's own bar: where it came from, which capture is on screen,
+               and the one gesture a bookmark invites — take it again. *@
+            <div class="bookmark-bar">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+                </svg>
+                <span class="bookmark-source">Saved from
+                    <a href="@sourceUrl" target="_blank" rel="noopener noreferrer">@sourceUrl</a>
+                </span>
+                @if (captures.Count > 1)
+                {
+                    <label class="capture-pick">
+                        Capture
+                        <select value="@ViewedCapture" @onchange="OnCaptureChosen">
+                            @foreach (var capture in captures)
+                            {
+                                <option value="@capture.Number">
+                                    @capture.UploadedAt.LocalDateTime.ToString("g")@(capture.Number == file.Version ? " — latest" : "")
+                                </option>
+                            }
+                        </select>
+                    </label>
+                }
+                <button class="primary" @onclick="CaptureAgainAsync" disabled="@capturing">
+                    @(capturing ? "Capturing…" : "Capture again")
+                </button>
+            </div>
+            @if (captureError is { Length: > 0 })
+            {
+                <p class="capture-error" role="alert">@captureError</p>
+            }
+            @if (ViewedCapture != file.Version)
+            {
+                <p class="capture-note">An older capture, as the page stood then — the
+                    History panel below can restore it, or pick the latest above.</p>
+            }
+        }
         <div class="file-preview">
             @if (file.MediaType.StartsWith("image/"))
             {
@@ -14,6 +54,16 @@
             else if (file.MediaType == "application/pdf")
             {
                 <iframe src="@contentUrl" title="@file.FileName"></iframe>
+            }
+            else if (file.MediaType == "text/html")
+            {
+                @* A bookmark's snapshot — or any saved page — reads as the page it was.
+                   Doubly inert: the capture had its scripts stripped, the response is
+                   served with a sandboxing policy, and the frame is sandboxed too.
+                   Pinned to a version so a fresh capture shows up (the bare content URL
+                   never changes) — and so the bar above can page through history. *@
+                <iframe class="snapshot" src="@($"{contentUrl}?version={ViewedCapture}")"
+                        title="@file.FileName" sandbox></iframe>
             }
             else if (file.MediaType.StartsWith("video/"))
             {
@@ -98,7 +148,17 @@
 
     private NodeInfo? node;
     private string description = "";
+    private bool capturing;
+    private string? captureError;
+    private IReadOnlyList<VersionInfo> captures = [];
+    private int? viewedCapture;
     private CancellationTokenSource? watching;
+
+    /// <summary>Which capture the frame shows: a chosen one, else the latest.</summary>
+    private int ViewedCapture => viewedCapture ?? node?.File?.Version ?? 0;
+
+    private void OnCaptureChosen(ChangeEventArgs e) =>
+        viewedCapture = int.TryParse(e.Value?.ToString(), out var number) ? number : null;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -116,6 +176,13 @@
     {
         node = await Data.GetNodeAsync(NodeId);
         description = node.File?.Description ?? "";
+        // A bookmark's history is its crawls; anything else's lives in the History
+        // panel alone.
+        captures = node.File?.SourceUrl is not null
+            ? (await Data.GetVersionsAsync(NodeId)).OrderByDescending(v => v.Number).ToList()
+            : [];
+        if (viewedCapture is { } chosen && captures.All(c => c.Number != chosen))
+            viewedCapture = null;
     }
 
     /// <summary>A transcript lands minutes after the upload it belongs to, on a worker
@@ -158,6 +225,28 @@
 
     private static string TranscriptLabel(string mediaType) =>
         mediaType.StartsWith("image/") ? "Text in the image" : "Transcript";
+
+    /// <summary>Fetches the bookmark's URL again; the capture lands as a new version,
+    /// so the one being read stays in history either way.</summary>
+    private async Task CaptureAgainAsync()
+    {
+        capturing = true;
+        captureError = null;
+        try
+        {
+            await Data.CaptureBookmarkAsync(NodeId);
+            viewedCapture = null;
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            captureError = ex.Message;
+        }
+        finally
+        {
+            capturing = false;
+        }
+    }
 
     private async Task SaveDescriptionAsync()
     {

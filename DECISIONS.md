@@ -966,3 +966,81 @@ Looked at and left: `RichHtmlOptions.HeadingAnchors` (Wikipedia-style heading id
 turn it on without going around the component — revisit when slopedit exposes it.
 `GetOutline()` duplicates what `PublishOutline` already walks, but Gatherum's walk
 skips asides' own headings (`Tag: null`), which the model's outline has no word for.
+
+## Bookmarks capture what the server serves, through a seam a browser could fill
+"Index the rendered page à la the Internet Archive" became a sixth abstraction seam:
+`IPageArchiver`, with `HttpPageArchiver` fetching what one polite HTTP request gets and
+`PageSnapshot` folding it into a single inert HTML file — scripts, frames and handlers
+stripped, stylesheets and images inlined under a byte purse, every remaining reference
+absolutized, the source URL and capture time stamped in a first-line comment. That is
+not what a browser paints for a script-rendered page, and the seam is the honest
+admission: a browser-driving archiver is the stated second implementation, slotting in
+without touching `BookmarkService`. The snapshot is one file so the acceptance test
+keeps its meaning — a bookmark on disk reads with `cat`, Gatherum or no Gatherum.
+
+Three judgment calls beside it. The fetch runs inside the request rather than on a
+worker: unlike analysis, the capture *is* the node's content, so there is nothing
+sensible to show until it exists — the dialog waits with a progress note, bounded at
+thirty seconds. The source URL lives on `FileBody` and in `meta.json` (and redundantly
+in the snapshot itself), so "capture again" survives losing the database like everything
+else. And nothing blocks fetching private addresses: the server sits on a homelab where
+bookmarking one's own dashboards is a first-class use, and every caller is one of the
+two authenticated users.
+
+## Stored HTML renders, and is therefore served sandboxed
+A bookmark's snapshot should read as the page it captured, so `text/html` nodes render
+in the file view instead of opening as source in the code editor — which also demoted
+HTML from "editable text" on the node page, a fair trade since editing a capture is not
+a thing. Serving stored markup inline on the app's origin is stored XSS by construction
+(upload was already such a door, before bookmarks widened it), so the content endpoint
+now sends `Content-Security-Policy: sandbox` for HTML and SVG, the preview iframe adds
+its own `sandbox`, and the capture had its scripts stripped at save — three fences,
+any one of which is sufficient, none of which is trusted alone.
+
+## The browser is the archiver, and the plain fetch is what it degrades to
+The owner wanted "Webpage, Complete": the page after its scripts have run, assets and
+all. So `BrowserPageArchiver` fills the seam the HTTP archiver left stated: Playwright
+drives the container's own Chromium (Debian's build, one apt layer for both
+architectures, `Gatherum__Bookmarks__BrowserPath` to point anywhere else), waits for
+network-idle within a bound, scrolls so lazy loading asks for its images, records every
+response off the wire, and hands the settled DOM to the same `PageSnapshot` transform —
+whose fetcher now answers from the recorded responses first, so the snapshot folds in
+the very bytes the page rendered with. `PageSnapshot` also learned to inline what CSS
+names — fonts and background images — and to drop `loading="lazy"`, since the scroll
+already happened.
+
+Deliberate departures from Chrome's version of the gesture. Scripts do not ride along:
+by capture time their output *is* the DOM being saved, replaying them against it
+rebuilds or blanks what they made, and the sandbox the snapshot is served under would
+refuse them anyway — completeness here means what the scripts did, not what they were.
+And the capture stays one file rather than a page-plus-folder, because a bookmark on
+disk should read with `cat`.
+
+Failure tilts toward keeping something: a URL serving a document, an instance with no
+browser (a bare `dotnet run`), and a browser that cannot load or finish a page all
+degrade to the plain HTTP capture with a logged reason; only the site's own answer — a
+404, a 500 — fails a bookmark, because it would fail either way. Chromium runs with its
+own sandbox off (`--no-sandbox`, `--disable-dev-shm-usage`): the rootless container is
+the sandbox, and Chromium's wants privileges it does not have. The browser is told
+about `HTTPS_PROXY`/`NO_PROXY` explicitly, since unlike `HttpClient` it does not honor
+them on its own.
+
+## A bookmark reads as Markdown, on the convention docx already set
+"Convert these webpages to Markdown for LLM processing over MCP" needed no new surface:
+docx had already established that a rich format's *extracted text* is its canonical
+Markdown rendering, and `get_node` already hands extracted text to agents. So
+`HtmlMarkdown` renders a captured page's whole body — headings, lists, links, tables,
+quotes, fenced code — and `HtmlTextExtractor` stores that as the version's text, which
+makes search index prose instead of tags and MCP serve Markdown without a tool being
+added. The whole body, deliberately: guessing at "main content" is the reader's
+judgment call, not an extractor's. Inlined images are the one loss — a snapshot carries
+them as data: URIs megabytes long, so they reduce to their alt text. Nothing escapes
+Markdown metacharacters in prose; the rendering is for reading and searching, not for
+round-tripping. Unlike docx, the rendering does not feed link resolution: a captured
+page's links are the web's, and resolving them as wiki titles would fabricate backlinks.
+
+Capture history needed no new storage either — captures were already versions. What it
+got is a face: the bookmark bar over the preview names the source, holds the Capture
+again button, and pages the sandboxed frame back through older captures via the version
+the content URL already accepted, an archive's calendar in one select. Restore and
+download stay the History panel's; the bar only decides which past the frame shows.

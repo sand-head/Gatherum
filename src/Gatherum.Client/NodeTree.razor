@@ -23,6 +23,11 @@
     }
 </div>
 
+@if (bookmarking)
+{
+    <BookmarkDialog ParentId="bookmarkParent" OnClose="() => bookmarking = false" />
+}
+
 @if (moving is { } movingNode)
 {
     <Modal Title="@($"Move “{movingNode.Title}”")" OnClose="() => moving = null">
@@ -47,6 +52,8 @@
 @code {
     private ElementReference dropZone;
     private TreeNodeInfo? moving;
+    private bool bookmarking;
+    private Guid? bookmarkParent;
     private string moveTargetId = "";
     private readonly HashSet<Guid> expanded = [];
     private IJSObjectReference? module;
@@ -76,6 +83,12 @@
     {
         if (!expanded.Remove(id))
             expanded.Add(id);
+    }
+
+    public void BeginBookmark(Guid? parentId)
+    {
+        bookmarkParent = parentId;
+        bookmarking = true;
     }
 
     public async Task CreatePageAsync(Guid? parentId)

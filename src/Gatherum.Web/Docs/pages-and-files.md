@@ -31,9 +31,45 @@ file moves on disk.
 | A page from a red link | Click a `[[wiki link]]` that resolves to nothing and accept the offer |
 | A file | Drag it onto the tree, use the picker, or `POST /api/files` |
 | A new version of a file | Re-upload onto the existing node |
+| A bookmark | **Bookmark a page** in the New menu, or `POST /api/bookmarks`, or the `bookmark_page` MCP tool |
 
 Uploads go anywhere in the tree, and the file keeps its name — the node's title starts
 as the filename and can be renamed independently afterwards.
+
+## Bookmarks
+
+A bookmark is a web page kept the way an archive keeps one, not the way a browser does:
+paste a URL and Gatherum captures the page **once, now**, and saves it as a file node.
+A headless browser loads the page and lets its scripts run and settle — what gets kept
+is the document as it stands afterwards, the page you actually saw, not the stub the
+server sent to build it from. The capture is one self-contained HTML file — the
+stylesheets, images and fonts the page rendered with folded in, every remaining link
+made absolute — whose first line records where and when it was taken. It is searchable
+by what the page said and by its address, and it still reads after the original
+changes, moves, or disappears.
+
+- The node's title is the page's own; the file lands wherever in the tree you asked.
+- The page renders inline on the node — sandboxed, so nothing in it runs — under a bar
+  naming where it was saved from, one click from the live page.
+- **Capture again** (the button on that bar, the `capture_bookmark` MCP tool, or
+  `POST /api/bookmarks/{id}/capture`) fetches the URL again and keeps the result as a
+  new version — and the bar's capture picker pages back through the older ones, each
+  rendered as the page stood then, like an archive's calendar of crawls. The History
+  panel below restores or downloads any of them.
+- A URL that serves a document rather than a page — a PDF, an image — is kept as that
+  document, source address and all.
+- To search — and to an agent reading it over MCP — a bookmark is its **Markdown
+  rendering**: headings, lists, links and tables as structured prose, the same
+  convention docx files follow, so a model processes the page without wading through
+  its markup.
+
+Nothing is fetched on a schedule and nothing is re-fetched behind your back: a capture
+happens when you ask, and that is the whole of it. The page's scripts run once, at
+capture time, and do not ride along in the file — their output is what the snapshot
+*is*, and stored markup that could execute is a page that could act as its reader. On
+an instance with no browser installed (a bare `dotnet run`, say — see
+[Configuration](/docs/configuration)), the capture degrades to what the server serves
+a plain fetch.
 
 ## Editing
 

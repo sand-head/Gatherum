@@ -4,6 +4,52 @@
     gap: 24px;
 }
 
+/* The bookmark's masthead: provenance on the left, history and the recapture
+   gesture on the right. */
+.bookmark-bar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px 14px;
+    padding: 10px 16px;
+    background: color-mix(in srgb, var(--surface-dim) 55%, transparent);
+    border: 1px solid var(--outline-dim);
+    border-radius: var(--radius);
+
+    & svg { flex-shrink: 0; color: var(--on-surface-dim); }
+
+    & .bookmark-source {
+        flex: 1;
+        min-width: 200px;
+        overflow-wrap: anywhere;
+        color: var(--on-surface-dim);
+
+        & a { margin-left: 4px; }
+    }
+
+    & .capture-pick {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 13px;
+        color: var(--on-surface-dim);
+    }
+}
+
+.capture-error {
+    margin: -12px 0 0;
+    color: var(--danger);
+    font-size: 13px;
+    overflow-wrap: anywhere;
+}
+
+.capture-note {
+    margin: -12px 0 0;
+    color: var(--on-surface-dim);
+    font-size: 13px;
+    font-style: italic;
+}
+
 .file-preview {
     & img, & video {
         max-width: 100%;
@@ -17,6 +63,10 @@
         border: 1px solid var(--outline-dim);
         border-radius: var(--radius);
     }
+
+    /* A snapshot is a web page and expects a light canvas; the frame supplies one so a
+       page that never states a background stays readable in dark mode. */
+    & iframe.snapshot { background: #fff; }
 
     & audio { width: 100%; }
 }

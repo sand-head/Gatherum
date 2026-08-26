@@ -47,6 +47,14 @@ public interface IAppData
     Task<IReadOnlyList<TreeNodeInfo>> GetTreeAsync();
     Task<Guid> CreatePageAsync(Guid? parentId, string title);
     Task<Guid> UploadFileAsync(Guid? parentId, string fileName, string contentType, Stream content);
+
+    /// <summary>Bookmark a web page: the URL is fetched now and kept as a snapshot
+    /// file node. Slow by nature — it is somebody else's server — so callers show
+    /// progress rather than assuming this returns like a local write.</summary>
+    Task<Guid> BookmarkAsync(Guid? parentId, string url);
+
+    /// <summary>Fetch a bookmark's URL again; what comes back is a new version.</summary>
+    Task CaptureBookmarkAsync(Guid nodeId);
     Task MoveAsync(Guid nodeId, Guid? newParentId, int? position = null);
     Task RenameAsync(Guid nodeId, string title);
     Task DeleteAsync(Guid nodeId);
@@ -98,8 +106,8 @@ public record PersonInfo(Guid Id, string DisplayName, string Username);
 public record NodeInfo(Guid Id, string Title, string Access,
     IReadOnlyList<CategoryRef> Categories, FileFacts? File);
 public record FileFacts(string FileName, string MediaType, long SizeBytes, int Version,
-    string Sha256, string Description, string ExtractedText, string Transcript, string Summary,
-    string Analysis, string? AnalysisError)
+    string Sha256, string Description, string? SourceUrl, string ExtractedText,
+    string Transcript, string Summary, string Analysis, string? AnalysisError)
 {
     public bool AnalysisPending => Analysis == "Pending";
     public bool AnalysisFailed => Analysis == "Failed";
@@ -211,6 +219,16 @@ public sealed class HttpAppData(HttpClient http) : IAppData
         response.EnsureSuccessStatusCode();
         return (await response.Content.ReadFromJsonAsync<NodeInfo>())!.Id;
     }
+
+    public async Task<Guid> BookmarkAsync(Guid? parentId, string url)
+    {
+        var response = await http.PostAsJsonAsync("/api/bookmarks", new { url, parentId });
+        await EnsureAsync(response);
+        return (await response.Content.ReadFromJsonAsync<NodeInfo>())!.Id;
+    }
+
+    public async Task CaptureBookmarkAsync(Guid nodeId) =>
+        await EnsureAsync(await http.PostAsync($"/api/bookmarks/{nodeId}/capture", null));
 
     public async Task MoveAsync(Guid nodeId, Guid? newParentId, int? position = null) =>
         Ensure(await http.PostAsJsonAsync($"/api/nodes/{nodeId}/move", new { newParentId, position }));

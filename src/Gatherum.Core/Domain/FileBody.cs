@@ -5,6 +5,13 @@ public class FileBody
     public Guid NodeId { get; init; }
     public Node? Node { get; init; }
     public string Description { get; set; } = "";
+
+    /// <summary>The address a bookmark was captured from, and empty for everything that
+    /// was never a bookmark. This is what "capture again" re-fetches, so it survives the
+    /// database in the sidecar — and the snapshot itself repeats it in a comment, for
+    /// whoever reads the file with no Gatherum running.</summary>
+    public string SourceUrl { get; set; } = "";
+
     public List<FileVersion> Versions { get; init; } = [];
 
     public FileVersion Current => Versions.MaxBy(v => v.Number)

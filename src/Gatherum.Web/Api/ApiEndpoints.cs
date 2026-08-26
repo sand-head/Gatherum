@@ -265,6 +265,22 @@ public static class ApiEndpoints
             return Results.Created($"/api/nodes/{node.Id}", NodeDto.From(created));
         }).DisableAntiforgery();
 
+        api.MapPost("/bookmarks", async (BookmarkService bookmarks, NodeService nodes,
+            HttpContext http, BookmarkRequest request) =>
+        {
+            var node = await bookmarks.SaveAsync(http.User.GetUserId(), request.ParentId,
+                request.Url);
+            var created = await nodes.GetWithBodyAsync(http.User.GetUserId(), node.Id);
+            return Results.Created($"/api/nodes/{node.Id}", NodeDto.From(created));
+        });
+
+        api.MapPost("/bookmarks/{id:guid}/capture", async (BookmarkService bookmarks,
+            NodeService nodes, HttpContext http, Guid id) =>
+        {
+            await bookmarks.CaptureAgainAsync(http.User.GetUserId(), id);
+            return Results.Ok(NodeDto.From(await nodes.GetWithBodyAsync(http.User.GetUserId(), id)));
+        });
+
         api.MapPost("/files/{id:guid}/versions", async (FileService files, NodeService nodes,
             HttpContext http, Guid id, IFormFile file) =>
         {
@@ -279,6 +295,12 @@ public static class ApiEndpoints
             Guid id, int? version) =>
         {
             var content = await files.OpenContentAsync(http.User.GetUserIdOrNull(), id, version);
+            // Stored markup served inline on the app's own origin would run as whoever
+            // opened it. Sandboxing the response keeps a bookmark snapshot — or any
+            // uploaded HTML or SVG — a document rather than a program, both in the file
+            // view's frame and opened directly.
+            if (content.MediaType is MediaTypes.Html or "image/svg+xml")
+                http.Response.Headers.ContentSecurityPolicy = "sandbox";
             return Results.Stream(content.Stream, content.MediaType,
                 enableRangeProcessing: true);
         }).AllowAnonymous().RequireRateLimiting(AnonymousRateLimits.Read);

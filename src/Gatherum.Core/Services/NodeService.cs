@@ -321,6 +321,10 @@ public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeP
         var current = file.Current;
         node.SearchText = string.Join('\n', categories, current.FileName, file.Description,
             current.ExtractedText, current.Transcript, current.Summary);
+        // Appended rather than joined in, so every node that is not a bookmark keeps
+        // byte-identical search text — and its embeddings — across this feature existing.
+        if (file.SourceUrl.Length > 0)
+            node.SearchText += '\n' + file.SourceUrl;
     }
 
     public async Task ReplaceLinksAsync(Node node, IReadOnlySet<Guid> targetIds, CancellationToken ct)
