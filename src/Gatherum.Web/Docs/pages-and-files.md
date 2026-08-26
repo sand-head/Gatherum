@@ -88,8 +88,10 @@ Pages, uploaded `.docx` documents, and any text file open in the editor.
 - **Everything else** gets a preview: images, PDF, video and audio play inline, and an
   `.epub` opens in a paginated reader — the chapter flows into book-like pages turned by
   the arrow keys, the page edges, or a scroll, with the book's own chapter list in a bar
-  above and its internal links still going where they point; anything else offers a
-  download.
+  above and its internal links still going where they point. The reader keeps your
+  place: reopen the book on any device you're signed in on and it opens where you left
+  off — each reader keeps their own place, and a visitor on a public book is not
+  remembered. Anything else offers a download.
 
 Editing autosaves. Presence shows who else has the document open, and if someone saved
 while you were typing the editor says so — your next save makes a new version and theirs

@@ -1308,3 +1308,27 @@ because its entries are registrable domains, `Match` answering with the *most ge
 entry keeps the first-party exemption whole when a community list names one outfit's
 subdomains host by host. A fetch failure degrades to blocking less, never to failing
 the capture that wanted the list.
+
+## The EPUB pager is a second script, served rather than shipped
+"No JavaScript beyond `wwwroot/js/gatherum.js`" met a page that has no Blazor to lean
+on: an EPUB chapter renders in a frame sandboxed to an opaque origin (the same
+inertness a bookmark snapshot gets), and turning pages inside that frame is something
+only a script in the document can do. So `EpubChapterHtml` injects one pager script
+into every chapter it renders, and the response's `Content-Security-Policy` admits
+exactly that script by SHA-256 hash — the book's own scripts are stripped, and one that
+slipped past stripping would still not run. The interop file grew a `message` listener
+because a sandboxed frame's only voice toward the page hosting it is `postMessage`
+(cross-chapter links, reading progress), which Blazor cannot hear natively.
+
+## Reading positions live only in the database
+"Nothing may live only in a table" is about content: everything the directories can
+say must be rebuildable from them. A reading position is the opposite kind of thing —
+per-reader, per-node ephemera that no file could carry (the storage root is browsed,
+rsynced, and shared; a sidecar churning on every page turn would be backup noise, and
+one file per reader pair would put one user's state under the other's root). So
+`ReadingPositions` joins `Users`, `ApiKeys`, and the Data Protection keys in the
+database-only column: not derived from the directories, cascade-deleted with the node
+and the user, and losing one costs exactly a page number. Saving requires only seeing
+the node — a ribbon is the reader's own, so no editing right is asked — and anonymous
+readers are never remembered: the position write is an authenticated endpoint like
+every other write.

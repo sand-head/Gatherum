@@ -65,6 +65,24 @@ public sealed class EpubReaderBrowserTests
 
             // And the first paragraph is on the first page, not scrolled off somewhere.
             Assert.True(await page.IsVisibleAsync("text=Paragraph 1,"));
+
+            // Every turn reports how far through the chapter the reader is — the
+            // message the hosting page turns into the position the server remembers.
+            await page.EvaluateAsync(
+                "() => { window.__progress = null; addEventListener('message', e => " +
+                "{ if (typeof e.data?.gatherumEpubProgress === 'number') " +
+                "window.__progress = e.data.gatherumEpubProgress; }); }");
+            await page.ClickAsync("#epub-next");
+            await page.WaitForFunctionAsync("() => typeof window.__progress === 'number'");
+
+            // A saved fraction arrives as a fragment and reopens the chapter there:
+            // #at=1 is the last page. (The reload is what a fresh visit is; a bare
+            // hash change would be a same-document navigation the pager never sees.)
+            await page.GotoAsync("file://" + path + "#at=1");
+            await page.ReloadAsync();
+            await page.WaitForFunctionAsync(
+                "() => { const t = document.getElementById('epub-page').textContent;" +
+                " const [now, all] = t.split(' / '); return now === all && +all > 1; }");
         }
         finally
         {

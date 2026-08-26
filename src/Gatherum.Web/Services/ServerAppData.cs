@@ -272,8 +272,16 @@ public sealed class ServerAppData(
         await using (content.Stream)
         {
             using var book = await EpubBook.OpenAsync(content.Stream);
-            return new EpubInfo(book.Title, book.Chapters.Select(c => c.Title).ToList());
+            var position = await ops.Files(s => s.GetReadingPositionAsync(userId, nodeId));
+            return new EpubInfo(book.Title, book.Chapters.Select(c => c.Title).ToList(),
+                position is null ? null : new EpubPosition(position.Chapter, position.Progress));
         }
+    }
+
+    public async Task SaveEpubPositionAsync(Guid nodeId, int chapter, double progress)
+    {
+        var userId = await UserIdAsync();
+        await ops.Files(s => s.SaveReadingPositionAsync(userId, nodeId, chapter, progress));
     }
 
     public async Task<IReadOnlyList<VersionInfo>> GetVersionsAsync(Guid nodeId)

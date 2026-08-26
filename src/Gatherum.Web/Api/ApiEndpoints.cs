@@ -307,8 +307,19 @@ public static class ApiEndpoints
             if (!IsEpub(content))
                 return Results.NotFound();
             using var book = await EpubBook.OpenAsync(stream);
-            return Results.Ok(EpubDto.From(book));
+            var position = await files.GetReadingPositionAsync(http.User.GetUserIdOrNull(), id);
+            return Results.Ok(EpubDto.From(book, position));
         }).AllowAnonymous().RequireRateLimiting(AnonymousRateLimits.Read);
+
+        // The ribbon moves as the reader reads. A write, so never anonymous: a
+        // stranger on a public book reads without being remembered.
+        api.MapPut("/files/{id:guid}/epub/position", async (FileService files,
+            HttpContext http, Guid id, EpubPositionRequest request) =>
+        {
+            await files.SaveReadingPositionAsync(http.User.GetUserId(), id,
+                request.Chapter, request.Progress);
+            return Results.NoContent();
+        });
 
         // One chapter, rendered for the reader's sandboxed frame: self-contained,
         // inert but for the pager the policy admits by hash, paginated by the chrome

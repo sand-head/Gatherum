@@ -36,7 +36,7 @@ else if (book is { } epub)
         @* Sandboxed like a bookmark snapshot, plus the one concession the pager
            needs: scripts run, but as an opaque origin the response's policy has
            already narrowed to the pager itself. *@
-        <iframe @ref="frame" class="epub-frame" src="@($"/api/files/{NodeId}/epub/{chapter}")"
+        <iframe @ref="frame" class="epub-frame" src="@FrameSrc"
                 title="@(epub.Title ?? "Book")" sandbox="allow-scripts"></iframe>
     </div>
 }
@@ -52,15 +52,35 @@ else if (book is { } epub)
     private DotNetObjectReference<EpubView>? self;
     private Guid loaded;
 
+    // The ribbon: how far through the chapter the pager last said the reader is,
+    // saved after a quiet moment — a page turn is not worth a request each.
+    private double progress;
+    private bool dirty;
+    private bool remember = true;
+    private System.Threading.Timer? saveDebounce;
+    private string restoreAt = "";
+
+    /// <summary>The chapter's URL, carrying the saved fraction as a fragment on the
+    /// first opening only — the pager cashes it in once it knows its page count.</summary>
+    private string FrameSrc => $"/api/files/{NodeId}/epub/{chapter}{restoreAt}";
+
     protected override async Task OnParametersSetAsync()
     {
         if (loaded == NodeId)
             return;
         loaded = NodeId;
         chapter = 0;
+        restoreAt = "";
         try
         {
             book = await Data.GetEpubAsync(NodeId);
+            if (book.Position is { } position)
+            {
+                chapter = Math.Clamp(position.Chapter, 0, book.Chapters.Count - 1);
+                if (position.Progress > 0.0005)
+                    restoreAt = "#at=" + position.Progress.ToString("0.####",
+                        System.Globalization.CultureInfo.InvariantCulture);
+            }
         }
         catch
         {
@@ -86,10 +106,30 @@ else if (book is { } epub)
         StateHasChanged();
     });
 
+    /// <summary>The pager's report of how far through the chapter the reader is —
+    /// after every page turn, and once when a chapter lands.</summary>
+    [JSInvokable]
+    public void OnProgress(double fraction)
+    {
+        progress = fraction;
+        dirty = true;
+        QueueSave();
+    }
+
     private void Open(int index)
     {
-        if (book is { } epub)
-            chapter = Math.Clamp(index, 0, epub.Chapters.Count - 1);
+        if (book is not { } epub)
+            return;
+        var target = Math.Clamp(index, 0, epub.Chapters.Count - 1);
+        if (target == chapter)
+            return;
+        chapter = target;
+        // The fragment belonged to the chapter that was restored; a fresh chapter
+        // starts at its first page.
+        restoreAt = "";
+        progress = 0;
+        dirty = true;
+        QueueSave();
     }
 
     private void OnChapterChosen(ChangeEventArgs e)
@@ -101,8 +141,34 @@ else if (book is { } epub)
     private static string ChapterName(EpubInfo epub, int index) =>
         epub.Chapters[index] ?? $"Chapter {index + 1}";
 
+    private void QueueSave()
+    {
+        saveDebounce?.Dispose();
+        saveDebounce = new System.Threading.Timer(_ => _ = SaveAsync(), null,
+            1500, Timeout.Infinite);
+    }
+
+    private async Task SaveAsync()
+    {
+        if (!remember || !dirty)
+            return;
+        dirty = false;
+        try
+        {
+            await Data.SaveEpubPositionAsync(NodeId, chapter, progress);
+        }
+        catch
+        {
+            // A reader the instance cannot remember — a stranger on a public book —
+            // gets a refusal once and is not asked about again.
+            remember = false;
+        }
+    }
+
     public async ValueTask DisposeAsync()
     {
+        saveDebounce?.Dispose();
+        await SaveAsync();
         self?.Dispose();
         if (module is null)
             return;

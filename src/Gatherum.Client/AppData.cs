@@ -77,8 +77,13 @@ public interface IAppData
 
     /// <summary>The reader's map of an EPUB node: the book's own title and its chapters
     /// in reading order, named the way its table of contents names them — null where it
-    /// names nothing.</summary>
+    /// names nothing — and where this reader left off, if they are signed in and ever
+    /// stopped anywhere.</summary>
     Task<EpubInfo> GetEpubAsync(Guid nodeId);
+
+    /// <summary>Remembers where the reader is in a book, so coming back — on any
+    /// device — reopens it there.</summary>
+    Task SaveEpubPositionAsync(Guid nodeId, int chapter, double progress);
     Task<string> GetVersionTextAsync(Guid nodeId, int number);
     Task RestoreVersionAsync(Guid nodeId, int number);
     Task UploadVersionAsync(Guid nodeId, string fileName, string contentType, Stream content);
@@ -114,7 +119,10 @@ public record FileFacts(string FileName, string MediaType, long SizeBytes, int V
 }
 public record VersionInfo(int Number, string FileName, string MediaType, long SizeBytes,
     DateTimeOffset UploadedAt, bool IsText);
-public record EpubInfo(string? Title, IReadOnlyList<string?> Chapters);
+public record EpubInfo(string? Title, IReadOnlyList<string?> Chapters,
+    EpubPosition? Position);
+/// <summary>A ribbon in a book: the chapter, and how far through it (0..1).</summary>
+public record EpubPosition(int Chapter, double Progress);
 /// <summary>A category as a node wears it: the id is the page it is, the name is what
 /// the chip says.</summary>
 public record CategoryRef(Guid Id, string Name);
@@ -283,6 +291,10 @@ public sealed class HttpAppData(HttpClient http) : IAppData
 
     public async Task<EpubInfo> GetEpubAsync(Guid nodeId) =>
         (await http.GetFromJsonAsync<EpubInfo>($"/api/files/{nodeId}/epub"))!;
+
+    public async Task SaveEpubPositionAsync(Guid nodeId, int chapter, double progress) =>
+        (await http.PutAsJsonAsync($"/api/files/{nodeId}/epub/position",
+            new { chapter, progress })).EnsureSuccessStatusCode();
 
     public async Task<IReadOnlyList<VersionInfo>> GetVersionsAsync(Guid nodeId) =>
         await http.GetFromJsonAsync<List<VersionInfo>>($"/api/nodes/{nodeId}/versions") ?? [];

@@ -32,9 +32,14 @@ export function registerEpubReader(frame, dotnet) {
   if (!frame) return;
 
   epubListener = (e) => {
+    if (e.source !== frame.contentWindow) return;
     const chapter = e.data?.gatherumEpubChapter;
-    if (e.source === frame.contentWindow && Number.isInteger(chapter))
-      dotnet.invokeMethodAsync('OnChapterLinked', chapter);
+    if (Number.isInteger(chapter)) dotnet.invokeMethodAsync('OnChapterLinked', chapter);
+    // The pager reports how far through the chapter the reader is; the component
+    // turns that into the position the server remembers.
+    const progress = e.data?.gatherumEpubProgress;
+    if (typeof progress === 'number' && Number.isFinite(progress))
+      dotnet.invokeMethodAsync('OnProgress', progress);
   };
   addEventListener('message', epubListener);
 }

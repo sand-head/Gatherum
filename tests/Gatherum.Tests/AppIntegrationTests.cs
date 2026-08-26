@@ -716,6 +716,37 @@ public class AppIntegrationTests(PostgresFixture postgres) : IAsyncLifetime
             (await client.GetAsync($"/api/files/{pageId}/epub")).StatusCode);
     }
 
+    [Fact]
+    public async Task A_reading_position_is_remembered_for_the_reader_and_nobody_else()
+    {
+        using var upload = new MultipartFormDataContent();
+        var part = new ByteArrayContent(EpubFixtures.TwoChapterBook());
+        part.Headers.ContentType =
+            new System.Net.Http.Headers.MediaTypeHeaderValue("application/epub+zip");
+        upload.Add(part, "file", "thermals.epub");
+        var id = (await (await client.PostAsync("/api/files", upload))
+            .Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+
+        // Nothing remembered yet; then the ribbon is placed and read back.
+        var manifest = await client.GetFromJsonAsync<JsonElement>($"/api/files/{id}/epub");
+        Assert.Equal(JsonValueKind.Null, manifest.GetProperty("position").ValueKind);
+        var put = await client.PutAsJsonAsync($"/api/files/{id}/epub/position",
+            new { chapter = 1, progress = 0.5 });
+        Assert.Equal(HttpStatusCode.NoContent, put.StatusCode);
+        manifest = await client.GetFromJsonAsync<JsonElement>($"/api/files/{id}/epub");
+        Assert.Equal(1, manifest.GetProperty("position").GetProperty("chapter").GetInt32());
+        Assert.Equal(0.5, manifest.GetProperty("position").GetProperty("progress").GetDouble());
+
+        // A stranger on the published book reads without being remembered: the
+        // manifest carries no ribbon for them, and placing one is refused.
+        await client.PostAsJsonAsync($"/api/nodes/{id}/access", new { access = "Public" });
+        using var anonymous = factory.CreateClient();
+        var strangers = await anonymous.GetFromJsonAsync<JsonElement>($"/api/files/{id}/epub");
+        Assert.Equal(JsonValueKind.Null, strangers.GetProperty("position").ValueKind);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.PutAsJsonAsync(
+            $"/api/files/{id}/epub/position", new { chapter = 0, progress = 0.1 })).StatusCode);
+    }
+
     /// <summary>What EmbeddingWorker's sweep would do, driven on demand so the test does
     /// not wait out an interval.</summary>
     private async Task EmbedEverythingAsync()

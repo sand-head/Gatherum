@@ -276,13 +276,21 @@ public static class EpubChapterHtml
             page = Math.max(0, Math.min(n, pages - 1));
             flow.style.transform = 'translateX(' + (-page * step) + 'px)';
             label.textContent = (page + 1) + ' / ' + pages;
+            parent.postMessage({ gatherumEpubProgress: pages > 1 ? page / (pages - 1) : 0 }, '*');
           };
+          // Where the reader left off arrives as a fragment — pages renumber with
+          // every viewport, so it is a fraction, cashed in once the count is known.
+          let restore = parseFloat((location.hash.match(/^#at=([0-9.]+)$/) || [])[1]);
           const layout = () => {
             const width = flow.clientWidth;
             const gap = parseFloat(getComputedStyle(flow).columnGap) || 0;
             flow.style.columnWidth = width + 'px';
             step = width + gap;
             pages = Math.max(1, Math.round((flow.scrollWidth + gap) / step));
+            if (Number.isFinite(restore)) {
+              page = Math.round(Math.min(restore, 1) * (pages - 1));
+              restore = NaN;
+            }
             show(page);
           };
 
