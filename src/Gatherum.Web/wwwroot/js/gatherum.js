@@ -44,6 +44,30 @@ export function registerEpubReader(frame, dotnet) {
   addEventListener('message', epubListener);
 }
 
+// An anonymous reader's ribbon. A signed-in reader's place lives on the server — any
+// device, either user — but a visitor on a public book is deliberately never
+// remembered there (no write is anonymous), so their place lives in the one place
+// that is theirs alone: their own browser. Guarded, because storage can be blocked
+// entirely — a browser that refuses to remember was asked not to.
+export function readEpubPosition(nodeId) {
+  try {
+    const stored = JSON.parse(localStorage.getItem('gatherum-epub-' + nodeId));
+    return Number.isInteger(stored?.chapter) && typeof stored?.progress === 'number'
+      ? stored
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveEpubPosition(nodeId, chapter, progress) {
+  try {
+    localStorage.setItem('gatherum-epub-' + nodeId, JSON.stringify({ chapter, progress }));
+  } catch {
+    // Nothing to do: the reader finds their own page, like a book with no ribbon.
+  }
+}
+
 export function initDropZone(element, dotnet) {
   const stop = (e) => { e.preventDefault(); e.stopPropagation(); };
   ['dragenter', 'dragover'].forEach((name) =>

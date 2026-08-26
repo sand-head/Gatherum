@@ -57,6 +57,7 @@ else if (book is { } epub)
     private double progress;
     private bool dirty;
     private bool remember = true;
+    private bool localChecked;
     private System.Threading.Timer? saveDebounce;
     private string restoreAt = "";
 
@@ -71,15 +72,14 @@ else if (book is { } epub)
         loaded = NodeId;
         chapter = 0;
         restoreAt = "";
+        localChecked = false;
         try
         {
             book = await Data.GetEpubAsync(NodeId);
             if (book.Position is { } position)
             {
-                chapter = Math.Clamp(position.Chapter, 0, book.Chapters.Count - 1);
-                if (position.Progress > 0.0005)
-                    restoreAt = "#at=" + position.Progress.ToString("0.####",
-                        System.Globalization.CultureInfo.InvariantCulture);
+                localChecked = true;
+                Restore(position);
             }
         }
         catch
@@ -97,6 +97,30 @@ else if (book is { } epub)
         module ??= await Js.InvokeAsync<IJSObjectReference>("import", "./js/gatherum.js");
         self ??= DotNetObjectReference.Create(this);
         await module.InvokeVoidAsync("registerEpubReader", frame, self);
+
+        // The server had no ribbon for this reader — a stranger on a public book, or
+        // simply a book never opened — so ask the one place a stranger's ribbon can
+        // be: this browser. Only here, after a render, because the storage is JS.
+        if (!localChecked)
+        {
+            localChecked = true;
+            var stored = await module.InvokeAsync<EpubPosition?>("readEpubPosition", NodeId);
+            if (stored is { } local && (local.Chapter != 0 || local.Progress > 0.0005))
+            {
+                Restore(local);
+                StateHasChanged();
+            }
+        }
+    }
+
+    private void Restore(EpubPosition position)
+    {
+        if (book is not { } epub)
+            return;
+        chapter = Math.Clamp(position.Chapter, 0, epub.Chapters.Count - 1);
+        if (position.Progress > 0.0005)
+            restoreAt = "#at=" + position.Progress.ToString("0.####",
+                System.Globalization.CultureInfo.InvariantCulture);
     }
 
     [JSInvokable]
@@ -150,9 +174,24 @@ else if (book is { } epub)
 
     private async Task SaveAsync()
     {
-        if (!remember || !dirty)
+        if (!dirty)
             return;
         dirty = false;
+        // The browser's copy first: it is the anonymous fallback, costs nothing when
+        // the server remembers too, and is only ever read back when the server had
+        // nothing to say.
+        if (module is { } js)
+        {
+            try
+            {
+                await js.InvokeVoidAsync("saveEpubPosition", NodeId, chapter, progress);
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+        }
+        if (!remember)
+            return;
         try
         {
             await Data.SaveEpubPositionAsync(NodeId, chapter, progress);
@@ -160,7 +199,8 @@ else if (book is { } epub)
         catch
         {
             // A reader the instance cannot remember — a stranger on a public book —
-            // gets a refusal once and is not asked about again.
+            // gets a refusal once and is not asked about again; their browser above
+            // keeps remembering.
             remember = false;
         }
     }

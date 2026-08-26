@@ -1330,5 +1330,8 @@ one file per reader pair would put one user's state under the other's root). So
 database-only column: not derived from the directories, cascade-deleted with the node
 and the user, and losing one costs exactly a page number. Saving requires only seeing
 the node — a ribbon is the reader's own, so no editing right is asked — and anonymous
-readers are never remembered: the position write is an authenticated endpoint like
-every other write.
+readers are never remembered server-side: the position write is an authenticated
+endpoint like every other write. A visitor's place is kept by their own browser
+instead (`localStorage`, written on every save as the fallback the server never is,
+read only when the server had nothing) — so a stranger still resumes their reading,
+and nothing about them ever lands in the instance.
