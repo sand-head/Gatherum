@@ -171,6 +171,10 @@ fresh DI scope via `Services/AppOperations`.
 
 ## Conventions
 
+Commit and PR titles are short, plain descriptions of the change in active voice
+("Add bookmark capture history"), at the owner's request — no wordplay, no colons-and-
+clauses, no prose styling. Save the voice for the body if the change needs one.
+
 C# is modern and terse: primary constructors, records for values, expression-bodied
 members where they read well. File placement follows the map above; one public type per
 file, named for the type. Static pages and layout live under
