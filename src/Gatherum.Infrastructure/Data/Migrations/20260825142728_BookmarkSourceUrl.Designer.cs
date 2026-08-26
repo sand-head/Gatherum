@@ -3,6 +3,7 @@ using System;
 using Gatherum.Core.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using NpgsqlTypes;
@@ -13,9 +14,11 @@ using Pgvector;
 namespace Gatherum.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(GatherumDbContext))]
-    partial class GatherumDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260825142728_BookmarkSourceUrl")]
+    partial class BookmarkSourceUrl
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -66,6 +69,35 @@ namespace Gatherum.Infrastructure.Data.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("ApiKeys");
+                });
+
+            modelBuilder.Entity("Gatherum.Core.Domain.Category", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid?>("ParentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Path")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ParentId");
+
+                    b.HasIndex("Path")
+                        .IsUnique();
+
+                    b.ToTable("Categories");
                 });
 
             modelBuilder.Entity("Gatherum.Core.Domain.FileBody", b =>
@@ -171,9 +203,6 @@ namespace Gatherum.Infrastructure.Data.Migrations
                     b.Property<bool>("InheritAccess")
                         .HasColumnType("boolean");
 
-                    b.Property<bool>("IsCategory")
-                        .HasColumnType("boolean");
-
                     b.Property<string>("MediaType")
                         .IsRequired()
                         .HasMaxLength(255)
@@ -222,8 +251,6 @@ namespace Gatherum.Infrastructure.Data.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("IsCategory");
 
                     b.HasIndex("Reach");
 
@@ -418,6 +445,16 @@ namespace Gatherum.Infrastructure.Data.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("Gatherum.Core.Domain.Category", b =>
+                {
+                    b.HasOne("Gatherum.Core.Domain.Category", "Parent")
+                        .WithMany("Children")
+                        .HasForeignKey("ParentId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.Navigation("Parent");
+                });
+
             modelBuilder.Entity("Gatherum.Core.Domain.FileBody", b =>
                 {
                     b.HasOne("Gatherum.Core.Domain.Node", "Node")
@@ -477,8 +514,8 @@ namespace Gatherum.Infrastructure.Data.Migrations
 
             modelBuilder.Entity("Gatherum.Core.Domain.NodeCategory", b =>
                 {
-                    b.HasOne("Gatherum.Core.Domain.Node", "Category")
-                        .WithMany("Members")
+                    b.HasOne("Gatherum.Core.Domain.Category", "Category")
+                        .WithMany("Nodes")
                         .HasForeignKey("CategoryId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -543,6 +580,13 @@ namespace Gatherum.Infrastructure.Data.Migrations
                     b.Navigation("Target");
                 });
 
+            modelBuilder.Entity("Gatherum.Core.Domain.Category", b =>
+                {
+                    b.Navigation("Children");
+
+                    b.Navigation("Nodes");
+                });
+
             modelBuilder.Entity("Gatherum.Core.Domain.FileBody", b =>
                 {
                     b.Navigation("Versions");
@@ -563,8 +607,6 @@ namespace Gatherum.Infrastructure.Data.Migrations
                     b.Navigation("Grants");
 
                     b.Navigation("InboundLinks");
-
-                    b.Navigation("Members");
 
                     b.Navigation("OutboundLinks");
                 });

@@ -30,8 +30,12 @@ RUN RID="linux-$(case "$TARGETARCH" in arm64) echo arm64;; *) echo x64;; esac)" 
 # frames it looks at. Without it images and audio still analyze; video records why
 # it could not. The embedding model needs nothing installed: ONNX Runtime's native
 # library is published alongside the app, and the weights beside it.
+# chromium renders a bookmarked page before it is captured — scripts run, then the
+# settled document is what gets kept. Debian's build rather than a Playwright download,
+# so one apt layer serves both architectures; without it (or with the env var pointed
+# at nothing) a bookmark degrades to capturing what the server serves.
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
-RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg chromium \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /app .
@@ -39,7 +43,10 @@ RUN mkdir -p /data/files && chown -R $APP_UID /data
 USER $APP_UID
 ENV ASPNETCORE_HTTP_PORTS=8080 \
     ASPNETCORE_FORWARDEDHEADERS_ENABLED=true \
-    Gatherum__Storage__Root=/data/files
+    Gatherum__Storage__Root=/data/files \
+    Gatherum__Bookmarks__BrowserPath=/usr/bin/chromium \
+    XDG_CONFIG_HOME=/tmp/.chromium \
+    XDG_CACHE_HOME=/tmp/.chromium-cache
 EXPOSE 8080
 VOLUME /data
 ENTRYPOINT ["dotnet", "Gatherum.Web.dll"]

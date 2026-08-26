@@ -148,6 +148,19 @@ public sealed class ServerAppData(
         return node.Id;
     }
 
+    public async Task<Guid> BookmarkAsync(Guid? parentId, string url)
+    {
+        var userId = await UserIdAsync();
+        var node = await ops.Bookmarks(s => s.SaveAsync(userId, parentId, url));
+        return node.Id;
+    }
+
+    public async Task CaptureBookmarkAsync(Guid nodeId)
+    {
+        var userId = await UserIdAsync();
+        await ops.Bookmarks(s => s.CaptureAgainAsync(userId, nodeId));
+    }
+
     public async Task MoveAsync(Guid nodeId, Guid? newParentId, int? position = null)
     {
         var userId = await UserIdAsync();
@@ -209,7 +222,8 @@ public sealed class ServerAppData(
         var file = node.File is { Versions.Count: > 0 } body
             ? new FileFacts(body.Current.FileName, body.Current.MediaType,
                 body.Current.SizeBytes, body.Current.Number, body.Current.Hash,
-                body.Description, body.Current.ExtractedText, body.Current.Transcript,
+                body.Description, body.SourceUrl.Length > 0 ? body.SourceUrl : null,
+                body.Current.ExtractedText, body.Current.Transcript,
                 body.Current.Summary, body.Current.Analysis.ToString(),
                 body.Current.AnalysisError.Length > 0 ? body.Current.AnalysisError : null)
             : null;

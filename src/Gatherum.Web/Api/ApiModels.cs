@@ -47,6 +47,7 @@ public record FileInfoDto(
     int Version,
     string Sha256,
     string Description,
+    string? SourceUrl,
     string ExtractedText,
     string Transcript,
     string Summary,
@@ -60,6 +61,7 @@ public record FileInfoDto(
         file.Current.Number,
         file.Current.Hash,
         file.Description,
+        file.SourceUrl.Length > 0 ? file.SourceUrl : null,
         file.Current.ExtractedText,
         file.Current.Transcript,
         file.Current.Summary,
@@ -164,4 +166,5 @@ public record UserDto(Guid Id, string DisplayName, string Username)
     public static UserDto From(User user) => new(user.Id, user.DisplayName, user.Username);
 }
 public record DescriptionRequest(string Description);
+public record BookmarkRequest(string Url, Guid? ParentId);
 public record PresenceDto(IReadOnlyList<string> Editors, int HeadVersion);

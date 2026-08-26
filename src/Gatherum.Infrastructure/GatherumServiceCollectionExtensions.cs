@@ -3,12 +3,14 @@ using Gatherum.Core.Abstractions;
 using Gatherum.Core.Data;
 using Gatherum.Core.Services;
 using Gatherum.Infrastructure.Analysis;
+using Gatherum.Infrastructure.Bookmarks;
 using Gatherum.Infrastructure.Embedding;
 using Gatherum.Infrastructure.Extraction;
 using Gatherum.Infrastructure.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Gatherum.Infrastructure;
@@ -28,6 +30,9 @@ public static class GatherumServiceCollectionExtensions
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<INodeAuthorizer, DefaultNodeAuthorizer>();
         services.AddSingleton<IFileStorage, FileSystemStorage>();
+        // Html before PlainText: the first extractor that claims a file wins, and an
+        // HTML file is text — it should be searchable by its words, not its tags.
+        services.AddSingleton<ITextExtractor, HtmlTextExtractor>();
         services.AddSingleton<ITextExtractor, PlainTextExtractor>();
         services.AddSingleton<ITextExtractor, PdfTextExtractor>();
         services.AddSingleton<ITextExtractor, DocxTextExtractor>();
@@ -35,6 +40,7 @@ public static class GatherumServiceCollectionExtensions
 
         AddAnalysis(services, configuration);
         AddEmbedding(services, configuration);
+        AddBookmarks(services, configuration);
 
         services.AddSingleton<INodeMetadataStore, JsonNodeMetadataStore>();
         services.AddScoped<AccessService>();
@@ -44,11 +50,46 @@ public static class GatherumServiceCollectionExtensions
         services.AddScoped<NodeService>();
         services.AddScoped<CategoryService>();
         services.AddScoped<FileService>();
+        services.AddScoped<BookmarkService>();
         services.AddScoped<SearchService>();
         services.AddScoped<EmbeddingService>();
         services.AddScoped<UserService>();
         services.AddScoped<ApiKeyService>();
         return services;
+    }
+
+    /// <summary>Bookmarks need nothing configured. The capture renders in a headless
+    /// Chromium when one can be found — the container ships one, a dev machine may have
+    /// a Playwright install, and <c>Gatherum__Bookmarks__BrowserPath</c> names one
+    /// explicitly — and degrades to a plain HTTP fetch when none can, so a bare
+    /// <c>dotnet run</c> still bookmarks. The plain client is registered either way:
+    /// it is the browser's fallback for documents and its second chance at assets, and
+    /// it dresses as a browser because plenty of servers refuse a bare one.</summary>
+    private static void AddBookmarks(IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddHttpClient<HttpPageArchiver>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(30);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd(
+                "Mozilla/5.0 (compatible; Gatherum/1.0)");
+            client.DefaultRequestHeaders.Accept.ParseAdd(
+                "text/html,application/xhtml+xml,*/*;q=0.8");
+        }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+        {
+            AutomaticDecompression = System.Net.DecompressionMethods.All,
+        });
+
+        var bookmarks = configuration
+            .GetSection($"{GatherumOptions.Section}:{nameof(GatherumOptions.Bookmarks)}")
+            .Get<BookmarkOptions>() ?? new BookmarkOptions();
+        if (BrowserPageArchiver.ResolveBrowser(bookmarks.BrowserPath) is { } browser)
+            services.AddScoped<IPageArchiver>(provider => new BrowserPageArchiver(browser,
+                provider.GetRequiredService<HttpPageArchiver>(),
+                provider.GetRequiredService<TimeProvider>(),
+                provider.GetRequiredService<ILogger<BrowserPageArchiver>>()));
+        else
+            services.AddScoped<IPageArchiver>(provider =>
+                provider.GetRequiredService<HttpPageArchiver>());
     }
 
     /// <summary>Multimedia analysis is opt-in and self-hosted: with no endpoint

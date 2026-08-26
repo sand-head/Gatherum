@@ -100,6 +100,18 @@ the latest one.
 `/api/files/{id}/content` is also the URL a page embeds a file with; see
 [Markdown](/docs/markdown).
 
+## Bookmarks
+
+| Endpoint | Body |
+| --- | --- |
+| `POST /api/bookmarks` | `{ "url": "https://…", "parentId": null }` — fetches the URL now and keeps the capture as a file node |
+| `POST /api/bookmarks/{id}/capture` | Fetches the bookmark's URL again; the capture is a new version |
+
+The fetch happens inside the request — expect it to take as long as the other server
+does, up to a bound — and a refusal comes back as `400` with a sentence saying what the
+server answered. A bookmark's node carries `sourceUrl` in its file metadata. See
+[Bookmarks](/docs/pages-and-files#bookmarks).
+
 ## Structure
 
 | Endpoint | Body |

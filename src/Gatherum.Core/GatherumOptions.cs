@@ -10,6 +10,19 @@ public class GatherumOptions
     public AnalysisOptions Analysis { get; set; } = new();
     public EmbeddingOptions Embedding { get; set; } = new();
     public SharingOptions Sharing { get; set; } = new();
+    public BookmarkOptions Bookmarks { get; set; } = new();
+}
+
+/// <summary>How a bookmark's page is captured. With a browser found, the page is
+/// rendered — scripts run, then the settled document is what gets kept; without one,
+/// the capture is what the server serves to a plain fetch.</summary>
+public class BookmarkOptions
+{
+    /// <summary>Path to a Chromium executable. Empty means look in the usual places
+    /// (a Playwright install, the container's own browser) and fall back to a plain
+    /// HTTP fetch when nothing is found — so a bare <c>dotnet run</c> still bookmarks,
+    /// just without rendering.</summary>
+    public string BrowserPath { get; set; } = "";
 }
 
 /// <summary>What reaches people who are not signed in. A node marked

@@ -33,9 +33,13 @@
             @* The allow-list carries locked: through to the HTML so a link the reader
                may not follow arrives as an anchor CSS can hang a padlock on. Nothing
                navigates: no browser knows the scheme, and LinkRouter routes it Nowhere. *@
+            @* Below the fold floor each h2 section folds behind its heading, the way
+               Wikipedia's mobile skin folds one. Read-tab chrome on purpose: an
+               editor cannot hide the text the caret lives in. *@
             <DocumentHtmlView Grid="doc" Theme="EditorThemes.For(AppTheme.IsDark)"
                               ContentPadding="0" TopPadding="0"
                               AllowedUrlSchemes="NodeLinks.ReaderUrlSchemes"
+                              CollapseSectionsBelow="FoldSectionsBelowPx"
                               OnLinkActivated="FollowAsync" AriaLabel="Article" />
         </div>
     }
@@ -64,6 +68,13 @@
 </div>
 
 @code {
+    /// <summary>The measure under which an article folds its h2 sections. A floor on
+    /// the article's own column, not the viewport — the float-collapse doctrine — and
+    /// the same 480 app.css holds where tables stop being tables: the width below
+    /// which a page stops affording its full shape. A phone's column is under it; a
+    /// tablet's, and the pane beside the sidebar at any comfortable window, are not.</summary>
+    public const float FoldSectionsBelowPx = 480f;
+
     [Parameter, EditorRequired] public Guid NodeId { get; set; }
     [Parameter, EditorRequired] public string FileName { get; set; } = "";
     [Parameter, EditorRequired] public string MediaType { get; set; } = "";

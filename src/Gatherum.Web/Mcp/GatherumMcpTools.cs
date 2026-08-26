@@ -16,6 +16,7 @@ public class GatherumMcpTools(
     NodeService nodes,
     CategoryService categories,
     FileService files,
+    BookmarkService bookmarks,
     SearchService search,
     IHttpContextAccessor httpContext)
 {
@@ -88,6 +89,33 @@ public class GatherumMcpTools(
             if (title is not null)
                 await nodes.RenameAsync(UserId, id, title);
             await files.SaveTextAsync(UserId, id, markdown);
+            return NodeDto.From(await nodes.GetWithBodyAsync(UserId, id));
+        });
+
+    [McpServerTool(Name = "bookmark_page")]
+    [Description("Bookmark a web page: fetch the URL now and keep a self-contained " +
+        "snapshot of it as a file node — searchable, versioned, categorized and linked " +
+        "like anything else. A URL that serves a document (a PDF, an image) is kept as " +
+        "that document. Nothing is fetched again until asked; use capture_bookmark for " +
+        "that.")]
+    public async Task<NodeDto> BookmarkPage(
+        [Description("The absolute http(s) URL to capture.")] string url,
+        [Description("Parent node id; omit for a root-level bookmark.")] Guid? parentId = null) =>
+        await Run(async () =>
+        {
+            var node = await bookmarks.SaveAsync(UserId, parentId, url);
+            return NodeDto.From(await nodes.GetWithBodyAsync(UserId, node.Id));
+        });
+
+    [McpServerTool(Name = "capture_bookmark")]
+    [Description("Fetch a bookmark's URL again and keep the result as a new version. " +
+        "Old captures stay in the version history, the way an archive keeps every " +
+        "crawl.")]
+    public async Task<NodeDto> CaptureBookmark(
+        [Description("The bookmark node id.")] Guid id) =>
+        await Run(async () =>
+        {
+            await bookmarks.CaptureAgainAsync(UserId, id);
             return NodeDto.From(await nodes.GetWithBodyAsync(UserId, id));
         });
 

@@ -56,6 +56,31 @@ public class GatherumMarkdownTests
     }
 
     [Fact]
+    public void Footnotes_and_scripts_survive_the_dialect_round_trip()
+    {
+        // slopedit 2.5 made these native to the Markdown container; what is Gatherum's
+        // to prove is that they still read and write with the wiki's own extensions
+        // active — a footnote marker's [^ must not be eaten by the wiki-link parser.
+        var source = """
+            Water is H~2~O,[^1] and E = mc^2^ per [[Relativity]].[^note]
+
+            [^1]: Mostly.
+            [^note]: Einstein, 1905.
+            """;
+        var doc = Parse(source);
+
+        // The marker reads as a superscript run carrying its key; readers see derived
+        // numbers, in marker order, whatever the keys say.
+        var marker = doc.Blocks[0].Runs.First(r => r.Style.Footnote is not null);
+        Assert.True(marker.Style.Has(InlineFlags.Superscript));
+        var notes = doc.GetFootnotes();
+        Assert.Equal(2, notes.Count);
+        Assert.Equal(["1", "note"], notes.Select(n => n.Key));
+
+        Assert.Equal(source, GatherumMarkdown.ToMarkdown(doc));
+    }
+
+    [Fact]
     public void A_figure_keeps_the_side_and_width_it_was_written_with()
     {
         var source = """

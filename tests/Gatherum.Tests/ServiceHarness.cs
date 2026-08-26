@@ -28,6 +28,7 @@ public sealed class ServiceHarness : IAsyncDisposable
     public IOptions<GatherumOptions> Settings { get; private set; } = null!;
     public CategoryService Categories { get; }
     public FileService Files { get; }
+    public BookmarkService Bookmarks { get; }
     public SearchService Search { get; }
     public ManualClock Clock { get; } = new();
     public MediaAnalysisQueue AnalysisQueue { get; } = new();
@@ -42,6 +43,9 @@ public sealed class ServiceHarness : IAsyncDisposable
     /// and heard, and assert on everything around it — the queueing, the reuse, the
     /// search text — which is the part that has to be right.</summary>
     public FakeMediaAnalyzer Analyzer { get; } = new();
+
+    /// <summary>Stands in for the web, so a bookmark test never fetches anything.</summary>
+    public FakePageArchiver Archiver { get; } = new();
 
     private readonly string storageRoot;
 
@@ -100,10 +104,11 @@ public sealed class ServiceHarness : IAsyncDisposable
         Access = new AccessService(Db, Clock, Sidecar);
         Nodes = new NodeService(Db, authorizer, Clock, Embeddings, Access, Sidecar);
         Files = new FileService(Db, Nodes, storage, Roots, Sidecar,
-            [new PlainTextExtractor(), new PdfTextExtractor(), new DocxTextExtractor(),
-                new ImageMetadataExtractor()],
+            [new HtmlTextExtractor(), new PlainTextExtractor(), new PdfTextExtractor(),
+                new DocxTextExtractor(), new ImageMetadataExtractor()],
             [Analyzer], AnalysisQueue, Clock, NullLogger<FileService>.Instance);
         Categories = new CategoryService(Db, Nodes, Files, authorizer, Sidecar, Clock);
+        Bookmarks = new BookmarkService(Db, Nodes, Files, Archiver, Sidecar);
         Search = new SearchService(Db, authorizer, Embeddings);
     }
 

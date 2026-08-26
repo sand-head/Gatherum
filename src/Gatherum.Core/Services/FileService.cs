@@ -49,11 +49,15 @@ public class FileService(
         return node;
     }
 
+    /// <summary><paramref name="title"/> is for a caller that knows better than the
+    /// filename — a bookmark carries the page's own title. Uploads leave it null and the
+    /// filename is the title, as everywhere else.</summary>
     public async Task<Node> CreateFileNodeAsync(Guid userId, Guid? parentId, string fileName,
-        string? declaredMediaType, Stream content, CancellationToken ct = default)
+        string? declaredMediaType, Stream content, string? title = null,
+        CancellationToken ct = default)
     {
         var mediaType = MediaTypes.Resolve(declaredMediaType, fileName);
-        var node = await nodes.CreateNodeAsync(userId, parentId, fileName, mediaType, ct);
+        var node = await nodes.CreateNodeAsync(userId, parentId, title ?? fileName, mediaType, ct);
         node.File = new FileBody { NodeId = node.Id };
         node.RelativePath = await AllocatePathAsync(userId, parentId,
             NodePaths.IsLegalSegment(fileName) ? fileName : $"{node.Id:N}", ct);

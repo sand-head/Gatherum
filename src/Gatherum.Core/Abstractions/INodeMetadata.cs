@@ -21,6 +21,10 @@ public record NodeMetadata
 
     public string Description { get; init; } = "";
 
+    /// <summary>Where a bookmark's snapshot was captured from, and null for everything
+    /// else. Recorded here because "capture this again" has to survive the database.</summary>
+    public string? SourceUrl { get; init; }
+
     /// <summary>Whether this node is a category rather than a page about one. Nothing
     /// about a Markdown file's bytes says it is a subject, so this is the one thing about
     /// a category the sidecar has to carry.</summary>

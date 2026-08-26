@@ -6,6 +6,7 @@ public static class MediaTypes
     public const string PlainText = "text/plain";
     public const string Binary = "application/octet-stream";
     public const string Docx = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    public const string Html = "text/html";
 
     /// <summary>What a directory is, when it is only a place to keep things. A folder
     /// somebody made in their file manager is a node too.</summary>
@@ -20,7 +21,8 @@ public static class MediaTypes
         [".yaml"] = "application/x-yaml",
         [".yml"] = "application/x-yaml",
         [".xml"] = "application/xml",
-        [".html"] = "text/html",
+        [".html"] = Html,
+        [".htm"] = Html,
         [".css"] = "text/css",
         [".csv"] = "text/csv",
         [".svg"] = "image/svg+xml",
@@ -35,7 +37,7 @@ public static class MediaTypes
     {
         ".txt", ".md", ".markdown", ".rst", ".org", ".csv", ".tsv", ".log",
         ".json", ".yaml", ".yml", ".toml", ".ini", ".conf", ".container", ".env",
-        ".xml", ".html", ".css", ".svg",
+        ".xml", ".html", ".htm", ".css", ".svg",
         ".cs", ".csproj", ".sln", ".slnx", ".razor", ".fs", ".vb",
         ".js", ".mjs", ".ts", ".tsx", ".jsx", ".py", ".rb", ".go", ".rs", ".java",
         ".kt", ".swift", ".c", ".h", ".cpp", ".hpp", ".sh", ".bash", ".ps1", ".sql",

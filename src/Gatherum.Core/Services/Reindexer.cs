@@ -194,6 +194,7 @@ public class Reindexer(
     {
         node.File ??= new FileBody { NodeId = node.Id };
         node.File.Description = sidecar?.Description ?? node.File.Description;
+        node.File.SourceUrl = sidecar?.SourceUrl ?? node.File.SourceUrl;
 
         var history = sidecar?.History ?? [];
         foreach (var recorded in history)

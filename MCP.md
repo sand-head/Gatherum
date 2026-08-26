@@ -38,6 +38,8 @@ claude mcp add --transport http gatherum http://localhost:5140/mcp \
 | `list_children` | `id?` (omit for roots) | Children in tree order |
 | `create_page` | `title`, `markdown`, `parentId?` | The created node (a Markdown file) |
 | `update_page` | `id`, `markdown`, `title?` | The updated node (a new version is recorded) |
+| `bookmark_page` | `url`, `parentId?` | The captured page as a new file node |
+| `capture_bookmark` | `id` | The bookmark, with a fresh capture as its newest version |
 | `move_node` | `id`, `newParentId?`, `position?` | Confirmation |
 | `add_category` | `id`, `path` (e.g. `Homelab/Podman`) | The path it landed on |
 | `remove_category` | `id`, `path` | Confirmation |
@@ -58,6 +60,28 @@ pass `mode=text` when the exact spelling is the point — an identifier, a filen
 phrase you are quoting. `mode=semantic` asks for meaning alone. If embeddings are turned
 off, or the owner has pointed Gatherum at an endpoint that is unreachable, every mode
 still answers from full-text search: a search never fails because a model is down.
+
+### Bookmarks
+
+`bookmark_page` captures the URL once, at the moment of the call, and keeps what came
+back as a file node: for a web page, one self-contained sanitized HTML snapshot of the
+document *after* a headless browser has let its scripts run and settle (styles, images
+and fonts folded in from the responses the page rendered with, scripts dropped once
+their output is the DOM being saved, the source URL and capture time stamped in a
+comment on the first line); for a URL that serves a document — a PDF, an image — the
+document itself. An instance with no browser captures what the server serves a plain
+fetch.
+
+A bookmark's `extractedText` is the captured page rendered as Markdown — headings,
+lists, links, tables, quotes and code, with inlined images reduced to their alt text —
+the same convention docx follows, so `get_node` hands a model the page as structured
+prose rather than a wall of HTML. Every capture is a version; the current one is what
+`get_node` reads, and older ones stay retrievable over REST
+(`GET /api/files/{id}/content?version=N`). The node is searchable by the page's words and by its address, and
+`get_node` reports the address as `sourceUrl` in the file metadata. Nothing is ever
+re-fetched on a schedule; `capture_bookmark` fetches again on demand and records the
+result as a new version, so old captures read back like an archive's older crawls. A
+fetch the other server refuses comes back as a tool error quoting the answer.
 
 ### Categories
 

@@ -41,6 +41,9 @@ public class ReadOnlyHtmlTests
         // An aside leaves the flow, and the card and header band it is dressed with come
         // with it — chrome derived from block tags, not anything slopedit ships.
         Assert.Contains("<aside style=\"float:right", html);
+        // The 0.5em of air Wikipedia keeps above an infobox; the bottom half rides
+        // the aside's margin-bottom, folded into the paragraph gap.
+        Assert.Contains("margin-top:8px", html);
         Assert.Contains("data-tag=\"infobox", html);
         Assert.Contains("data-tag=\"callout warning", html);
         Assert.Contains("Rootless containers need lingering.", html);
@@ -69,6 +72,86 @@ public class ReadOnlyHtmlTests
         // has nowhere to go in a view that isn't routing clicks.
         Assert.Contains("<span class=\"se-link\"", html);
         Assert.Contains("@Sam", html);
+    }
+
+    [Fact]
+    public void Pages_wear_the_encyclopedias_dress()
+    {
+        var html = Html("""
+            # Podman
+
+            ## History
+
+            ### Origins
+            """);
+
+        // The hairline under h1 and h2 — Wikipedia's dress, put on by Dress for every
+        // page — and nothing under h3, where the encyclopedia's own stops.
+        Assert.Contains("<h1 class=\"se-t se-hline\"", html);
+        Assert.Contains("<h2 class=\"se-t se-hline\"", html);
+        Assert.Contains("<h3 class=\"se-t\"", html);
+    }
+
+    [Fact]
+    public void A_phones_column_folds_sections_the_way_wikipedia_mobile_does()
+    {
+        var doc = GatherumMarkdown.Parse("""
+            # Podman
+
+            A container engine.
+
+            ## History
+
+            It began as a CLI for CRI-O.
+            """, isDark: false);
+        doc.Measurer = new FakeMeasurer();
+        var reader = new RichHtmlOptions { CollapseSectionsBelowPx = NodeReader.FoldSectionsBelowPx };
+
+        // A phone's article column: each h2 section folds behind its heading band.
+        doc.WrapWidthPx = 360f;
+        var narrow = RichHtmlWriter.WriteBody(doc, reader);
+        Assert.Contains("<details class=\"se-sec\" open", narrow);
+        Assert.Contains("</h2></summary>", narrow);
+
+        // A desktop measure: the fold floor leaves the markup byte-for-byte what it
+        // is with no floor at all — folding is phone chrome, not a reinterpretation.
+        doc.WrapWidthPx = 800f;
+        doc.InvalidateLayout();
+        Assert.Equal(RichHtmlWriter.WriteBody(doc, new RichHtmlOptions()),
+            RichHtmlWriter.WriteBody(doc, reader));
+    }
+
+    [Fact]
+    public void A_footnote_reads_as_a_superscript_link_and_its_note_links_back()
+    {
+        var html = Html("""
+            The NAS reboots nightly.[^why]
+
+            [^why]: The controller wedges; see [[Homelab]].
+            """);
+
+        // The marker is an anchor down to the note; the note carries the id it lands
+        // on and its number is the anchor back up. All slopedit's own plumbing — what
+        // is Gatherum's is that it arrives with the wiki's extensions active.
+        Assert.Contains("class=\"se-fnref\"", html);
+        Assert.Contains("class=\"se-t se-fn\"", html);
+        Assert.Contains("class=\"se-marker se-fnmark\"", html);
+        Assert.Contains("href=\"wikilink:Homelab\"", html);
+    }
+
+    /// <summary>Fixed hand-picked widths, the way slopedit's own layout tests measure:
+    /// enough for the emitter to lay out in pixels without a font engine anywhere.</summary>
+    private sealed class FakeMeasurer : ITextMeasurer
+    {
+        public float LineHeight => 20f;
+        public float Baseline => 15f;
+
+        public float[] Advances(string text, InlineFlags flags, bool code)
+        {
+            var advances = new float[text.Length];
+            Array.Fill(advances, 8f);
+            return advances;
+        }
     }
 
     [Fact]

@@ -55,6 +55,7 @@ public class NodeMetadataWriter(GatherumDbContext db, INodeMetadataStore store, 
             // true — and the one that eventually disagrees.
             Title = node.Title == NodePaths.DefaultTitle(node.RelativePath) ? null : node.Title,
             Description = node.File?.Description ?? "",
+            SourceUrl = node.File is { SourceUrl.Length: > 0 } bookmark ? bookmark.SourceUrl : null,
             Category = node.IsCategory,
             Categories = node.Categories.Select(c => c.Category!.Title)
                 .OrderBy(name => name, StringComparer.OrdinalIgnoreCase).ToList(),

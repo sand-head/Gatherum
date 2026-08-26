@@ -44,7 +44,7 @@ in the order an agent needs it.
   difference between reaching a node and finding one.
 - **[REST API](/docs/api)** — every endpoint under `/api`, with the shapes it takes and
   returns.
-- **[MCP server](/docs/mcp)** — the eleven tools at `/mcp`, and how to point an agent
+- **[MCP server](/docs/mcp)** — the thirteen tools at `/mcp`, and how to point an agent
   at them.
 - **[Working with agents](/docs/agents)** — the briefing to give a model that is going
   to write here.

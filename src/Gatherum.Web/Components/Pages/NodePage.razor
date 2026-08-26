@@ -169,9 +169,13 @@ else if (node is not null)
             // What the document surfaces can open at all — a page, a source file, a docx.
             // Reading one is what publishing a page means, so this asks nothing about who
             // is looking; a file with no document form falls through to FileView.
+            // HTML is text, but reading one as source misses the point — above all for
+            // a bookmark, whose snapshot is the page it captured. FileView renders it,
+            // sandboxed, the way it renders a PDF.
             readable = fileName.Length > 0
                 && node.File!.Current.SizeBytes <= 4 * 1024 * 1024
-                && (MediaTypes.IsText(node.MediaType, fileName) || node.MediaType == MediaTypes.Docx);
+                && (MediaTypes.IsText(node.MediaType, fileName) || node.MediaType == MediaTypes.Docx)
+                && node.MediaType != MediaTypes.Html;
             // Editing is never offered to somebody who is not signed in, whatever the
             // node says — public is a publishing gesture, not an invitation.
             editable = readable && SignedIn;

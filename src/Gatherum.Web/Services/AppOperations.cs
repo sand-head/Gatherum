@@ -12,6 +12,8 @@ public sealed class AppOperations(IServiceScopeFactory scopes)
     public Task Categories(Func<CategoryService, Task> action) => Run(action);
     public Task<T> Files<T>(Func<FileService, Task<T>> action) => Run(action);
     public Task Files(Func<FileService, Task> action) => Run(action);
+    public Task<T> Bookmarks<T>(Func<BookmarkService, Task<T>> action) => Run(action);
+    public Task Bookmarks(Func<BookmarkService, Task> action) => Run(action);
     public Task<T> Search<T>(Func<SearchService, Task<T>> action) => Run(action);
     public Task<T> Keys<T>(Func<ApiKeyService, Task<T>> action) => Run(action);
     public Task Keys(Func<ApiKeyService, Task> action) => Run(action);

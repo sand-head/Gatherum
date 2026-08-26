@@ -1,0 +1,61 @@
+@inject IAppData Data
+@inject TreeState Tree
+@inject NavigationManager Navigation
+
+@* Bookmarking is a capture, not a link: the page is fetched while this dialog waits,
+   so it stays up with a progress note — and with the server's own sentence when the
+   other end refuses. *@
+<Modal Title="Bookmark a page" OnClose="CloseAsync">
+    <p class="bookmark-hint">The page is fetched once, now, and kept as a snapshot you
+        can read and search even after it changes — capture it again any time from the
+        saved copy.</p>
+    <label for="bookmark-url">Address</label>
+    <input id="bookmark-url" type="url" placeholder="https://…" autocomplete="off"
+           @bind="url" @bind:event="oninput" disabled="@saving" />
+    @if (error is { Length: > 0 })
+    {
+        <p class="bookmark-error" role="alert">@error</p>
+    }
+    <div class="modal-actions">
+        <button class="primary" @onclick="SaveAsync"
+                disabled="@(saving || url.Trim().Length == 0)">
+            @(saving ? "Capturing…" : "Save")
+        </button>
+        <button @onclick="CloseAsync" disabled="@saving">Cancel</button>
+    </div>
+</Modal>
+
+@code {
+    /// <summary>Where the bookmark lands in the tree; null for the top level.</summary>
+    [Parameter] public Guid? ParentId { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private string url = "";
+    private string? error;
+    private bool saving;
+
+    private async Task SaveAsync()
+    {
+        saving = true;
+        error = null;
+        try
+        {
+            var nodeId = await Data.BookmarkAsync(ParentId, url);
+            await Tree.RefreshAsync();
+            await OnClose.InvokeAsync();
+            Navigation.NavigateTo($"/nodes/{nodeId}");
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    /// <summary>A capture mid-flight keeps its dialog: dismissing it would leave the
+    /// person wondering whether anything was saved.</summary>
+    private Task CloseAsync() => saving ? Task.CompletedTask : OnClose.InvokeAsync();
+}

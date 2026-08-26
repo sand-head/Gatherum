@@ -27,7 +27,7 @@ claude mcp add --transport http gatherum http://localhost:5140/mcp \
   --header "Authorization: Bearer gk_…"
 ```
 
-`/mcp` inside Claude Code should then list the `gatherum` server with eleven tools.
+`/mcp` inside Claude Code should then list the `gatherum` server with thirteen tools.
 
 ## The tools
 
@@ -38,6 +38,8 @@ claude mcp add --transport http gatherum http://localhost:5140/mcp \
 | `list_children` | `id?` (omit for roots) | Children in tree order |
 | `create_page` | `title`, `markdown`, `parentId?` | The created node |
 | `update_page` | `id`, `markdown`, `title?` | The updated node; a new version is recorded |
+| `bookmark_page` | `url`, `parentId?` | The captured page as a new file node |
+| `capture_bookmark` | `id` | The bookmark, with a fresh capture as its newest version |
 | `move_node` | `id`, `newParentId?`, `position?` | Confirmation |
 | `add_category` | `id`, `name` (e.g. `Podman`) | The name it landed on |
 | `remove_category` | `id`, `name` | Confirmation |
@@ -65,6 +67,14 @@ Media that a model has analyzed comes back from `get_node` with `transcript` and
   `update_page` writes that.
 - **Links earn backlinks.** A mention or wiki link is recorded in both directions the
   moment the page is saved; a bare title in prose is not.
+- **A bookmark is a capture, not a link.** `bookmark_page` renders the URL in a
+  headless browser once, now — scripts run and settle first — and keeps a
+  self-contained snapshot as a file node, searchable by what the page said and by its
+  address. Nothing is fetched again unless `capture_bookmark` asks, and each capture is
+  a version. See [Bookmarks](/docs/pages-and-files#bookmarks).
+- **A bookmark reads as Markdown.** `get_node` returns the captured page rendered as
+  Markdown in `extractedText` — headings, lists, links, tables and code, no markup —
+  the same convention docx files follow. Read the bookmark, not the HTML.
 - **Private is private.** A key sees exactly what its owner sees. Another user's private
   subtree does not appear in `search`, `get_node` or `list_children` — it behaves as if
   it does not exist.

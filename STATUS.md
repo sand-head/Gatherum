@@ -94,6 +94,28 @@ browser sessions — including against the built container).
   description, categories, referenced-by, per-version download; extraction: text verbatim,
   PDF (PdfPig), image metadata (MetadataExtractor); media types resolved sensibly
   when browsers upload code as octet-stream.
+- **Bookmarks** — a URL captured as a file node, on request and never on a schedule.
+  `BrowserPageArchiver` (Playwright over the container's Chromium, honoring
+  `HTTPS_PROXY`, `Gatherum__Bookmarks__BrowserPath` to point elsewhere) loads the page,
+  lets scripts run and settle, scrolls lazy loading into existence, records every
+  response off the wire, and keeps the post-JS DOM as one self-contained sanitized
+  snapshot (stylesheets, images and the fonts/backgrounds their CSS names inlined from
+  the recorded bytes under a byte purse; scripts, frames and handlers stripped;
+  references absolutized; source URL and capture time stamped in a first-line comment) —
+  verified end-to-end against a JS-only page through the API. Rendered sandboxed in the
+  file view, findable by the page's words and by its address, "capture again" records a
+  fresh capture as a new version. Non-HTML URLs (a PDF) are kept as the document they
+  serve, and a missing or failing browser degrades to `HttpPageArchiver`'s plain fetch
+  with a logged reason — never to a failure the browser alone caused. The source URL
+  lives on `FileBody` and in `meta.json`, so it survives a reindex. The node wears a
+  bookmark bar: source link, a Capture again button, and a capture picker that pages
+  the sandboxed frame back through older captures (restore/download stay in the History
+  panel). To search and to MCP a bookmark is its Markdown rendering — `HtmlMarkdown`
+  converts the whole captured body (headings, lists, links, tables, quotes, fenced
+  code; inlined images reduce to alt text) and `HtmlTextExtractor` stores it as the
+  version's text, the convention docx set — so `get_node` hands agents structured prose.
+  New: `POST /api/bookmarks`, `POST /api/bookmarks/{id}/capture`, MCP
+  `bookmark_page`/`capture_bookmark`, and `text/html` served inline is CSP-sandboxed.
 - **Multimedia analysis** — optional, off unless `Gatherum__Analysis__Endpoint` names an
   OpenAI-compatible model you run. Still images are read (OCR), audio and video are
   transcribed (video split by ffmpeg into its audio track and sampled frames), and each
@@ -113,7 +135,7 @@ browser sessions — including against the built container).
 - **Auth** — OIDC-only via discovery, defensive `offline_access`, first user becomes
   admin, cookie sessions; API keys hashed at rest, revocable, shown once; dev
   auto-login only when no authority is configured.
-- **REST API** (`/api`) and **MCP** (`/mcp`, all eleven tools) — thin adapters over the
+- **REST API** (`/api`) and **MCP** (`/mcp`, all thirteen tools) — thin adapters over the
   same services; page bodies are Markdown verbatim in both directions.
 - **Privacy** — per-subtree private flag enforced by one `INodeAuthorizer` in every
   read path, and a published page renders for whoever may reach it: signed out, the node
@@ -123,7 +145,7 @@ browser sessions — including against the built container).
   exercised against a postgres container, editor verified in-browser against the
   containerized app), compose.yaml, Podman Quadlets, `/healthz`, JSON console logs
   outside Development, migrations on startup with opt-out.
-- **Tests** — 183 passing: the Markdown dialect (infobox/figure/callout round trips,
+- **Tests** — 229 passing: the Markdown dialect (infobox/figure/callout round trips,
   wiki-link spellings, extension composition, derived chrome, red-link inking, in-app
   URL shapes) and the same dialect as read-only HTML (the aside and its card, a
   callout's tint, a wiki link's URL, a mention that keeps its look and loses its
