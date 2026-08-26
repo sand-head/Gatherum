@@ -5,7 +5,8 @@ files are the same kind of thing.** Every item is a *node* — it has a title, a
 one tree, categories, links, backlinks, version history, and searchable text. A page is
 simply a node whose file is Markdown; a fic chapter, a Podman quadlet, a PDF, and a
 photo all live in one tree, one search, one login, one API. Built almost entirely in
-C#/Blazor — the only JavaScript is a ~65-line interop file.
+C#/Blazor — the only JavaScript is a small interop file and the EPUB reader's
+page-turner.
 
 - **Editing**: pages — and uploaded `.docx` documents — open in
   [slopedit](https://git.sand.town/sand_head/slopedit)'s rich document editor — a
@@ -22,10 +23,11 @@ C#/Blazor — the only JavaScript is a ~65-line interop file.
   losslessly, and an Insert menu writes the fences for you. Links go somewhere: a mention
   or a wiki link opens the node it names, an external link leaves the app.
 - **Files**: drag-drop or picker upload anywhere in the tree, content-addressed
-  storage (SHA-256) on disk, inline previews (images, PDF, video, audio), descriptions,
+  storage (SHA-256) on disk, inline previews (images, PDF, video, audio — and EPUBs
+  open in a paginated reader, chapter by chapter, links and all), descriptions,
   categories, and re-upload as a new version with old bytes retrievable. Text extraction
   (plain text/markdown/code verbatim, PDF via PdfPig, docx as its Markdown rendering,
-  image metadata) feeds search — and see **Multimedia** below for what a model adds to
+  EPUB chapters in reading order, image metadata) feeds search — and see **Multimedia** below for what a model adds to
   that on top.
 - **Bookmarks**: paste a URL and Gatherum keeps the page the way an archive would —
   fetched once, on request, never on a schedule. A headless Chromium (in the container

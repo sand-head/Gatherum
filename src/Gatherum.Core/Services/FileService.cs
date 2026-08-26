@@ -385,6 +385,37 @@ public class FileService(
             .MaxAsync(v => (int?)v.Number, ct) ?? 0;
     }
 
+    /// <summary>Where this reader stopped in this book, if they ever stopped anywhere —
+    /// null for a reader with no account to remember with.</summary>
+    public async Task<ReadingPosition?> GetReadingPositionAsync(Guid? userId, Guid nodeId,
+        CancellationToken ct = default)
+    {
+        if (userId is not { } reader)
+            return null;
+        await nodes.GetVisibleAsync(userId, nodeId, ct);
+        return await db.ReadingPositions.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.NodeId == nodeId && p.UserId == reader, ct);
+    }
+
+    /// <summary>Remembers where a reader stopped. Seeing the node is enough — the
+    /// position is the reader's own ribbon, not the node's content, so no editing
+    /// right is asked and nothing of it reaches the other reader.</summary>
+    public async Task SaveReadingPositionAsync(Guid userId, Guid nodeId, int chapter,
+        double progress, CancellationToken ct = default)
+    {
+        await nodes.GetVisibleAsync(userId, nodeId, ct);
+        var position = await db.ReadingPositions.FindAsync([nodeId, userId], ct);
+        if (position is null)
+        {
+            position = new ReadingPosition { NodeId = nodeId, UserId = userId };
+            db.ReadingPositions.Add(position);
+        }
+        position.Chapter = Math.Max(0, chapter);
+        position.Progress = double.IsFinite(progress) ? Math.Clamp(progress, 0, 1) : 0;
+        position.UpdatedAt = clock.GetUtcNow();
+        await db.SaveChangesAsync(ct);
+    }
+
     /// <summary>The editable text of a text node — read from storage, so it is exact
     /// even where extraction truncates.</summary>
     public async Task<string> GetTextAsync(Guid? userId, Guid nodeId, CancellationToken ct = default)

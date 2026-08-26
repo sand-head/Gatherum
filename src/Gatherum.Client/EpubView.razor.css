@@ -1,0 +1,41 @@
+.epub-reader {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.epub-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    & select {
+        flex: 1;
+        min-width: 0;
+    }
+
+    & button {
+        padding: 2px 12px;
+        font-size: 18px;
+        line-height: 1.2;
+    }
+}
+
+/* The page keeps a book's proportions on a wide screen and the whole viewport's worth
+   on a narrow one; the paper tint matches the one the chapter document paints, so the
+   frame never flashes a different white. */
+.epub-frame {
+    width: 100%;
+    height: 75vh;
+    border: 1px solid var(--outline-dim);
+    border-radius: var(--radius);
+    background: #f8f5ef;
+}
+
+.epub-fallback {
+    color: var(--on-surface-dim);
+    padding: 40px 30px;
+    text-align: center;
+    border: 1px dashed var(--outline);
+    border-radius: var(--radius);
+}

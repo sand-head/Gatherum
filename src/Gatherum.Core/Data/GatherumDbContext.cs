@@ -15,6 +15,7 @@ public class GatherumDbContext(DbContextOptions<GatherumDbContext> options)
     public DbSet<NodeGrant> NodeGrants => Set<NodeGrant>();
     public DbSet<NodeAccessEntry> NodeAccessEntries => Set<NodeAccessEntry>();
     public DbSet<NodeEmbedding> NodeEmbeddings => Set<NodeEmbedding>();
+    public DbSet<ReadingPosition> ReadingPositions => Set<ReadingPosition>();
     public DbSet<User> Users => Set<User>();
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
 
@@ -136,6 +137,15 @@ public class GatherumDbContext(DbContextOptions<GatherumDbContext> options)
                 .HasForeignKey(e => e.NodeId).OnDelete(DeleteBehavior.Cascade);
             embedding.HasIndex(e => new { e.NodeId, e.Ordinal });
             embedding.HasIndex(e => e.Hash);
+        });
+
+        model.Entity<ReadingPosition>(position =>
+        {
+            position.HasKey(p => new { p.NodeId, p.UserId });
+            position.HasOne(p => p.Node).WithMany()
+                .HasForeignKey(p => p.NodeId).OnDelete(DeleteBehavior.Cascade);
+            position.HasOne(p => p.User).WithMany()
+                .HasForeignKey(p => p.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
         model.Entity<User>(user =>

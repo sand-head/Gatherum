@@ -7,6 +7,7 @@ public static class MediaTypes
     public const string Binary = "application/octet-stream";
     public const string Docx = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
     public const string Html = "text/html";
+    public const string Epub = "application/epub+zip";
 
     /// <summary>What a directory is, when it is only a place to keep things. A folder
     /// somebody made in their file manager is a node too.</summary>
@@ -28,6 +29,7 @@ public static class MediaTypes
         [".svg"] = "image/svg+xml",
         [".pdf"] = "application/pdf",
         [".docx"] = Docx,
+        [".epub"] = Epub,
     };
 
     /// <summary>Extensions whose content is text even when the upload says otherwise —

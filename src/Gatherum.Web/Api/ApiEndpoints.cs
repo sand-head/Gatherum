@@ -1,6 +1,7 @@
 using Gatherum.Core;
 using Gatherum.Core.Domain;
 using Gatherum.Core.Services;
+using Gatherum.Infrastructure.Epub;
 using Gatherum.Web.Auth;
 using Gatherum.Web.Services;
 
@@ -296,6 +297,48 @@ public static class ApiEndpoints
                 fileDownloadName: content.FileName);
         }).AllowAnonymous().RequireRateLimiting(AnonymousRateLimits.Read);
 
+        // The reader's map of an EPUB: the book's own title and its chapters, in
+        // reading order, named the way its table of contents names them.
+        api.MapGet("/files/{id:guid}/epub", async (FileService files, HttpContext http,
+            Guid id, int? version) =>
+        {
+            var content = await files.OpenContentAsync(http.User.GetUserIdOrNull(), id, version);
+            await using var stream = content.Stream;
+            if (!IsEpub(content))
+                return Results.NotFound();
+            using var book = await EpubBook.OpenAsync(stream);
+            var position = await files.GetReadingPositionAsync(http.User.GetUserIdOrNull(), id);
+            return Results.Ok(EpubDto.From(book, position));
+        }).AllowAnonymous().RequireRateLimiting(AnonymousRateLimits.Read);
+
+        // The ribbon moves as the reader reads. A write, so never anonymous: a
+        // stranger on a public book reads without being remembered.
+        api.MapPut("/files/{id:guid}/epub/position", async (FileService files,
+            HttpContext http, Guid id, EpubPositionRequest request) =>
+        {
+            await files.SaveReadingPositionAsync(http.User.GetUserId(), id,
+                request.Chapter, request.Progress);
+            return Results.NoContent();
+        });
+
+        // One chapter, rendered for the reader's sandboxed frame: self-contained,
+        // inert but for the pager the policy admits by hash, paginated by the chrome
+        // the rendering wears.
+        api.MapGet("/files/{id:guid}/epub/{chapter:int}", async (FileService files,
+            HttpContext http, Guid id, int chapter, int? version) =>
+        {
+            var content = await files.OpenContentAsync(http.User.GetUserIdOrNull(), id, version);
+            await using var stream = content.Stream;
+            if (!IsEpub(content))
+                return Results.NotFound();
+            using var book = await EpubBook.OpenAsync(stream);
+            if (chapter < 0 || chapter >= book.Chapters.Count)
+                return Results.NotFound();
+            var html = await EpubChapterHtml.RenderAsync(book, chapter);
+            http.Response.Headers.ContentSecurityPolicy = EpubChapterHtml.ContentSecurityPolicy;
+            return Results.Content(html, "text/html; charset=utf-8");
+        }).AllowAnonymous().RequireRateLimiting(AnonymousRateLimits.Read);
+
         api.MapPut("/files/{id:guid}/description", async (FileService files, HttpContext http,
             Guid id, DescriptionRequest request) =>
         {
@@ -322,6 +365,13 @@ public static class ApiEndpoints
             return Results.NoContent();
         });
     }
+
+    /// <summary>What the reader endpoints serve: the stored type when the upload was
+    /// honest, the extension when a browser called the book a plain zip or nothing at
+    /// all — the same benefit of the doubt extraction gives it.</summary>
+    private static bool IsEpub(FileContent content) =>
+        content.MediaType.Equals(MediaTypes.Epub, StringComparison.OrdinalIgnoreCase) ||
+        Path.GetExtension(content.FileName).Equals(".epub", StringComparison.OrdinalIgnoreCase);
 
     private static async ValueTask<object?> TranslateDomainErrors(
         EndpointFilterInvocationContext context, EndpointFilterDelegate next)

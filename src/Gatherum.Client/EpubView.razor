@@ -1,0 +1,225 @@
+@inject IAppData Data
+@inject IJSRuntime Js
+@implements IAsyncDisposable
+
+@* A book, read where it lives: chapters in a paginated frame, the chapter list in a
+   bar above it. The frame's document paints its own pages and page count; what the
+   bar owns is which chapter is on the desk. A cross-chapter link inside the book
+   asks this component (over postMessage — the sandbox leaves it no other voice) to
+   turn to the chapter it names, so the bar never lies about where the reader is. *@
+
+@if (failed)
+{
+    <div class="epub-fallback">This one would not open as a book — the download below
+        still has the file as it was uploaded.</div>
+}
+else if (book is { } epub)
+{
+    <div class="epub-reader">
+        @if (epub.Chapters.Count > 1)
+        {
+            <div class="epub-toolbar">
+                <button type="button" title="Previous chapter" aria-label="Previous chapter"
+                        @onclick="() => Open(chapter - 1)" disabled="@(chapter == 0)">‹</button>
+                <select value="@chapter" @onchange="OnChapterChosen" aria-label="Chapter">
+                    @for (var i = 0; i < epub.Chapters.Count; i++)
+                    {
+                        var index = i;
+                        <option value="@index">@ChapterName(epub, index)</option>
+                    }
+                </select>
+                <button type="button" title="Next chapter" aria-label="Next chapter"
+                        @onclick="() => Open(chapter + 1)"
+                        disabled="@(chapter >= epub.Chapters.Count - 1)">›</button>
+            </div>
+        }
+        @* Sandboxed like a bookmark snapshot, plus the one concession the pager
+           needs: scripts run, but as an opaque origin the response's policy has
+           already narrowed to the pager itself. *@
+        <iframe @ref="frame" class="epub-frame" src="@FrameSrc"
+                title="@(epub.Title ?? "Book")" sandbox="allow-scripts"></iframe>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public Guid NodeId { get; set; }
+
+    private EpubInfo? book;
+    private bool failed;
+    private int chapter;
+    private ElementReference frame;
+    private IJSObjectReference? module;
+    private DotNetObjectReference<EpubView>? self;
+    private Guid loaded;
+
+    // The ribbon: how far through the chapter the pager last said the reader is,
+    // saved after a quiet moment — a page turn is not worth a request each.
+    private double progress;
+    private bool dirty;
+    private bool remember = true;
+    private bool localChecked;
+    private System.Threading.Timer? saveDebounce;
+    private string restoreAt = "";
+
+    /// <summary>The chapter's URL, carrying the saved fraction as a fragment on the
+    /// first opening only — the pager cashes it in once it knows its page count.</summary>
+    private string FrameSrc => $"/api/files/{NodeId}/epub/{chapter}{restoreAt}";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (loaded == NodeId)
+            return;
+        loaded = NodeId;
+        chapter = 0;
+        restoreAt = "";
+        localChecked = false;
+        try
+        {
+            book = await Data.GetEpubAsync(NodeId);
+            if (book.Position is { } position)
+            {
+                localChecked = true;
+                Restore(position);
+            }
+        }
+        catch
+        {
+            // A truncated upload, a zip that never was a book — the file view still
+            // stands, so say so and leave the download to speak for the bytes.
+            failed = true;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (book is null)
+            return;
+        module ??= await Js.InvokeAsync<IJSObjectReference>("import", "./js/gatherum.js");
+        self ??= DotNetObjectReference.Create(this);
+        await module.InvokeVoidAsync("registerEpubReader", frame, self);
+
+        // The server had no ribbon for this reader — a stranger on a public book, or
+        // simply a book never opened — so ask the one place a stranger's ribbon can
+        // be: this browser. Only here, after a render, because the storage is JS.
+        if (!localChecked)
+        {
+            localChecked = true;
+            var stored = await module.InvokeAsync<EpubPosition?>("readEpubPosition", NodeId);
+            if (stored is { } local && (local.Chapter != 0 || local.Progress > 0.0005))
+            {
+                Restore(local);
+                StateHasChanged();
+            }
+        }
+    }
+
+    private void Restore(EpubPosition position)
+    {
+        if (book is not { } epub)
+            return;
+        chapter = Math.Clamp(position.Chapter, 0, epub.Chapters.Count - 1);
+        if (position.Progress > 0.0005)
+            restoreAt = "#at=" + position.Progress.ToString("0.####",
+                System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    [JSInvokable]
+    public Task OnChapterLinked(int index) => InvokeAsync(() =>
+    {
+        Open(index);
+        StateHasChanged();
+    });
+
+    /// <summary>The pager's report of how far through the chapter the reader is —
+    /// after every page turn, and once when a chapter lands.</summary>
+    [JSInvokable]
+    public void OnProgress(double fraction)
+    {
+        progress = fraction;
+        dirty = true;
+        QueueSave();
+    }
+
+    private void Open(int index)
+    {
+        if (book is not { } epub)
+            return;
+        var target = Math.Clamp(index, 0, epub.Chapters.Count - 1);
+        if (target == chapter)
+            return;
+        chapter = target;
+        // The fragment belonged to the chapter that was restored; a fresh chapter
+        // starts at its first page.
+        restoreAt = "";
+        progress = 0;
+        dirty = true;
+        QueueSave();
+    }
+
+    private void OnChapterChosen(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var index))
+            Open(index);
+    }
+
+    private static string ChapterName(EpubInfo epub, int index) =>
+        epub.Chapters[index] ?? $"Chapter {index + 1}";
+
+    private void QueueSave()
+    {
+        saveDebounce?.Dispose();
+        saveDebounce = new System.Threading.Timer(_ => _ = SaveAsync(), null,
+            1500, Timeout.Infinite);
+    }
+
+    private async Task SaveAsync()
+    {
+        if (!dirty)
+            return;
+        dirty = false;
+        // The browser's copy first: it is the anonymous fallback, costs nothing when
+        // the server remembers too, and is only ever read back when the server had
+        // nothing to say.
+        if (module is { } js)
+        {
+            try
+            {
+                await js.InvokeVoidAsync("saveEpubPosition", NodeId, chapter, progress);
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+        }
+        if (!remember)
+            return;
+        try
+        {
+            await Data.SaveEpubPositionAsync(NodeId, chapter, progress);
+        }
+        catch
+        {
+            // A reader the instance cannot remember — a stranger on a public book —
+            // gets a refusal once and is not asked about again; their browser above
+            // keeps remembering.
+            remember = false;
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        saveDebounce?.Dispose();
+        await SaveAsync();
+        self?.Dispose();
+        if (module is null)
+            return;
+        try
+        {
+            await module.InvokeVoidAsync("registerEpubReader", (object?)null, (object?)null);
+            await module.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit is gone, and its listener with it.
+        }
+    }
+}

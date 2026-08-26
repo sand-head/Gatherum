@@ -71,6 +71,11 @@
                 <iframe class="snapshot" src="@($"{contentUrl}?version={ViewedCapture}")"
                         title="@file.FileName" sandbox></iframe>
             }
+            else if (file.MediaType == "application/epub+zip"
+                || file.FileName.EndsWith(".epub", StringComparison.OrdinalIgnoreCase))
+            {
+                <EpubView NodeId="@NodeId" />
+            }
             else if (file.MediaType.StartsWith("video/"))
             {
                 <video src="@contentUrl" controls></video>

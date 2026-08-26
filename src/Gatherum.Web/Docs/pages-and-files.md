@@ -85,8 +85,14 @@ Pages, uploaded `.docx` documents, and any text file open in the editor.
   the raw Markdown. Both surfaces read and write the same file; see
   [Markdown in Gatherum](/docs/markdown) for the dialect.
 - **Code and text files** open in a code editor with syntax highlighting.
-- **Everything else** gets a preview: images, PDF, video and audio play inline; anything
-  else offers a download.
+- **Everything else** gets a preview: images, PDF, video and audio play inline, and an
+  `.epub` opens in a paginated reader — the chapter flows into book-like pages turned by
+  the arrow keys, the page edges, or a scroll, with the book's own chapter list in a bar
+  above and its internal links still going where they point. The reader keeps your
+  place: reopen the book on any device you're signed in on and it opens where you left
+  off, and each reader keeps their own place. A visitor on a public book is never
+  remembered by the server — their place is kept by their own browser instead, and
+  goes no further. Anything else offers a download.
 
 Editing autosaves. Presence shows who else has the document open, and if someone saved
 while you were typing the editor says so — your next save makes a new version and theirs
@@ -127,6 +133,7 @@ Two different tempos, and they never share a path.
 | Text, Markdown, code | The content, verbatim |
 | PDF | The text layer, via PdfPig |
 | `.docx` | Its Markdown rendering — the same text the editor shows |
+| `.epub` | Its chapters in reading order, each as its Markdown rendering |
 | Images | Embedded metadata |
 
 **Analysis** asks a model, takes minutes, and runs on a background worker after the

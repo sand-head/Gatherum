@@ -165,6 +165,27 @@ public record UserDto(Guid Id, string DisplayName, string Username)
 {
     public static UserDto From(User user) => new(user.Id, user.DisplayName, user.Username);
 }
+/// <summary>The reader's map of a book: its own title, one entry per spine chapter —
+/// the name the book's contents give it, or null where they give none — and where this
+/// reader left off, when they are somebody the instance can remember.</summary>
+public record EpubDto(string? Title, IReadOnlyList<string?> Chapters,
+    EpubPositionDto? Position)
+{
+    public static EpubDto From(Gatherum.Infrastructure.Epub.EpubBook book,
+        ReadingPosition? position) =>
+        new(book.Title, book.Chapters.Select(c => c.Title).ToList(),
+            EpubPositionDto.From(position));
+}
+
+/// <summary>A ribbon in a book: the chapter, and how far through it (0..1).</summary>
+public record EpubPositionDto(int Chapter, double Progress)
+{
+    public static EpubPositionDto? From(ReadingPosition? position) =>
+        position is null ? null : new(position.Chapter, position.Progress);
+}
+
+public record EpubPositionRequest(int Chapter, double Progress);
+
 public record DescriptionRequest(string Description);
 public record BookmarkRequest(string Url, Guid? ParentId);
 public record PresenceDto(IReadOnlyList<string> Editors, int HeadVersion);

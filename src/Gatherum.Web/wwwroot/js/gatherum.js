@@ -19,6 +19,55 @@ export function registerSearchShortcut(input) {
   document.addEventListener('keydown', searchHotkey);
 }
 
+// One book on screen at a time, like the search box: registering replaces the
+// listener, registering nothing removes it. A chapter's frame is sandboxed to an
+// opaque origin, so a cross-chapter link in the book can only *ask* to be followed —
+// a postMessage the frame's pager sends — and only the frame actually on screen is
+// believed.
+let epubListener;
+
+export function registerEpubReader(frame, dotnet) {
+  if (epubListener) removeEventListener('message', epubListener);
+  epubListener = null;
+  if (!frame) return;
+
+  epubListener = (e) => {
+    if (e.source !== frame.contentWindow) return;
+    const chapter = e.data?.gatherumEpubChapter;
+    if (Number.isInteger(chapter)) dotnet.invokeMethodAsync('OnChapterLinked', chapter);
+    // The pager reports how far through the chapter the reader is; the component
+    // turns that into the position the server remembers.
+    const progress = e.data?.gatherumEpubProgress;
+    if (typeof progress === 'number' && Number.isFinite(progress))
+      dotnet.invokeMethodAsync('OnProgress', progress);
+  };
+  addEventListener('message', epubListener);
+}
+
+// An anonymous reader's ribbon. A signed-in reader's place lives on the server — any
+// device, either user — but a visitor on a public book is deliberately never
+// remembered there (no write is anonymous), so their place lives in the one place
+// that is theirs alone: their own browser. Guarded, because storage can be blocked
+// entirely — a browser that refuses to remember was asked not to.
+export function readEpubPosition(nodeId) {
+  try {
+    const stored = JSON.parse(localStorage.getItem('gatherum-epub-' + nodeId));
+    return Number.isInteger(stored?.chapter) && typeof stored?.progress === 'number'
+      ? stored
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveEpubPosition(nodeId, chapter, progress) {
+  try {
+    localStorage.setItem('gatherum-epub-' + nodeId, JSON.stringify({ chapter, progress }));
+  } catch {
+    // Nothing to do: the reader finds their own page, like a book with no ribbon.
+  }
+}
+
 export function initDropZone(element, dotnet) {
   const stop = (e) => { e.preventDefault(); e.stopPropagation(); };
   ['dragenter', 'dragover'].forEach((name) =>

@@ -12,7 +12,8 @@ search, one login, one API, plus an MCP server so agents are first-class users.
 C#/Blazor end to end — static shell with Interactive Auto islands for everything
 interactive: the first visit renders on a server circuit while the WASM runtime
 downloads, every later visit runs fully in WebAssembly over `/api` (the only JS is
-`wwwroot/js/gatherum.js`, ~100 lines) — PostgreSQL, deployed as a single rootless
+`wwwroot/js/gatherum.js`, ~150 lines, plus the pager script `EpubChapterHtml` injects
+into rendered EPUB chapters — see DECISIONS.md) — PostgreSQL, deployed as a single rootless
 Podman container behind a TLS-terminating reverse proxy with Authelia for OIDC.
 
 ## Build, run, test
@@ -91,7 +92,8 @@ fresh DI scope via `Services/AppOperations`.
   `{storage root}/{owner root}/{path}`, and superseded content is content-addressed under
   `{owner root}/.gatherum/versions`. `Kind` is derived from the media type, never stored.
 - The filesystem is the system of record; the database is an index over it. Everything
-  except `Users` and `ApiKeys` is rebuildable by `Reindexer` from a cold scan, so nothing
+  except `Users`, `ApiKeys`, and `ReadingPositions` (per-reader ephemera — see
+  DECISIONS.md) is rebuildable by `Reindexer` from a cold scan, so nothing
   may live only in a table — see `FILESYSTEM.md`. The disk always wins a disagreement, and
   nothing outside `.gatherum` is written or deleted to resolve one.
 - Ownership is the path: whoever owns the root directory owns what is under it, and no
@@ -163,7 +165,9 @@ fresh DI scope via `Services/AppOperations`.
   API endpoint is authenticated unless it says `.AllowAnonymous()`, and no write ever does.
 - `INodeAuthorizer.VisibleTo` is the only door for visibility. Never spell the rule again
   in a query — widening the seam is what makes a change correct everywhere at once.
-- No JavaScript beyond `wwwroot/js/gatherum.js`, and nothing goes in there that
+- No JavaScript beyond `wwwroot/js/gatherum.js` and the pager `EpubChapterHtml`
+  injects into the chapters it renders (a sandboxed frame has no Blazor to lean on;
+  the CSP admits that script by hash and nothing else). Nothing goes in either that
   Blazor can do natively.
 - Every Markdown ⇄ document conversion goes through `GatherumMarkdown` — never
   `MarkdownSerializer` directly. A page read without the extension set writes the wiki's
