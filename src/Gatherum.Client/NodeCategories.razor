@@ -6,13 +6,15 @@
    that — and a row of subject chips there is a row of exits placed before anyone
    has read a word. Wikipedia's catlinks bar has always been last, and so is this.
 
-   It reads as a sentence rather than a row of chips, for the same reason: these are
-   the names of subjects, and a chip apiece makes a toolbar out of a list. A rule
-   between them is enough. *@
+   The shape is MediaWiki's catlinks, deliberately and literally: one inline flow —
+   the label is part of the sentence, the list renders inline, every name past the
+   first carries a left rule — so the names wrap the way prose wraps and a second
+   line starts at the box's own edge rather than hanging under the first name.
+   Wikipedia's label is itself a link to the category index, and so is this one. *@
 @if (categories.Count > 0 || CanFile)
 {
     <footer class="node-categories">
-        <span class="label">Categories:</span>
+        <span class="label"><a href="/categories">Categories</a>:</span>
         <ul class="names">
             @foreach (var category in categories)
             {
@@ -74,9 +76,11 @@
     /// island boundary and gets serialized to reach the interactive copy.</summary>
     [Parameter] public CategoryRef[] Categories { get; set; } = [];
 
-    /// <summary>Whether the viewer may file and unfile. The taxonomy has no owner — any
-    /// signed-in user can file any node they can see — so this is only ever "is there
-    /// somebody there", which is the page's answer rather than this component's.</summary>
+    /// <summary>Whether the bar offers filing at all. The taxonomy has no owner — any
+    /// signed-in user may file any node they can edit — so this is not a permission: it
+    /// is the page saying which surface is showing. Reading gets the names alone, the
+    /// way Wikipedia's bar reads; the × and the + belong to the editor, except on a node
+    /// that has no editor to be in, where the read view is the only surface there is.</summary>
     [Parameter] public bool CanFile { get; set; }
 
     private string draft = "";

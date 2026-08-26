@@ -1088,47 +1088,63 @@ same reason — a document that can be saved has to write back the bytes it was 
 A test existed that nearly caught this and didn't: it asserted the reader's HTML contained
 the text `@Notebook`, which a span satisfies. The replacement asserts the anchor.
 
-## The category bar reads as a sentence, not a toolbar
-The bar at the foot of a page was a row of chips — filled pills, each with its own ×, in
-the same shape the app uses for a control you press. That is the wrong shape. These are
-the names of subjects; the row is the end of a sentence about what the page is about, and
-a chip apiece turns it into a toolbar you are meant to operate. Wikipedia's catlinks bar
-has always been plain links with a rule between them, and the reason is not restraint —
-it is that a list of names is a list of names.
+## The category bar is MediaWiki's catlinks, in this app's clothes
+The bar at the foot of a page went through two wrong shapes before landing on the one
+Wikipedia has used all along, and the middle one is worth recording because it *looked*
+right in isolation and read wrong on the page.
 
-So: a `<ul>` of links, a hairline rule between them, "Categories:" inline at the head of
-the line. Three details are worth writing down because each of them was a wrong first
-attempt:
+First it was a row of chips — filled pills, each with its own ×, in the shape the app uses
+for a control you press. These are the names of subjects; the row is the end of a sentence
+about what the page is about, and a chip apiece turns it into a toolbar you are meant to
+operate.
 
-- **The rule goes on the right of each name, not the left.** With a left rule, a line that
-  wraps starts with a stray divider hanging in front of its first name. With a right rule,
-  a wrapped line starts clean and the line above ends with a rule, which reads as
-  "continues".
-- **The list is `flex: 1 1 0`, not `auto`.** At `auto` it asks for the width its contents
-  want, cannot have it, and wraps itself onto the line below the label — so "Categories:"
-  ends up a heading over a list instead of the first two words of the sentence.
-- **Every name carries its own left padding and the list is pulled back by exactly that
-  much.** Without the negative margin the first name sits indented from the label;
-  without the padding the first name of a *wrapped* line sits flush left, out of line with
-  every other name. Both, and every line agrees.
+Second it was a flex row: label on the left, a flexed list of names beside it, rules
+between them. Closer, but flex is the wrong display model for a sentence — the names were
+a column *next to* the label rather than a paragraph *containing* it, so a wrapped line
+hung under the first name instead of returning to the box's edge, and keeping the label on
+the first line took a `flex-basis: 0` and a negative-margin trick that existed only to
+fight the layout model. When the construction needs tricks to look like text, the
+construction is not text.
 
-Filing is the one thing Wikipedia's bar does not have to do — its categories are edited in
-the wikitext — so the × and the plus are ours, and they are the parts that have to stay
-quiet. The × is 40% opacity until it is hovered or focused. The plus is a single glyph at
-the row's own font size doing the whole gesture: shut, it opens the field; open with
-something typed, it commits; open with nothing typed, it shuts again. It replaced a dashed
-ghost pill reading "+ category" and a separate "Add" button that appeared beside it — two
-controls and a placeholder for one act.
+So, third: MediaWiki's own construction, literally, with the app's colors on it —
 
-Enter and blur still commit, and Escape cancels. The Add button existed because neither is
-visible and a soft keyboard makes guessing expensive; the plus inherits that job rather
-than dropping it, which is why it stays put while the field is open instead of being
-replaced by something else.
+```
+.catlinks       { border; faint background; padding }
+.catlinks ul    { display: inline }
+.catlinks li    { display: inline-block; border-left: 1px solid; padding: 0 .5em }
+li:first-child  { border-left: 0 }
+```
+
+One inline flow. The label is part of the sentence — and it is a link to `/categories`,
+because Wikipedia's "Categories" links to the category index and it should. The list
+renders inline, so the names wrap the way prose wraps and a wrapped line starts at the
+box's edge. The rule sits on the *left* of every name but the first, which means a wrapped
+line opens with a rule — Wikipedia accepts that, and it is what makes the dividers read as
+part of the text rather than as column borders. The faint ground under the box is
+`--surface-ground`, which is within a hair of Wikipedia's own `#f8f9fa`.
+
+Filing is the one thing Wikipedia's bar does not do — its categories are edited in the
+wikitext, which is also the answer to *when* ours should appear: filing is editing, so a
+reader sees the names alone and the × and the plus come out with the editor. The one
+exception is a node with no editor to be in — an image, an archive, a folder — where the
+read view is the only surface it has, so a signed-in viewer files it from there. The × is
+40% opacity until hovered or focused. The plus is a single glyph at the row's own size doing the whole
+gesture: shut, it opens the field; open with something typed, it commits; open with
+nothing, it shuts again. It replaced a dashed ghost pill reading "+ category" and a
+separate "Add" button — two controls and a placeholder for one act. Enter and blur still
+commit and Escape cancels; the plus stays put while the field is open because neither of
+those is visible and a soft keyboard makes guessing expensive.
 
 **Touch is a different shape, and the padlock rule proves it.** A 14px × is not something a
 finger can hit, and `app.css` used to carry an exception — `.category button { min-height:
 0 }` — so the chip's × could stay small inside a pill that was big enough. There is no pill
-now, so the exception went, and with it the mobile check's matching `!el.closest(".category")`
-escape. Under a coarse pointer the line of names becomes a list of rows, each at least
-`--tap` tall, with the × at the right where a list keeps its actions. That is what the
-check was there to insist on, and it now insists on it without an exemption.
+now, so the exception went, and with it the mobile check's matching
+`!el.closest(".category")` escape. Under a coarse pointer the sentence becomes a list of
+rows, each at least `--tap` tall, with the × at the right where a list keeps its actions —
+which is what the check was there to insist on, and it now insists on unexempted.
+
+A compiler quirk found on the way: Blazor's CSS isolation rewriter dropped the second
+selector of a nested list (`& li, & li:first-child { … }`), so the first-child half never
+matched and an earlier `padding-left` won on specificity. The symptom was a first row
+indented by 4px on a phone and nowhere else. Nested selector lists get their own rules in
+scoped stylesheets until that is known fixed.

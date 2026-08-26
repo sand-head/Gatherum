@@ -1,52 +1,47 @@
-/* The catlinks bar: a boxed band under everything else, which is what gives an
-   article a floor. The other foot sections (history, "Referenced by") open with
-   a rule because something follows them; nothing follows this. */
+/* The catlinks bar, in MediaWiki's own construction: a bordered band on a faintly
+   dimmer ground, whose content is one inline flow — "Categories:" and then the
+   list, rendered inline so the names wrap the way prose wraps and a wrapped line
+   starts at the box's edge, not hanging under the first name. The colors are the
+   app's; the shape is Wikipedia's, verbatim:
+
+     .catlinks       { border; background; padding }
+     .catlinks ul    { display: inline }
+     .catlinks li    { display: inline-block; border-left; padding: 0 .5em }
+     li:first-child  { border-left: 0 }
+
+   That first-child rule means a name that wraps onto a new line keeps its left
+   rule at the line's start — Wikipedia accepts that, and it is what makes the
+   dividers read as part of the text instead of as column borders. */
 .node-categories {
-    display: flex;
-    align-items: baseline;
-    flex-wrap: wrap;
-    gap: 2px 8px;
     margin-top: 28px;
-    padding: 7px 12px;
+    padding: 6px 12px;
     border: 1px solid var(--outline-dim);
     border-radius: var(--radius-s);
-    font: 400 14px/1.8 var(--font-ui);
+    background: var(--surface-ground);
+    font: 400 14px/1.7 var(--font-ui);
 }
 
 .label { color: var(--on-surface-dim); }
 
-/* A list, because that is what it is — and one that reads as a line of names with
-   a rule between them rather than a row of pills. A chip apiece makes a toolbar
-   out of what is really the end of a sentence. */
 .names {
-    display: flex;
-    flex-wrap: wrap;
+    display: inline;
     list-style: none;
-    /* Shares the line with the label rather than pushing itself onto the next one,
-       which is the difference between a sentence and a heading over a list. Basis
-       zero, so it takes the room that is left instead of asking for the room it
-       wants and wrapping when it cannot have it. */
-    flex: 1 1 0;
-    min-width: 0;
-    /* Every name carries its own left padding so that the first one on a *wrapped*
-       line lines up with the first one on the first line. Pulling the list back by
-       that padding is what keeps the first line flush with the label. */
-    margin: 0 0 0 -9px;
+    margin: 0;
     padding: 0;
 
     & li {
-        display: flex;
-        align-items: baseline;
-        padding: 0 9px;
+        display: inline-block;
+        border-left: 1px solid var(--outline);
+        padding: 0 8px;
     }
 
-    /* The rule goes on the right rather than the left so a line that wraps starts
-       clean and ends with a rule — which reads as "continues" instead of putting a
-       stray divider in front of the first name on the new line. */
-    & li:not(:last-child) { border-right: 1px solid var(--outline); }
+    & li:first-child {
+        border-left: none;
+        padding-left: 4px;
+    }
 
-    /* The plus is not another name, and nothing sets it apart as one. */
-    & li.filing, & li:has(+ .filing) { border-right: none; }
+    /* The plus is not another name, so no divider announces it as one. */
+    & li.filing { border-left: none; padding-left: 0; }
 }
 
 /* Wikipedia's bar has nothing to unfile with, because its categories are edited in
@@ -81,8 +76,6 @@
     &:hover, &:focus-visible { color: var(--primary); background: none; }
 }
 
-.filing { gap: 6px; }
-
 .draft {
     font: inherit;
     width: 11ch;
@@ -93,6 +86,7 @@
     border-bottom: 1px solid var(--outline);
     border-radius: 0;
     padding: 0;
+    margin-right: 4px;
 
     &:focus-visible {
         outline: none;
@@ -102,33 +96,37 @@
 }
 
 .error {
-    flex-basis: 100%;
-    margin: 0;
+    margin: 4px 0 0;
     font: 400 13px/1.6 var(--font-ui);
     color: var(--danger);
 }
 
 /* A finger cannot hit a 14px ×, and shrinking the row to fit one would be the wrong
-   trade — so on a touch screen the line of names becomes a list of rows, each tall
+   trade — so on a touch screen the inline sentence becomes a list of rows, each tall
    enough to hit, with the unfile on the right where a list keeps its actions. */
 @media (pointer: coarse) {
-    .node-categories { flex-direction: column; align-items: stretch; }
+    .label { display: block; }
 
     .names {
-        flex-direction: column;
-        align-items: stretch;
-        margin-left: 0;
+        display: block;
 
         & li {
+            display: flex;
             justify-content: space-between;
             align-items: center;
             min-height: var(--tap);
+            border-left: none;
             padding: 0;
         }
 
-        /* Same specificity as the rule it undoes, and later, so it wins. */
-        & li:not(:last-child) { border-right: none; }
+        /* Its own rule rather than joined to the one above: the isolation compiler
+           has been seen dropping the second selector of a nested list, which left
+           the inline layout's first-child padding standing on specificity. */
+        & li:first-child { padding: 0; }
+
         & li + li { border-top: 1px solid var(--outline-dim); }
+
+        & li.filing { justify-content: space-between; }
     }
 
     .unfile, .file {
@@ -139,8 +137,6 @@
         padding: 0;
         opacity: 1;
     }
-
-    .filing { justify-content: space-between; }
 
     /* iOS zooms into any field under 16px and never zooms back out. */
     .draft { font-size: 16px; flex: 1; width: auto; }

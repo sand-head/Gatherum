@@ -100,9 +100,15 @@ else if (node is not null)
 
         @* Last on the page, under the history and under what links here — the foot of
            a wiki article is where its subjects belong, and they are the reader's way
-           onward once the prose is done rather than a detour before it starts. *@
+           onward once the prose is done rather than a detour before it starts.
+
+           Reading shows the names alone, Wikipedia's way: filing is editing, so the ×
+           and the + appear with the editor. The exception is a node with no editor to
+           be in — an image, an archive, a folder — where the read view is the only
+           surface it has, so a signed-in viewer files it from there. *@
         <NodeCategories @rendermode="InteractiveAuto" NodeId="@node.Id"
-                        Categories="@categories.ToArray()" CanFile="@SignedIn" />
+                        Categories="@categories.ToArray()"
+                        CanFile="@(SignedIn && (Editing || !editable))" />
     </article>
 }
 
