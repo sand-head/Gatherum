@@ -1,0 +1,153 @@
+# Hosts a bookmark capture refuses: never fetched as assets, stripped from the
+# document, and — in a rendered capture — never allowed to load at all. One entry
+# per line; an entry covers every host under it. Curated by hand, newest last in
+# each group: a capture should hold the page, not the auction that paid for it.
+#
+# This packaged list is the seed and the safety net, not the whole blocker: the
+# community list at Gatherum__Bookmarks__AdHostsUrl is fetched just in time and
+# unioned on top, and captures fall back to this alone when it cannot be had. Keep
+# it to the registrable domains of networks that matter — breadth is the fetched
+# list's job.
+
+# Google advertising and measurement
+doubleclick.net
+googlesyndication.com
+googleadservices.com
+googletagservices.com
+googletagmanager.com
+google-analytics.com
+adservice.google.com
+imasdk.googleapis.com
+2mdn.net
+app-measurement.com
+
+# Ad exchanges, SSPs and DSPs
+adnxs.com
+adsrvr.org
+adform.net
+adition.com
+advertising.com
+amazon-adsystem.com
+appnexus.com
+bidswitch.net
+casalemedia.com
+contextweb.com
+criteo.com
+criteo.net
+emxdgt.com
+gumgum.com
+improvedigital.com
+indexww.com
+lijit.com
+media.net
+mgid.com
+openx.net
+pubmatic.com
+rubiconproject.com
+serving-sys.com
+sharethrough.com
+smartadserver.com
+sonobi.com
+sovrn.com
+teads.tv
+triplelift.com
+360yield.com
+33across.com
+yieldlab.net
+yieldmo.com
+zemanta.com
+
+# Video ad delivery
+freewheel.tv
+innovid.com
+spotx.tv
+spotxchange.com
+springserve.com
+stickyadstv.com
+connatix.com
+primis.tech
+aniview.com
+vidazoo.com
+
+# Native ads and content recommendation
+taboola.com
+outbrain.com
+revcontent.com
+adblade.com
+plista.com
+zergnet.com
+adthrive.com
+mediavine.com
+
+# Ad verification and viewability measurement
+adsafeprotected.com
+doubleverify.com
+moatads.com
+moatpixel.com
+
+# Audience measurement and identity graphs
+scorecardresearch.com
+quantserve.com
+quantcount.com
+bluekai.com
+demdex.net
+everesttech.net
+exelator.com
+omtrdc.net
+2o7.net
+branch.io
+chartbeat.com
+parsely.com
+parse.ly
+
+# Session recording and product analytics
+hotjar.com
+mouseflow.com
+fullstory.com
+clarity.ms
+mixpanel.com
+mxpnl.com
+segment.com
+segment.io
+amplitude.com
+heapanalytics.com
+crazyegg.com
+luckyorange.com
+inspectlet.com
+smartlook.com
+js-agent.newrelic.com
+nr-data.net
+
+# Social platform trackers, by their tracking hosts — never the platforms
+# themselves, whose domains also serve pages people bookmark
+facebook.net
+ads-twitter.com
+ads.linkedin.com
+analytics.tiktok.com
+ct.pinterest.com
+tr.snapchat.com
+sc-static.net
+bat.bing.com
+mc.yandex.ru
+an.yandex.ru
+hm.baidu.com
+cnzz.com
+
+# Consent management platforms — machinery for the ads, and the overlay that
+# would otherwise be rendered into the capture
+cookielaw.org
+cookiebot.com
+trustarc.com
+consensu.org
+didomi.io
+sp-prod.net
+privacy-mgmt.com
+usercentrics.eu
+
+# Pop-under and push-ad networks
+popads.net
+propellerads.com
+exoclick.com
+adsterra.com
+hilltopads.net
+adroll.com

@@ -1,7 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Gatherum.Tests" />
     <ProjectReference Include="..\Gatherum.Core\Gatherum.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Bookmarks\AdHosts.txt" />
   </ItemGroup>
 
   <ItemGroup>

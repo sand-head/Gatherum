@@ -1272,3 +1272,39 @@ selector of a nested list (`& li, & li:first-child { … }`), so the first-child
 matched and an earlier `padding-left` won on specificity. The symptom was a first row
 indented by 4px on a phone and nowhere else. Nested selector lists get their own rules in
 scoped stylesheets until that is known fixed.
+
+## Bookmark captures block ads with a curated embedded list, not EasyList
+An ad blocker for captures wants a filter list, and the real ones (EasyList, uBlock's)
+update daily — but "nothing in Gatherum fetches the web unasked" would make a
+self-updating blocklist the first exception, and a hash-pinned build-time fetch (the
+embedding model's trick) breaks on a file that changes under it. So the list is a
+hand-curated set of ad, tracking and consent *hosts* embedded in the assembly
+(`Bookmarks/AdHosts.txt`), matched by domain suffix — no cosmetic rules, no regex
+engine. Blocking happens twice because the two halves catch different things: the
+browser archiver aborts listed hosts at the network, so ad scripts never run, never
+draw placeholders or consent overlays into the DOM, and stop costing the settle budget;
+the snapshot transform then refuses to fetch listed assets and strips elements pointing
+at them, which is what covers the plain-fetch fallback and keeps tracking pixels from
+reporting every later reading of the archive. A page whose own host is on the list is
+exempt from its own entry — bookmarking the ad company's blog still captures its logo —
+and the main-frame navigation is never blocked at all. `Gatherum__Bookmarks__BlockAds`
+turns the whole thing off.
+
+## The ad blocklist is community-sourced after all, fetched just in time
+The entry above chose a hand-curated embedded list to keep "nothing fetches the web
+unasked" airtight; the owner would rather have the community's coverage, and the tempo
+rule survives the change: the list is fetched lazily *inside* a capture somebody asked
+for — never on a schedule, never at startup — cached for a day in memory, with a
+fifteen-minute silence after a failure so a dead list host doesn't toll every bookmark.
+`AdBlocklistProvider` owns that lifecycle; `AdBlocklist` stays the immutable matcher.
+The default source is StevenBlack's hosts file, but the parser reads all the shapes
+these lists come in (hosts format, bare domains, `*.` wildcards, `||host^` rules —
+cosmetic and exception rules are skipped whole, and a mid-token `#` is Adblock syntax,
+not a comment, lest `example.com##.ad` read as a block on example.com), so
+`Gatherum__Bookmarks__AdHostsUrl` can point at OISD, Peter Lowe's, or the AdGuard DNS
+filter. The packaged curated list stayed, demoted to seed and safety net: it is unioned
+under every fetched list so an update can widen blocking but never narrow it — and
+because its entries are registrable domains, `Match` answering with the *most general*
+entry keeps the first-party exemption whole when a community list names one outfit's
+subdomains host by host. A fetch failure degrades to blocking less, never to failing
+the capture that wanted the list.

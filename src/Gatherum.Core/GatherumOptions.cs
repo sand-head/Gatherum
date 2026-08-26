@@ -23,6 +23,20 @@ public class BookmarkOptions
     /// HTTP fetch when nothing is found — so a bare <c>dotnet run</c> still bookmarks,
     /// just without rendering.</summary>
     public string BrowserPath { get; set; } = "";
+
+    /// <summary>Keep ads, trackers and consent machinery out of captures: their hosts
+    /// are refused before a rendered page's scripts run and stripped from the snapshot
+    /// either way. Off, a capture keeps the page warts and all.</summary>
+    public bool BlockAds { get; set; } = true;
+
+    /// <summary>Where the list of ad hosts comes from: a community-maintained list,
+    /// fetched just in time when a capture wants it and kept for a day — never on a
+    /// schedule. Any of the usual formats works (a hosts file, bare domains,
+    /// <c>||host^</c> rules), so this can point at Peter Lowe's list, OISD, or the
+    /// AdGuard DNS filter instead. Empty blocks with the small packaged list alone,
+    /// which is also what any capture falls back to when the fetch fails.</summary>
+    public string AdHostsUrl { get; set; } =
+        "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts";
 }
 
 /// <summary>What reaches people who are not signed in. A node marked
