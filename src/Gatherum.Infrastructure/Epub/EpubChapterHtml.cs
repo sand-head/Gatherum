@@ -258,6 +258,13 @@ public static class EpubChapterHtml
         #epub-page { position: absolute; left: 0; right: 0; bottom: 1rem; text-align: center;
                      font: 0.8rem/1 system-ui, sans-serif; color: rgb(0 0 0 / 0.45);
                      pointer-events: none; }
+        /* A phone's page: margins a paperback would have, not a desk's, and page
+           turns that fit under the thumbs that make them. */
+        @media (max-width: 40rem) {
+            #epub-box { padding: 1.75rem 2.5rem 2.75rem; }
+            #epub-prev, #epub-next { width: 2.5rem; font-size: 1.8rem; }
+            #epub-page { bottom: 0.8rem; }
+        }
         """;
 
     /// <summary>The pager: columns the chapter to the viewport, turns pages by
@@ -310,6 +317,19 @@ public static class EpubChapterHtml
             if (now - turned < 250) return;
             turned = now;
             show(page + (e.deltaY > 0 || e.deltaX > 0 ? 1 : -1));
+          }, { passive: true });
+          let touchX = null, touchY = null;
+          addEventListener('touchstart', (e) => {
+            touchX = e.changedTouches[0].clientX;
+            touchY = e.changedTouches[0].clientY;
+          }, { passive: true });
+          addEventListener('touchend', (e) => {
+            if (touchX === null) return;
+            const dx = e.changedTouches[0].clientX - touchX;
+            const dy = e.changedTouches[0].clientY - touchY;
+            touchX = null;
+            if (Math.abs(dx) > 48 && Math.abs(dx) > Math.abs(dy) * 1.5)
+              show(page + (dx < 0 ? 1 : -1));
           }, { passive: true });
 
           document.addEventListener('click', (e) => {
