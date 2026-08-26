@@ -40,7 +40,7 @@ else if (node is not null)
         <NodeHeader @rendermode="InteractiveAuto" NodeId="@node.Id" Title="@node.Title"
                     Access="@node.Access.ToString()" Owned="@(node.OwnerId == ViewerId)"
                     OnAccessChanged="OnParametersSetAsync"
-                    EditHref="@(editable && !Editing ? $"/nodes/{node.Id}?edit" : null)" />
+                    EditHref="@(SignedIn && !Editing ? $"/nodes/{node.Id}?edit" : null)" />
 
         @* Which surface a page opens in is a product decision, and this is it: a page
            reads, and editing is a URL you go to. Reading is the common case by a wide
@@ -73,7 +73,11 @@ else if (node is not null)
         }
         else
         {
-            <FileView @rendermode="InteractiveAuto" NodeId="@node.Id" />
+            @* A file's Edit is its management surface: the same view, with the writing
+               controls — upload a new version, the description — shown. Editing is
+               never offered to somebody not signed in, whatever the URL says. *@
+            <FileView @rendermode="InteractiveAuto" NodeId="@node.Id"
+                      Editing="@(SignedIn && Editing)" />
         }
 
         @* A category's members go between its prose and its history: they are what the
@@ -103,12 +107,12 @@ else if (node is not null)
            onward once the prose is done rather than a detour before it starts.
 
            Reading shows the names alone, Wikipedia's way: filing is editing, so the ×
-           and the + appear with the editor. The exception is a node with no editor to
-           be in — an image, an archive, a folder — where the read view is the only
-           surface it has, so a signed-in viewer files it from there. *@
+           and the + appear with ?edit — the same rule for every kind of node, because
+           every kind of node has an Edit surface: a page's is the editor, a file's is
+           its own view with the management controls shown. *@
         <NodeCategories @rendermode="InteractiveAuto" NodeId="@node.Id"
                         Categories="@categories.ToArray()"
-                        CanFile="@(SignedIn && (Editing || !editable))" />
+                        CanFile="@(SignedIn && Editing)" />
     </article>
 }
 

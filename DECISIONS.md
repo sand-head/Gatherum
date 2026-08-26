@@ -1125,10 +1125,15 @@ part of the text rather than as column borders. The faint ground under the box i
 
 Filing is the one thing Wikipedia's bar does not do — its categories are edited in the
 wikitext, which is also the answer to *when* ours should appear: filing is editing, so a
-reader sees the names alone and the × and the plus come out with the editor. The one
-exception is a node with no editor to be in — an image, an archive, a folder — where the
-read view is the only surface it has, so a signed-in viewer files it from there. The × is
-40% opacity until hovered or focused. The plus is a single glyph at the row's own size doing the whole
+reader sees the names alone and the × and the plus come out with ?edit. That rule briefly
+carried an exception — a node with no editor showed the controls in its read view — and
+the exception was the wrong fix for a real hole: files had no Edit surface at all, and
+their view compensated by mixing writing into reading, offering "Upload new version" and a
+description form to everybody, anonymous strangers on a public file included. So instead
+of excepting the bar, every node got the tab: a page's Edit is the editor, a file's is its
+own view with the management controls shown — upload, the description as a field rather
+than a caption — and the bar's rule holds for every media type without a footnote. The ×
+is 40% opacity until hovered or focused. The plus is a single glyph at the row's own size doing the whole
 gesture: shut, it opens the field; open with something typed, it commits; open with
 nothing, it shuts again. It replaced a dashed ghost pill reading "+ category" and a
 separate "Add" button — two controls and a placeholder for one act. Enter and blur still

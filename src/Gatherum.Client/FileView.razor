@@ -76,25 +76,46 @@
             <dt></dt>
             <dd class="file-actions">
                 <a class="button" href="/api/files/@NodeId/download" target="_blank">Download</a>
-                <label class="upload-label button">
-                    Upload new version
-                    <InputFile OnChange="UploadVersionAsync" />
-                </label>
+                @if (Editing)
+                {
+                    <label class="upload-label button">
+                        Upload new version
+                        <InputFile OnChange="UploadVersionAsync" />
+                    </label>
+                }
             </dd>
         </dl>
 
-        <section class="file-description">
-            <h3>Description</h3>
-            <textarea value="@description" @onchange='e => description = e.Value?.ToString() ?? ""'
-                      placeholder="What is this file?"></textarea>
-            <button class="primary" @onclick="SaveDescriptionAsync"
-                    disabled="@(description == file.Description)">Save description</button>
-        </section>
+        @* The description is the file's caption when reading and a field when editing —
+           the same split as everything else on the page, so a stranger on a public file
+           is never offered a save the API would refuse. *@
+        @if (Editing)
+        {
+            <section class="file-description">
+                <h3>Description</h3>
+                <textarea value="@description" @onchange='e => description = e.Value?.ToString() ?? ""'
+                          placeholder="What is this file?"></textarea>
+                <button class="primary" @onclick="SaveDescriptionAsync"
+                        disabled="@(description == file.Description)">Save description</button>
+            </section>
+        }
+        else if (file.Description.Length > 0)
+        {
+            <section class="file-description">
+                <h3>Description</h3>
+                <p>@file.Description</p>
+            </section>
+        }
     </div>
 }
 
 @code {
     [Parameter, EditorRequired] public Guid NodeId { get; set; }
+
+    /// <summary>Whether the management controls — upload, description — are out. The
+    /// page decides, because ?edit is the page's concept; reading a file shows the
+    /// file.</summary>
+    [Parameter] public bool Editing { get; set; }
 
     private NodeInfo? node;
     private string description = "";
