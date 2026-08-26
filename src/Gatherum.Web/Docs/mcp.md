@@ -33,7 +33,7 @@ claude mcp add --transport http gatherum http://localhost:5140/mcp \
 
 | Tool | Arguments | Returns |
 | --- | --- | --- |
-| `search` | `query`, `kind?` (`page`/`file`), `limit?`, `mode?` (`hybrid`/`text`/`semantic`) | Matches with kind and snippet |
+| `search` | `query`, `kind?` (`page`/`file`/`category`), `limit?`, `mode?` (`hybrid`/`text`/`semantic`) | Matches with kind and snippet |
 | `get_node` | `id` | Metadata plus the Markdown body (pages) or extracted text and file metadata |
 | `list_children` | `id?` (omit for roots) | Children in tree order |
 | `create_page` | `title`, `markdown`, `parentId?` | The created node |
@@ -41,10 +41,10 @@ claude mcp add --transport http gatherum http://localhost:5140/mcp \
 | `bookmark_page` | `url`, `parentId?` | The captured page as a new file node |
 | `capture_bookmark` | `id` | The bookmark, with a fresh capture as its newest version |
 | `move_node` | `id`, `newParentId?`, `position?` | Confirmation |
-| `add_category` | `id`, `path` (e.g. `Homelab/Podman`) | The path it landed on |
-| `remove_category` | `id`, `path` | Confirmation |
-| `list_categories` | `matching?` | The category tree in path order, with member counts |
-| `browse_category` | `path`, `deep?` | The category, its ancestry, subcategories and nodes |
+| `add_category` | `id`, `name` (e.g. `Podman`) | The name it landed on |
+| `remove_category` | `id`, `name` | Confirmation |
+| `list_categories` | `matching?` | Every category, with member counts and its parents' ids |
+| `browse_category` | `name`, `deep?` | The category, its parents, subcategories and nodes |
 | `get_backlinks` | `id` | Nodes linking to the given node |
 
 Media that a model has analyzed comes back from `get_node` with `transcript` and
@@ -59,9 +59,12 @@ Media that a model has analyzed comes back from `get_node` with `transcript` and
   renders it; write plain Markdown and nothing is lost either.
 - **Search before creating.** Titles are how `[[wiki links]]` resolve, so a near-duplicate
   page is worse here than a missing one.
-- **Categories are the subject index.** File a new page under something; `list_categories`
-  says what already exists, and the capitalization of an existing path is the one to
-  match.
+- **Categories are the subject index, and each one is a page.** File a new page under
+  something; `list_categories` says what already exists, and an existing name is the one to
+  match — a new name writes a new category page. Nesting is the same call pointed at a
+  category: `add_category` on Podman's own node id, with `Homelab`, makes it a
+  subcategory. `get_node` on a category reads what it says belongs in it, and
+  `update_page` writes that.
 - **Links earn backlinks.** A mention or wiki link is recorded in both directions the
   moment the page is saved; a bare title in prose is not.
 - **A bookmark is a capture, not a link.** `bookmark_page` renders the URL in a

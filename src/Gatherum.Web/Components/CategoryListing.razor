@@ -1,0 +1,64 @@
+@using Gatherum.Core.Domain
+@using Gatherum.Core.Services
+@using Gatherum.Client
+
+@* What a category page has that an ordinary page does not: the pages that say they are
+   about this. It sits under the prose, because the prose is the category telling you what
+   belongs here and this is the answer. *@
+
+@if (View.Subcategories.Count > 0)
+{
+    <h2>Subcategories</h2>
+    <div class="category-cloud">
+        @foreach (var child in View.Subcategories.OrderBy(c => c.Name,
+            StringComparer.OrdinalIgnoreCase))
+        {
+            <a class="category" href="@CategoryUrl.Page(child.Name)">
+                @child.Name <span class="count">@child.SubtreeMembers</span>
+            </a>
+        }
+    </div>
+}
+
+<h2>
+    Pages in @View.Category.Name
+    @if (View.Subcategories.Count > 0)
+    {
+        <a class="depth-toggle" href="@($"{CategoryUrl.Page(View.Category.Name)}?deep={(Deep ? "false" : "true")}")">
+            @(Deep ? "this category only" : "include subcategories")
+        </a>
+    }
+</h2>
+<ul class="node-list">
+    @foreach (var node in View.Nodes)
+    {
+        <li>
+            <a href="/nodes/@node.Id">
+                <span class="node-icon">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                         stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <path d="M14 2v6h6" />
+                        @if (node.Kind == NodeKind.Page)
+                        {
+                            <path d="M9 13h6M9 17h6" />
+                        }
+                    </svg>
+                </span>
+                @node.Title
+            </a>
+        </li>
+    }
+    @if (View.Nodes.Count == 0)
+    {
+        <li class="hint">Nothing filed here yet.</li>
+    }
+</ul>
+
+@code {
+    [Parameter, EditorRequired] public CategoryView View { get; set; } = null!;
+
+    /// <summary>Whether the subcategories' pages are being counted in. A link rather than
+    /// a toggle, because it is a different listing and deserves its own URL.</summary>
+    [Parameter] public bool Deep { get; set; }
+}

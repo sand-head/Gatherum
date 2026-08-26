@@ -140,7 +140,8 @@ public class SemanticSearchTests(PostgresFixture postgres) : IAsyncLifetime
         await harness.EmbedStaleAsync();
         harness.Embedder.Embedded.Clear();
 
-        await harness.Categories.RenameAsync("fiction", "Worldbuilding");
+        var fiction = await harness.Categories.ResolveAsync("fiction");
+        await harness.Nodes.RenameAsync(jess, fiction!.Id, "Worldbuilding");
         await harness.EmbedStaleAsync();
 
         Assert.NotEmpty(harness.Embedder.Embedded);

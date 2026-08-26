@@ -1,6 +1,8 @@
 .hint { color: var(--on-surface-dim); max-width: min(60ch, 100%); }
 
-/* The list arrives in path order, so one indent per level draws the whole tree. */
+/* The outline arrives parent-before-child with a depth on every row, so one indent per
+   level draws the whole graph — including a subject that turns up under two parents,
+   which is a thing the taxonomy can now say. */
 .category-tree {
     list-style: none;
     padding: 0;
@@ -23,59 +25,6 @@
     }
 
     & .count { color: var(--on-surface-dim); font-size: 13px; }
-}
-
-.breadcrumb {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-wrap: wrap;
-    color: var(--on-surface-dim);
-    font-size: 14px;
-}
-
-.category-cloud {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin-bottom: 8px;
-}
-
-.category-cloud .category { padding: 6px 14px; font-size: 14px; }
-
-.depth-toggle {
-    margin-left: 10px;
-    font: 400 13px/1.5 var(--font-ui);
-    color: var(--on-surface-dim);
-}
-
-.node-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    max-width: min(640px, 100%);
-
-    & li { border-bottom: 1px solid var(--outline-dim); }
-
-    & li.hint { border-bottom: none; padding: 9px 8px; }
-
-    & a {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        padding: 9px 8px;
-        border-radius: var(--radius-s);
-        color: var(--on-surface);
-
-        &:hover { background: var(--hover); text-decoration: none; }
-    }
-}
-
-.node-icon {
-    display: grid;
-    place-items: center;
-    color: var(--on-surface-dim);
-    flex-shrink: 0;
 }
 
 @media (max-width: 480px) {

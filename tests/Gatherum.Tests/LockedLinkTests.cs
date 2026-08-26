@@ -44,7 +44,7 @@ public class LockedLinkTests
     {
         var doc = Page();
 
-        Assert.True(NodeLinks.Seal(doc, Reachable(Open), Ink));
+        Assert.True(NodeLinks.Address(doc, Reachable(Open), Ink));
 
         var runs = Prose(doc).Runs;
         var locked = runs[runs.FindIndex(r => r.Text == "@Diary")];
@@ -56,9 +56,10 @@ public class LockedLinkTests
         // in the page: nothing about the text the author wrote has changed.
         Assert.Equal("@Diary", locked.Text);
 
-        // The one the reader may open is left exactly as the page wrote it.
+        // The one the reader may open gets the address that opens it, and keeps the ink
+        // the page wrote it in.
         var live = runs[runs.FindIndex(r => r.Text == "@Notebook")];
-        Assert.Equal($"node://{Open}", live.Style.Link);
+        Assert.Equal($"/nodes/{Open}", live.Style.Link);
         Assert.Equal(default, live.Style.Color);
     }
 
@@ -68,7 +69,7 @@ public class LockedLinkTests
         var doc = Page();
         var at = PictureAt(doc);
 
-        NodeLinks.Seal(doc, Reachable(Open), Ink);
+        NodeLinks.Address(doc, Reachable(Open), Ink);
 
         // Left as an image it would be a broken picture and nothing else: the browser
         // fetches it itself and is refused.
@@ -81,12 +82,38 @@ public class LockedLinkTests
     }
 
     [Fact]
-    public void Sealing_twice_changes_nothing_the_second_time()
+    public void A_mention_the_reader_may_follow_is_a_real_link()
     {
         var doc = Page();
 
-        Assert.True(NodeLinks.Seal(doc, Reachable(Open), Ink));
-        Assert.False(NodeLinks.Seal(doc, Reachable(Open), Ink));
+        NodeLinks.Address(doc, Reachable(Open), Ink);
+        var html = RichHtmlWriter.WriteBody(doc, ReaderOptions());
+
+        // The bug this exists for: node:// is nobody's scheme, so the read view dropped
+        // it and a mention came out as a styled span — no href, nothing to click, nothing
+        // to open in a new tab, nothing for the status bar to say.
+        Assert.Contains($"<a class=\"se-link\" href=\"/nodes/{Open}\"", html);
+        Assert.DoesNotContain("node://", html);
+    }
+
+    [Fact]
+    public void A_mention_nobody_answered_for_stays_inert()
+    {
+        // The reader leaves the document alone when the server does not answer, and that
+        // has to mean "no link", not "a link into somebody's private node".
+        var html = RichHtmlWriter.WriteBody(Page(), ReaderOptions());
+
+        Assert.DoesNotContain("<a", html);
+        Assert.Contains("@Notebook", html);
+    }
+
+    [Fact]
+    public void Addressing_twice_changes_nothing_the_second_time()
+    {
+        var doc = Page();
+
+        Assert.True(NodeLinks.Address(doc, Reachable(Open), Ink));
+        Assert.False(NodeLinks.Address(doc, Reachable(Open), Ink));
     }
 
     [Fact]
@@ -95,9 +122,9 @@ public class LockedLinkTests
         var dark = ChromeInk.For(isDark: true);
         var doc = Page();
         var at = PictureAt(doc);
-        NodeLinks.Seal(doc, Reachable(Open), Ink);
+        NodeLinks.Address(doc, Reachable(Open), Ink);
 
-        Assert.True(NodeLinks.Seal(doc, Reachable(Open), dark));
+        Assert.True(NodeLinks.Address(doc, Reachable(Open), dark));
 
         Assert.All(Prose(doc).Runs.Where(r => r.Style.Link?.StartsWith(NodeLinks.LockedScheme) == true),
             r => Assert.Equal(dark.LockedLink, r.Style.Color));
@@ -105,12 +132,17 @@ public class LockedLinkTests
     }
 
     [Fact]
-    public void A_page_that_answered_for_everything_is_left_alone()
+    public void A_page_that_answered_for_everything_padlocks_nothing()
     {
         var doc = Page();
+        var at = PictureAt(doc);
 
-        Assert.False(NodeLinks.Seal(doc, Reachable(Open, Shut), Ink));
-        Assert.Equal(BlockKind.Image, doc.Blocks[PictureAt(doc)].Kind);
+        NodeLinks.Address(doc, Reachable(Open, Shut), Ink);
+
+        Assert.Equal(BlockKind.Image, doc.Blocks[at].Kind);
+        Assert.All(Prose(doc).Runs.Where(r => r.Style.Link is { Length: > 0 }),
+            r => Assert.StartsWith("/nodes/", r.Style.Link!));
+        Assert.DoesNotContain(Prose(doc).Runs, r => r.Style.Color == Ink.LockedLink);
     }
 
     [Fact]
@@ -126,7 +158,7 @@ public class LockedLinkTests
     public void The_reader_gets_an_anchor_to_padlock_and_no_target_at_all()
     {
         var doc = Page();
-        NodeLinks.Seal(doc, Reachable(Open), Ink);
+        NodeLinks.Address(doc, Reachable(Open), Ink);
 
         var html = RichHtmlWriter.WriteBody(doc, ReaderOptions());
 

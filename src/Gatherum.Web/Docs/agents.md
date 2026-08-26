@@ -56,8 +56,9 @@ The traps, all of which are quiet rather than loud:
    name someone would type in prose: `Podman` over `Notes on podman (2026)`.
 3. **Place it.** `parentId` puts it under the right part of the tree; omitting it makes
    a top-level page, which is rarely what you want.
-4. **File it.** `list_categories` first, then `add_category` with a path that already
-   exists if one fits. Match the existing capitalization.
+4. **File it.** `list_categories` first, then `add_category` with a name that already
+   exists if one fits — a new name writes a new category page, and two spellings of one
+   subject are two subjects. Match the existing capitalization.
 5. **Link outward.** Mention or wiki-link the pages this one talks about. Backlinks are
    recorded on save and are most of what makes the wiki navigable.
 6. **Lead with the answer.** An infobox for the facts, a first paragraph that says what

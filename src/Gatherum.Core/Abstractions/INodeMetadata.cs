@@ -25,6 +25,16 @@ public record NodeMetadata
     /// else. Recorded here because "capture this again" has to survive the database.</summary>
     public string? SourceUrl { get; init; }
 
+    /// <summary>Whether this node is a category rather than a page about one. Nothing
+    /// about a Markdown file's bytes says it is a subject, so this is the one thing about
+    /// a category the sidecar has to carry.</summary>
+    public bool Category { get; init; }
+
+    /// <summary>The categories this node is filed under, by <em>name</em> — the same
+    /// choice, and for the same reason, as recording a grant by root directory rather
+    /// than by user id: an id is a database's opinion and this file exists for the day
+    /// there is no database. On a category page these are the categories it is nested
+    /// under, which is the only place nesting is written down.</summary>
     public IReadOnlyList<string> Categories { get; init; } = [];
     public AccessMode Access { get; init; } = AccessMode.Private;
     public bool Inherit { get; init; } = true;

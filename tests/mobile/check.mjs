@@ -28,8 +28,7 @@ function arg(name) {
   return i > 0 ? process.argv[i + 1] : undefined;
 }
 
-// Anything a user can hit or type into. Chips carry their own small × inside a
-// pill that is itself big enough, so they are measured as the chip, not the ×.
+// Anything a user can hit or type into.
 const INTERACTIVE = "button, .button, a.tree-link, input, textarea, select";
 
 async function routes(page) {
@@ -41,7 +40,7 @@ async function routes(page) {
     ["home", "/"],
     ["pages", "/pages"],
     ["categories", "/categories"],
-    ["category-deep", "/categories/Homelab/Networking/VLANs"],
+    ["category-deep", "/categories/Deeper%20still"],
     ["settings", "/settings"],
     ["not-found", "/not-found"],
     ...(page1 ? [["node-read", `/nodes/${page1}`], ["node-edit", `/nodes/${page1}?edit`]] : []),
@@ -61,7 +60,7 @@ async function measure(page) {
       const name = (typeof el.className === "string" && el.className) || el.tagName.toLowerCase();
       if (el.matches("input, textarea, select") && parseFloat(cs.fontSize) < FONT)
         smallFont.push(`${name} @ ${cs.fontSize}`);
-      if (box.height < TAP && !el.closest(".category"))
+      if (box.height < TAP)
         small.push(`${name} @ ${Math.round(box.height)}px`);
     }
     const rowMenu = document.querySelector(".row-menu");

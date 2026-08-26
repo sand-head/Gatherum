@@ -51,7 +51,7 @@ public class SearchServiceTests(PostgresFixture postgres) : IAsyncLifetime
     public async Task Categories_are_searchable_by_every_name_they_are_nested_under()
     {
         var page = await harness.Files.CreateTextNodeAsync(jess, null, "Chapter 3");
-        await harness.Categories.AddAsync(jess, page.Id, "Fiction/Worldbuilding");
+        await harness.FileUnderAsync(jess, page.Id, "Worldbuilding", nestedUnder: "Fiction");
 
         Assert.Equal([page.Id],
             (await harness.Search.SearchAsync(jess, "worldbuilding")).Select(r => r.Id));

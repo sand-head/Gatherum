@@ -9,40 +9,44 @@
         <input class="node-title-input" value="@title" aria-label="Page title"
                @onchange="e => RenameAsync(e.Value?.ToString() ?? title)" />
     </h1>
-    <div class="node-meta">
-        <CategoryEditor NodeId="@NodeId" Categories="@categories"
-                        OnChanged="ReloadCategoriesAsync" />
-        @* Only the owner can change who reaches a node, so only the owner is offered the
-           control — the service would refuse anybody else, and a button that always fails
-           is worse than no button. *@
-        @if (Owned)
-        {
-            <ShareControl NodeId="@NodeId" Title="@Title" OnChanged="OnAccessChanged" />
-        }
-        @if (Access == "Public")
-        {
-            <span class="badge badge-public" title="Anyone on the internet can read this">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <circle cx="12" cy="12" r="9" />
-                    <path d="M3 12h18M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18" />
-                </svg>
-                Public
-            </span>
-        }
-        else if (Access == "Shared")
-        {
-            <span class="badge badge-shared" title="Shared with someone">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-                    <circle cx="9" cy="7" r="4" />
-                    <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-                </svg>
-                Shared
-            </span>
-        }
-    </div>
+    @* What a page is about now sits at the foot of the article, where a wiki keeps
+       it, so this band is down to who can reach the page. It is nothing at all for
+       a visitor reading somebody's unlisted link, and empty rows are not a design. *@
+    @if (Owned || Access != "Private")
+    {
+        <div class="node-meta">
+            @* Only the owner can change who reaches a node, so only the owner is offered the
+               control — the service would refuse anybody else, and a button that always fails
+               is worse than no button. *@
+            @if (Owned)
+            {
+                <ShareControl NodeId="@NodeId" Title="@Title" OnChanged="OnAccessChanged" />
+            }
+            @if (Access == "Public")
+            {
+                <span class="badge badge-public" title="Anyone on the internet can read this">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                         stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <circle cx="12" cy="12" r="9" />
+                        <path d="M3 12h18M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18" />
+                    </svg>
+                    Public
+                </span>
+            }
+            else if (Access == "Shared")
+            {
+                <span class="badge badge-shared" title="Shared with someone">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                         stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                        <circle cx="9" cy="7" r="4" />
+                        <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+                    </svg>
+                    Shared
+                </span>
+            }
+        </div>
+    }
     @* A wiki's page actions: beside the title where there is room for words, and
        in their own band under the metadata where there is not — which is where
        Wikipedia's mobile skin keeps them, as an icon, just above the rule that
@@ -81,16 +85,10 @@
     /// body and for the editor itself — the page decides, because only it knows
     /// which surface is showing.</summary>
     [Parameter] public string? EditHref { get; set; }
-    [Parameter] public CategoryRef[] Categories { get; set; } = [];
 
     private string title = "";
-    private IReadOnlyList<CategoryRef> categories = [];
 
-    protected override void OnParametersSet()
-    {
-        title = Title;
-        categories = Categories;
-    }
+    protected override void OnParametersSet() => title = Title;
 
     private async Task RenameAsync(string newTitle)
     {
@@ -100,7 +98,4 @@
         title = newTitle;
         await Tree.RefreshAsync();
     }
-
-    private async Task ReloadCategoriesAsync() =>
-        categories = (await Data.GetNodeAsync(NodeId)).Categories;
 }

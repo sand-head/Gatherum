@@ -332,6 +332,9 @@ the bytes are stored, versioned, and searchable by title and category before any
 asked anything.
 
 ## Nested categories replace tags
+*Superseded in part by [A category is a page](#a-category-is-a-page): the argument against
+tags stands, the path does not.*
+
 Tags were in the brief from the start, and they were the wrong thing for this app.
 Wikipedia has no tags; Google Docs has none either. A tag is a flat label, so a wiki
 grown past a few dozen pages ends up with `podman`, `quadlet`, `quadlets` and `homelab`
@@ -779,6 +782,43 @@ Gatherum's history is still a toggle at the foot of the page. Moving it up would
 `VersionPanel` giving up its own open/closed state to the header, which is a bigger
 change than this one and not obviously right.
 
+## Categories moved to the foot of the page
+The chips sat in `NodeHeader`, between the title and the first line of the article. No
+wiki puts them there, and the reason is not habit: a category is a way *out* of a page,
+and a row of exits above the prose is an invitation to leave before reading. Wikipedia's
+catlinks bar has always been the last thing on an article, under the references and the
+navboxes; Gatherum's is now the last thing under the history and "Referenced by", in a
+box with a border on all four sides — the other foot sections open with a rule because
+something follows them, and nothing follows this one.
+
+The move made the component the header's, and it should not have been. `CategoryEditor`
+is `NodeCategories` now: it renders the whole bar, label included, and owns the list it
+shows. Filing a category was the only thing on the page that changed when you filed one,
+and the header was re-reading the node on the article's behalf to keep a row of chips it
+did not need. The page hands it what the prerender already knew, so the bar arrives with
+the article rather than a beat after it, and every change after that is the bar's own.
+
+Two things fell out of moving it that were wrong where it stood:
+
+- **A reader is no longer offered the editor.** The old bar showed an anonymous visitor
+  to a public page a × on every chip and a "+ category" field, both of which the API
+  would refuse. The taxonomy still has no owner — any signed-in user files any node they
+  can see — so `CanFile` is only ever "is there somebody there", which is the page's
+  answer and not the bar's. With nothing to file and nothing filed, the bar renders
+  nothing at all.
+- **The header's metadata band can now be empty**, because categories were the one thing
+  in it that everybody had. An unlisted page seen by the person holding the link has no
+  share control and no badge, so the band is not rendered rather than rendered hollow.
+
+What did not change is the direction: a page still says what it is about, and a category
+still comes into existence by being used. That is Wikipedia's model too — `[[Category:X]]`
+is written on the member, and the category page may not exist yet. What Wikipedia has
+that this does not is the category *as a page*: a body to describe the subject in, and
+its own membership in a parent category, which is how the hierarchy there is made. Here
+the hierarchy is the path, and a category has nothing to say for itself. That is a
+deliberate cost of `CategoryPath` — the prefix match is worth it — but it is the real
+gap, and it is not a UI one.
+
 ## The checks only ever saw half the app
 Blazor Auto renders on the server circuit while the WebAssembly payload downloads, and
 locally on every visit after. Those are different runtimes running different code, and
@@ -1044,3 +1084,191 @@ got is a face: the bookmark bar over the preview names the source, holds the Cap
 again button, and pages the sandboxed frame back through older captures via the version
 the content URL already accepted, an archive's calendar in one select. Restore and
 download stay the History panel's; the bar only decides which past the frame shows.
+
+## A category is a page
+Categories irked, and the complaint was worth taking seriously: *on Wikipedia a category is
+a thing that gets made, and pages are added to it; here pages dictate categories.* Half of
+that is a misreading — Wikipedia's membership is declared on the member too, `[[Category:X]]`
+is typed into the article, and a category page can be a redlink while already listing what
+is in it. The direction of filing was never the difference.
+
+The difference is that a Wikipedia category is **a page**. It has a body saying what belongs
+in it, a history, a talk page, something for a link to resolve to — and, decisively, it
+declares its own parents by being filed under them. Gatherum's category was a string. It
+had none of that, and it had `Path` doing the work of identity, which is where the rest of
+the awkwardness came from: a parallel set of verbs (rename, move, delete) that existed only
+because a path is a thing its own service has to maintain, and a shape that could not say
+"Podman is a homelab subject *and* a container subject" because a string has one prefix.
+
+So a category is a page. `Node.IsCategory`, an ordinary Markdown file at
+`Categories/<Name>.md` in the root of whoever first mentioned it, and `NodeCategory` demoted
+to an edge between two nodes. That edge is the taxonomy's **only** relation: pointed at a
+category it is a membership, pointed from one category at another it is a subcategory.
+Nesting is not a second mechanism.
+
+What that is worth, mostly measured in what stopped existing:
+
+- **Three verbs became none.** Rename is renaming the node. Re-nest is filing it somewhere
+  else — the same gesture as filing a page, on the same bar. Delete is deleting it.
+  `CategoryService.RenameAsync`/`MoveAsync`/`DeleteAsync`, three REST endpoints, and
+  `CategoryTools` — a whole component that existed to maintain paths — are gone.
+- **Deleting a category no longer deletes its subcategories.** It could when they were
+  rows under a prefix. They are pages now, so they lose a parent and become subjects of
+  their own, and the pages filed in the deleted one are simply no longer filed there. That
+  is the change most likely to surprise, and it is the one the model forces and improves:
+  deleting `Homelab` should never have been able to delete somebody's writing about Podman.
+- **The taxonomy is a graph.** `Podman` under `Homelab` and under `Containers` at once, and
+  members belong to both. An index does this. `Homelab/Podman` could not.
+- **Rename stops rewriting the world.** Identity is an id, so no path is repathed and no
+  `RepathAsync` exists. It still costs the search text of everything beneath it — a
+  category contributes its whole ancestry to its members' findable text, and that is the
+  property the embedding staleness rule was written for — and it now also costs the
+  *sidecars* of its direct members, because a name is what they write down.
+- **`[[Homelab]]` resolves.** A category is a page, so it is a wiki-link target, a backlink
+  target, and something `get_node` reads. That was the whole ask.
+
+`CategoryPath` becomes `CategoryName`: one name, trimmed and whitespace-collapsed and
+compared case-insensitively, unique among categories. Unique is load-bearing rather than
+tidy — it is what lets `meta.json` say `"categories": ["Podman"]` and mean something with no
+database to look an id up in, which is the same argument that already made a grant record a
+root directory instead of a `Guid`. It is also what makes `/categories/Podman` addressable,
+and a category name is the one address in this wiki a reader would type, so the readable
+route is a second `@page` on `NodePage` rather than a second article view to keep in step.
+
+Things worth stating because they are not free:
+
+- **Ancestry was a string prefix and is now a walk.** `CategoryIndex` loads the whole
+  taxonomy for the length of one operation and answers ancestors, descendants and closures
+  from memory. That is not a new trade — `GetSimilarAsync` already decided it, in those
+  words, for exactly this question — and the taxonomy is a table of dozens of rows in a
+  wiki for two people. It is a snapshot: load one per operation and let it go.
+- **The reindex needs two passes.** A page filed under "Podman" cannot be joined up until
+  whichever root holds Podman's page has been walked, so filings are collected during the
+  walk and wired afterwards, in one pass, against one snapshot. A name nothing answers to —
+  somebody typed it into a `meta.json` by hand — gets its page written. That is the one
+  place the scan creates a file outside `.gatherum`, and it is deliberate: a taxonomy half
+  of which exists only in the database would not survive the next cold start, which is the
+  one thing this whole architecture is for.
+- **A category page is private until its author says otherwise**, like any page. The
+  taxonomy still has no owner in the sense that mattered — anyone who can edit a node can
+  file it under anything, and listings are still computed against what the asker can see —
+  but who may read a category's *prose* is now that page's own business. The subject is
+  everyone's; the essay about it is its author's. Sharing it is the ordinary gesture.
+- **An unqualified search no longer returns categories.** Every filed page has a same-named
+  subject standing beside it, so the default would answer half in headings. They are
+  indexed like the pages they are and `kind: category` asks for them.
+- **Two spellings of one subject are two subjects**, and always were — the datalist under
+  the category field is what keeps that from happening, and it matters more now that a
+  second spelling writes a second file. An ordinary page called "Podman" is *not* quietly
+  promoted into a subject when somebody files something under that word; only a category
+  answers to a category name.
+
+One thing was fixed on the way past because the design made it load-bearing:
+`NodeService.RenameAsync` never wrote the sidecar, so a title override lived in the index
+alone and the next reindex would quietly undo it. Harmless-looking until a category's name
+is what its members write on disk.
+
+## A mention was never a link
+`[@Podman](node://id)` rendered, in the read view, as a `<span>`. It had the link's colour
+and the link's underline and did nothing at all when clicked — no target, nothing to open
+in a new tab, nothing to copy, nothing for the status bar to preview. The wiki link beside
+it worked, which is what made it look like a styling problem rather than a missing anchor.
+
+The cause is one line and worth writing down because it will happen again: the read view
+hands `RichHtmlWriter` an allow-list of URL schemes, and anything outside it is written as
+a styled span rather than an `<a>` — the sanitizer doing exactly its job. `wikilink:` is on
+that list because slopedit put it there; `locked:` is on it because we did, deliberately,
+so a padlocked link has an element to hang the padlock on. `node://` was on nobody's list.
+It is Gatherum's own scheme and it never needed to be a *browser's* URL — the canvas
+resolves it by hit-testing, and the canvas is where mentions were designed.
+
+The fix is not to add `node` to the allow-list. `node://id` is not something a browser can
+do anything with either: Ctrl-click would open a tab on a scheme it cannot resolve, and
+"copy link address" would yield a string that means nothing outside this app. slopedit's
+own note on why the read-only view emits real anchors says it plainly — a plain left click
+comes back to the host, and *every other click is the browser's*. A link that only answers
+one of those is half a link. So the read view addresses a mention as `/nodes/id`, which is
+where it goes, and which every one of those gestures already understands.
+
+Where that rewrite happens is the part that matters. It belongs inside the pass that
+already asks the server which of a page's links this reader may follow, and nowhere
+earlier — because a mention that has not been vouched for must stay inert. Do it up front,
+before the answer comes back, and a page whose reachability call fails or gets rate-limited
+ships live links into other people's private nodes; do it in the same pass, and the three
+outcomes are one decision in one place: reachable becomes `/nodes/id`, unreachable becomes
+`locked:id`, and unanswered stays `node://id` — which the sanitizer draws as no link at
+all. `NodeLinks.Seal` became `NodeLinks.Address` because that is now what it does: it gives
+every node link in the document the address it should have *for this reader*.
+
+The stored bytes never change. A mention is written `node://id`, saved `node://id`, and
+round-trips `node://id`; the addressing is the read view's, like the padlock, and for the
+same reason — a document that can be saved has to write back the bytes it was read from.
+
+A test existed that nearly caught this and didn't: it asserted the reader's HTML contained
+the text `@Notebook`, which a span satisfies. The replacement asserts the anchor.
+
+## The category bar is MediaWiki's catlinks, in this app's clothes
+The bar at the foot of a page went through two wrong shapes before landing on the one
+Wikipedia has used all along, and the middle one is worth recording because it *looked*
+right in isolation and read wrong on the page.
+
+First it was a row of chips — filled pills, each with its own ×, in the shape the app uses
+for a control you press. These are the names of subjects; the row is the end of a sentence
+about what the page is about, and a chip apiece turns it into a toolbar you are meant to
+operate.
+
+Second it was a flex row: label on the left, a flexed list of names beside it, rules
+between them. Closer, but flex is the wrong display model for a sentence — the names were
+a column *next to* the label rather than a paragraph *containing* it, so a wrapped line
+hung under the first name instead of returning to the box's edge, and keeping the label on
+the first line took a `flex-basis: 0` and a negative-margin trick that existed only to
+fight the layout model. When the construction needs tricks to look like text, the
+construction is not text.
+
+So, third: MediaWiki's own construction, literally, with the app's colors on it —
+
+```
+.catlinks       { border; faint background; padding }
+.catlinks ul    { display: inline }
+.catlinks li    { display: inline-block; border-left: 1px solid; padding: 0 .5em }
+li:first-child  { border-left: 0 }
+```
+
+One inline flow. The label is part of the sentence — and it is a link to `/categories`,
+because Wikipedia's "Categories" links to the category index and it should. The list
+renders inline, so the names wrap the way prose wraps and a wrapped line starts at the
+box's edge. The rule sits on the *left* of every name but the first, which means a wrapped
+line opens with a rule — Wikipedia accepts that, and it is what makes the dividers read as
+part of the text rather than as column borders. The faint ground under the box is
+`--surface-ground`, which is within a hair of Wikipedia's own `#f8f9fa`.
+
+Filing is the one thing Wikipedia's bar does not do — its categories are edited in the
+wikitext, which is also the answer to *when* ours should appear: filing is editing, so a
+reader sees the names alone and the × and the plus come out with ?edit. That rule briefly
+carried an exception — a node with no editor showed the controls in its read view — and
+the exception was the wrong fix for a real hole: files had no Edit surface at all, and
+their view compensated by mixing writing into reading, offering "Upload new version" and a
+description form to everybody, anonymous strangers on a public file included. So instead
+of excepting the bar, every node got the tab: a page's Edit is the editor, a file's is its
+own view with the management controls shown — upload, the description as a field rather
+than a caption — and the bar's rule holds for every media type without a footnote. The ×
+is 40% opacity until hovered or focused. The plus is a single glyph at the row's own size doing the whole
+gesture: shut, it opens the field; open with something typed, it commits; open with
+nothing, it shuts again. It replaced a dashed ghost pill reading "+ category" and a
+separate "Add" button — two controls and a placeholder for one act. Enter and blur still
+commit and Escape cancels; the plus stays put while the field is open because neither of
+those is visible and a soft keyboard makes guessing expensive.
+
+**Touch is a different shape, and the padlock rule proves it.** A 14px × is not something a
+finger can hit, and `app.css` used to carry an exception — `.category button { min-height:
+0 }` — so the chip's × could stay small inside a pill that was big enough. There is no pill
+now, so the exception went, and with it the mobile check's matching
+`!el.closest(".category")` escape. Under a coarse pointer the sentence becomes a list of
+rows, each at least `--tap` tall, with the × at the right where a list keeps its actions —
+which is what the check was there to insist on, and it now insists on unexempted.
+
+A compiler quirk found on the way: Blazor's CSS isolation rewriter dropped the second
+selector of a nested list (`& li, & li:first-child { … }`), so the first-child half never
+matched and an earlier `padding-left` won on specificity. The symptom was a first row
+indented by 4px on a phone and nowhere else. Nested selector lists get their own rules in
+scoped stylesheets until that is known fixed.

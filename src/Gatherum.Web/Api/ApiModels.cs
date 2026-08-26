@@ -26,7 +26,8 @@ public record NodeDto(
         node.ParentId,
         node.Position,
         node.Access.ToString(),
-        node.Categories.Select(c => CategoryRefDto.From(c.Category!)).OrderBy(c => c.Path).ToList(),
+        node.Categories.Select(c => CategoryRefDto.From(c.Category!))
+            .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase).ToList(),
         node.CreatedAt,
         node.UpdatedAt,
         node is { MediaType: MediaTypes.Markdown, File.Versions.Count: > 0 }
@@ -74,26 +75,28 @@ public record NodeSummaryDto(Guid Id, string Kind, string Title, Guid? ParentId,
         new(node.Id, node.Kind.ToString(), node.Title, node.ParentId, node.Position);
 }
 
-/// <summary>A category as a node wears it: the path is its identity, the name is what
-/// the chip says.</summary>
-public record CategoryRefDto(string Path, string Name)
+/// <summary>A category as the node filed under it wears it: the name is what the chip
+/// says and what addresses it, the id is the page it is.</summary>
+public record CategoryRefDto(Guid Id, string Name)
 {
-    public static CategoryRefDto From(Category category) => new(category.Path, category.Name);
+    public static CategoryRefDto From(Node category) => new(category.Id, category.Title);
 }
 
-public record CategoryDto(string Path, string Name, string? ParentPath, int Members,
+/// <summary>A category can be nested under more than one, so parents are a list and
+/// there is no single path up to a root to report.</summary>
+public record CategoryDto(Guid Id, string Name, IReadOnlyList<Guid> ParentIds, int Members,
     int SubtreeMembers)
 {
-    public static CategoryDto From(CategorySummary category) => new(category.Path, category.Name,
-        category.ParentPath, category.Members, category.SubtreeMembers);
+    public static CategoryDto From(CategorySummary category) => new(category.Id, category.Name,
+        category.ParentIds, category.Members, category.SubtreeMembers);
 }
 
-public record CategoryViewDto(CategoryDto Category, IReadOnlyList<CategoryDto> Ancestors,
+public record CategoryViewDto(CategoryDto Category, IReadOnlyList<CategoryDto> Parents,
     IReadOnlyList<CategoryDto> Subcategories, IReadOnlyList<NodeSummaryDto> Nodes)
 {
     public static CategoryViewDto From(CategoryView view) => new(
         CategoryDto.From(view.Category),
-        view.Ancestors.Select(CategoryDto.From).ToList(),
+        view.Parents.Select(CategoryDto.From).ToList(),
         view.Subcategories.Select(CategoryDto.From).ToList(),
         view.Nodes.Select(NodeSummaryDto.From).ToList());
 }
@@ -145,9 +148,7 @@ public record UpdatePageRequest(string Markdown, string? Title);
 public record SaveTextRequest(string Text);
 public record MoveNodeRequest(Guid? NewParentId, int? Position);
 public record RenameRequest(string Title);
-public record CategoryRequest(string Path);
-public record RenameCategoryRequest(string Path, string Name);
-public record MoveCategoryRequest(string Path, string? NewParentPath);
+public record CategoryRequest(string Name);
 public record CreateKeyRequest(string Name);
 /// <summary>Private, Shared, or Public — and Public means the internet.</summary>
 public record SetAccessRequest(string Access, bool Inherit = true);

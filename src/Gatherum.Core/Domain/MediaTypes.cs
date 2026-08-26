@@ -8,6 +8,10 @@ public static class MediaTypes
     public const string Docx = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
     public const string Html = "text/html";
 
+    /// <summary>What a directory is, when it is only a place to keep things. A folder
+    /// somebody made in their file manager is a node too.</summary>
+    public const string Directory = "inode/directory";
+
     private static readonly Dictionary<string, string> ByExtension = new(StringComparer.OrdinalIgnoreCase)
     {
         [".md"] = Markdown,

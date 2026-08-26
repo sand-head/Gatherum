@@ -30,7 +30,8 @@ public class GatherumMcpTools(
         "phrases, OR, -exclusions — which only the full-text half honours.")]
     public async Task<IEnumerable<SearchResultDto>> Search(
         [Description("The search query.")] string query,
-        [Description("Optional filter: 'page' (Markdown) or 'file' (everything else).")]
+        [Description("Optional filter: 'page' (Markdown), 'file' (everything else), or " +
+            "'category' (a subject's own page).")]
         string? kind = null,
         [Description("Maximum results, default 20.")] int? limit = null,
         [Description("'hybrid' (default), 'text' for literal matching only, or " +
@@ -134,34 +135,36 @@ public class GatherumMcpTools(
     }
 
     [McpServerTool(Name = "add_category")]
-    [Description("File a node under a category. Categories nest: 'Homelab/Podman' is a " +
-        "subcategory of 'Homelab', and both are created if they don't exist yet. A node " +
-        "in a subcategory counts as a member of everything above it.")]
+    [Description("File a node under a category, by name. A category is a page: if none " +
+        "is called this yet, one is written. Filing a category under another category is " +
+        "what makes it a subcategory, and a node in a subcategory counts as a member of " +
+        "everything above it.")]
     public async Task<string> AddCategory(
         [Description("The node id.")] Guid id,
-        [Description("The category path, e.g. 'Homelab/Podman'.")] string path) =>
-        await Run(() => categories.AddAsync(UserId, id, path));
+        [Description("The category name, e.g. 'Podman'.")] string name) =>
+        await Run(() => categories.AddAsync(UserId, id, name));
 
     [McpServerTool(Name = "remove_category")]
     [Description("Take a node out of one category. Its other categories, and the " +
         "categories this one is nested under, are untouched.")]
     public async Task<string> RemoveCategory(
         [Description("The node id.")] Guid id,
-        [Description("The category path to remove.")] string path)
+        [Description("The category name to remove.")] string name)
     {
         await Run(async () =>
         {
-            await categories.RemoveAsync(UserId, id, path);
+            await categories.RemoveAsync(UserId, id, name);
             return true;
         });
         return "removed";
     }
 
     [McpServerTool(Name = "list_categories")]
-    [Description("The whole category tree, in path order, with how many nodes sit in " +
-        "each directly and how many its subcategories hold in total.")]
+    [Description("Every category, by name, with the ids of the categories each is nested " +
+        "under, how many nodes sit in it directly, and how many its subcategories hold " +
+        "in total. A category can be nested under more than one.")]
     public async Task<IEnumerable<CategoryDto>> ListCategories(
-        [Description("Optional filter: only categories whose path contains this text.")]
+        [Description("Optional filter: only categories whose name contains this text.")]
         string? matching = null)
     {
         var all = await categories.ListAsync(UserId, matching);
@@ -169,14 +172,15 @@ public class GatherumMcpTools(
     }
 
     [McpServerTool(Name = "browse_category")]
-    [Description("One category: where it sits, what is nested under it, and the nodes " +
-        "in it — the subcategories' nodes too when deep is true.")]
+    [Description("One category: what it is nested under, what is nested under it, and " +
+        "the nodes in it — the subcategories' nodes too when deep is true. The category " +
+        "is a node of its own; read its page with get_node for what it says it holds.")]
     public async Task<CategoryViewDto> BrowseCategory(
-        [Description("The category path, e.g. 'Homelab/Podman'.")] string path,
+        [Description("The category name, e.g. 'Podman'.")] string name,
         [Description("Include the nodes of every subcategory, default false.")]
         bool? deep = null) =>
         await Run(async () => CategoryViewDto.From(
-            await categories.GetAsync(UserId, path, deep ?? false)));
+            await categories.GetAsync(UserId, name, deep ?? false)));
 
     [McpServerTool(Name = "get_backlinks")]
     [Description("List the nodes whose bodies link to the given node.")]
@@ -190,7 +194,8 @@ public class GatherumMcpTools(
     private static NodeKind ParseKind(string kind) =>
         Enum.TryParse<NodeKind>(kind, ignoreCase: true, out var parsed)
             ? parsed
-            : throw new McpException($"Unknown kind '{kind}'; use 'page' or 'file'.");
+            : throw new McpException(
+                $"Unknown kind '{kind}'; use 'page', 'file' or 'category'.");
 
     private static async Task<T> Run<T>(Func<Task<T>> action)
     {

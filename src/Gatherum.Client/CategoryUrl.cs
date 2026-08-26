@@ -1,11 +1,12 @@
 namespace Gatherum.Client;
 
-/// <summary>A category path in a URL. Segments are escaped one at a time: the slashes
-/// between them are structure the route keeps, not text inside a name.</summary>
+/// <summary>A category's readable URL. A category is a node, so it has a
+/// <c>/nodes/{id}</c> like everything else — but a wiki's categories are the one place
+/// a reader types the address, and a name is what they would type. Names are unique
+/// among categories, which is what makes this addressable at all.</summary>
 public static class CategoryUrl
 {
-    public static string For(string path) => string.Join('/',
-        path.Split('/', StringSplitOptions.RemoveEmptyEntries).Select(Uri.EscapeDataString));
+    public static string For(string name) => Uri.EscapeDataString(name);
 
-    public static string Page(string path) => $"/categories/{For(path)}";
+    public static string Page(string name) => $"/categories/{For(name)}";
 }

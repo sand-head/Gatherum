@@ -1,0 +1,186 @@
+@inject IAppData Data
+
+@* Where a wiki keeps what a page is about: at the foot of the article, after the
+   prose and after what links here, in a box that closes the page. Between the
+   title and the first line is where the *page* says what it is — the title does
+   that — and a row of subject chips there is a row of exits placed before anyone
+   has read a word. Wikipedia's catlinks bar has always been last, and so is this.
+
+   The shape is MediaWiki's catlinks, deliberately and literally: one inline flow —
+   the label is part of the sentence, the list renders inline, every name past the
+   first carries a left rule — so the names wrap the way prose wraps and a second
+   line starts at the box's own edge rather than hanging under the first name.
+   Wikipedia's label is itself a link to the category index, and so is this one. *@
+@if (categories.Count > 0 || CanFile)
+{
+    <footer class="node-categories">
+        <span class="label"><a href="/categories">Categories</a>:</span>
+        <ul class="names">
+            @foreach (var category in categories)
+            {
+                <li>
+                    <a href="@CategoryUrl.Page(category.Name)">@category.Name</a>
+                    @* Filing is a signed-in gesture, so a reader who could not unfile a
+                       page is not shown the button that says they could. *@
+                    @if (CanFile)
+                    {
+                        <button class="unfile" title="@($"Unfile from {category.Name}")"
+                                aria-label="@($"Unfile from {category.Name}")"
+                                @onclick="() => RemoveAsync(category.Name)">×</button>
+                    }
+                </li>
+            }
+            @if (CanFile)
+            {
+                <li class="filing">
+                    @if (filing)
+                    {
+                        <input class="draft" @ref="field" placeholder="category"
+                               list="category-suggestions-@NodeId" value="@draft"
+                               enterkeyhint="done" @oninput="OnInput" @onkeydown="OnKeyDown"
+                               @onblur="CommitAsync" />
+                    }
+                    @* One button, one glyph, in one place: it opens the field, and then it
+                       is the visible way to commit — Enter and blur both do it too, but
+                       neither is visible, and a soft keyboard makes guessing expensive.
+                       Preventing mousedown's default keeps focus in the field, so the blur
+                       never fires and the caret is ready for the next name. *@
+                    <button class="file" title="@(filing ? "Add" : "File under a category")"
+                            aria-label="@(filing ? "Add" : "File under a category")"
+                            @onmousedown:preventDefault @onclick="PlusAsync">+</button>
+                    @* A name is typed, not picked, so the datalist is only there to stop
+                       two spellings of one subject becoming two subjects. *@
+                    <datalist id="category-suggestions-@NodeId">
+                        @foreach (var suggestion in suggestions)
+                        {
+                            <option value="@suggestion.Name" />
+                        }
+                    </datalist>
+                </li>
+            }
+        </ul>
+        @* Filing can be refused for a reason worth reading — a name too long, a category
+           nested inside itself — and this is the only place that reason can be said. *@
+        @if (error is { Length: > 0 })
+        {
+            <p class="error" role="alert">@error</p>
+        }
+    </footer>
+}
+
+@code {
+    [Parameter, EditorRequired] public Guid NodeId { get; set; }
+
+    /// <summary>What the page already knows, so the prerender carries the names instead
+    /// of the bar appearing a beat after the article. An array because this crosses an
+    /// island boundary and gets serialized to reach the interactive copy.</summary>
+    [Parameter] public CategoryRef[] Categories { get; set; } = [];
+
+    /// <summary>Whether the bar offers filing at all. The taxonomy has no owner — any
+    /// signed-in user may file any node they can edit — so this is not a permission: it
+    /// is the page saying which surface is showing. Reading gets the names alone, the
+    /// way Wikipedia's bar reads; the × and the + belong to the editor, except on a node
+    /// that has no editor to be in, where the read view is the only surface there is.</summary>
+    [Parameter] public bool CanFile { get; set; }
+
+    private string draft = "";
+    private string? error;
+    private bool filing;
+    private bool focusWanted;
+    private ElementReference field;
+    private IReadOnlyList<CategoryInfo> suggestions = [];
+    private IReadOnlyList<CategoryRef> categories = [];
+
+    protected override void OnParametersSet() => categories = Categories;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!focusWanted)
+            return;
+        focusWanted = false;
+        await field.FocusAsync();
+    }
+
+    /// <summary>The plus opens the field when it is shut, and commits when there is
+    /// something to commit. Pressed on an empty field it shuts it again, so the same
+    /// glyph in the same place is the whole of the gesture.</summary>
+    private async Task PlusAsync()
+    {
+        if (!filing)
+        {
+            filing = true;
+            focusWanted = true;
+            return;
+        }
+        if (draft.Trim().Length == 0)
+        {
+            filing = false;
+            error = null;
+            return;
+        }
+        await CommitAsync();
+    }
+
+    private async Task OnInput(ChangeEventArgs e)
+    {
+        draft = e.Value?.ToString() ?? "";
+        suggestions = draft.Length > 0 ? await Data.ListCategoriesAsync(draft) : [];
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await CommitAsync();
+        else if (e.Key == "Escape")
+            Close();
+    }
+
+    private async Task CommitAsync()
+    {
+        if (draft.Trim().Length == 0)
+        {
+            Close();
+            return;
+        }
+        var wanted = draft;
+        error = null;
+        try
+        {
+            await Data.AddCategoryAsync(NodeId, wanted);
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return;
+        }
+        Close();
+        await ReloadAsync();
+    }
+
+    private async Task RemoveAsync(string name)
+    {
+        error = null;
+        try
+        {
+            await Data.RemoveCategoryAsync(NodeId, name);
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return;
+        }
+        await ReloadAsync();
+    }
+
+    private void Close()
+    {
+        draft = "";
+        suggestions = [];
+        filing = false;
+    }
+
+    /// <summary>The bar owns its own list once it is live: it is the only thing on the
+    /// page that changes when a category is filed, and re-reading the node here saves
+    /// the whole article a round trip.</summary>
+    private async Task ReloadAsync() => categories = (await Data.GetNodeAsync(NodeId)).Categories;
+}

@@ -47,13 +47,16 @@ from wherever the match was: for a literal hit it is the text around the words y
 and for a semantic hit it is the passage that matched — which may be nowhere near the top
 of the document.
 
-Results can be filtered to pages or to files, and the limit runs from 1 to 100
-(20 by default).
+Results can be filtered to pages, to files, or to categories, and the limit runs from 1 to
+100 (20 by default). Categories are pages and are indexed like pages, but an unqualified
+search leaves them out: every filed page has a same-named subject standing beside it, so
+the default would answer half in headings. Ask for `category` to search them.
 
 ## What is searchable
 
 - Titles, weighted above body text.
-- The names of every category a node is filed in.
+- The names of every category a node is filed in, and of every category those are nested
+  under — so searching "homelab" finds a page filed only under "Podman".
 - A file's description.
 - Extracted text: Markdown and code verbatim, a PDF's text layer, a `.docx`'s Markdown
   rendering, an image's metadata.
@@ -66,8 +69,8 @@ Full-text results are current the moment a save completes. Semantic results lag 
 however long the embedding worker takes to notice — it sweeps every fifteen seconds by
 default and works through what changed. A node is considered stale when a fingerprint of
 everything it is embedded from stops matching the fingerprint its vectors were made
-from, which is also why renaming a category re-embeds the hundred nodes filed under it
-without anything having to remember to ask.
+from, which is also why renaming a category — which is renaming its page — re-embeds the
+hundred nodes filed under it without anything having to remember to ask.
 
 ## When the model is unreachable
 

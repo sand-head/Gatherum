@@ -111,6 +111,8 @@ The directory behind `Gatherum__Storage__Root` **is** the knowledge base:
 ```
 {storage root}/
   {username}/                  one directory per user, named for their OIDC username
+    Categories/
+      Podman.md                a category — a page saying what belongs in it
     Homelab/
       podman-on-the-nas.md     a page, as a plain file
       rack.jpg
@@ -118,6 +120,12 @@ The directory behind `Gatherum__Storage__Root` **is** the knowledge base:
       meta.json                titles, categories, sharing, history
       versions/                superseded content, addressed by SHA-256
 ```
+
+`meta.json` names a node's categories by name — `"categories": ["Podman"]` — for the same
+reason it records who a node is shared with by directory rather than by user id: an id is a
+database's opinion, and this file exists for the day there is no database. A category page
+marks itself with `"category": true`, and the categories *it* lists are the ones it is
+nested under, which is the only place the taxonomy's shape is written down.
 
 Ownership is the path: whoever owns the root directory owns what is under it. Every page
 and file is readable, greppable and rsyncable with Gatherum switched off.

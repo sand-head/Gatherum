@@ -1,4 +1,8 @@
 @page "/nodes/{Id:guid}"
+@* A category is a page, so this is the page that renders one — there is no second
+   article view to keep in step. The readable route is here rather than redirecting to
+   the guid because a category name is the one address in this wiki a reader types. *@
+@page "/categories/{Name}"
 @inherits GatherumComponent
 @using Microsoft.AspNetCore.Authorization
 @* A node can be public or unlisted, so this page has to answer somebody with no session.
@@ -11,7 +15,14 @@
 @if (notFound)
 {
     <PageTitle>Not found — Gatherum</PageTitle>
-    <h1 class="node-missing">This node doesn't exist (or is private to someone else).</h1>
+    @if (Name is null)
+    {
+        <h1 class="node-missing">This node doesn't exist (or is private to someone else).</h1>
+    }
+    else
+    {
+        <h1 class="node-missing">Nothing here is about that (or it is private to someone else).</h1>
+    }
 }
 else if (node is not null)
 {
@@ -28,8 +39,8 @@ else if (node is not null)
     <article class="node">
         <NodeHeader @rendermode="InteractiveAuto" NodeId="@node.Id" Title="@node.Title"
                     Access="@node.Access.ToString()" Owned="@(node.OwnerId == ViewerId)"
-                    OnAccessChanged="OnParametersSetAsync" Categories="@categories.ToArray()"
-                    EditHref="@(editable && !Editing ? $"/nodes/{node.Id}?edit" : null)" />
+                    OnAccessChanged="OnParametersSetAsync"
+                    EditHref="@(SignedIn && !Editing ? $"/nodes/{node.Id}?edit" : null)" />
 
         @* Which surface a page opens in is a product decision, and this is it: a page
            reads, and editing is a URL you go to. Reading is the common case by a wide
@@ -42,6 +53,19 @@ else if (node is not null)
             <NodeEditor @rendermode="InteractiveAuto" NodeId="@node.Id" FileName="@fileName"
                         MediaType="@node.MediaType" />
         }
+        else if (category is not null && unwritten)
+        {
+            @* A category nobody has written yet is Wikipedia's redlinked category: it
+               already lists what is in it, and says so instead of opening half a screen
+               of empty document above the only thing on the page. *@
+            <p class="node-unwritten">
+                Nobody has said what belongs here yet.
+                @if (editable)
+                {
+                    <a href="/nodes/@node.Id?edit">Write it</a><text>.</text>
+                }
+            </p>
+        }
         else if (readable)
         {
             <NodeReader @rendermode="InteractiveAuto" NodeId="@node.Id" FileName="@fileName"
@@ -49,7 +73,18 @@ else if (node is not null)
         }
         else
         {
-            <FileView @rendermode="InteractiveAuto" NodeId="@node.Id" />
+            @* A file's Edit is its management surface: the same view, with the writing
+               controls — upload a new version, the description — shown. Editing is
+               never offered to somebody not signed in, whatever the URL says. *@
+            <FileView @rendermode="InteractiveAuto" NodeId="@node.Id"
+                      Editing="@(SignedIn && Editing)" />
+        }
+
+        @* A category's members go between its prose and its history: they are what the
+           page is for, and the history of the lede is a footnote beside them. *@
+        @if (category is not null)
+        {
+            <CategoryListing View="@category" Deep="@Deep" />
         }
 
         <VersionPanel @rendermode="InteractiveAuto" NodeId="@node.Id" />
@@ -66,11 +101,30 @@ else if (node is not null)
                 </ul>
             </section>
         }
+
+        @* Last on the page, under the history and under what links here — the foot of
+           a wiki article is where its subjects belong, and they are the reader's way
+           onward once the prose is done rather than a detour before it starts.
+
+           Reading shows the names alone, Wikipedia's way: filing is editing, so the ×
+           and the + appear with ?edit — the same rule for every kind of node, because
+           every kind of node has an Edit surface: a page's is the editor, a file's is
+           its own view with the management controls shown. *@
+        <NodeCategories @rendermode="InteractiveAuto" NodeId="@node.Id"
+                        Categories="@categories.ToArray()"
+                        CanFile="@(SignedIn && Editing)" />
     </article>
 }
 
 @code {
     [Parameter] public Guid Id { get; set; }
+
+    /// <summary>A category by name, from the readable route. Names are unique among
+    /// categories, which is what makes the route resolvable at all.</summary>
+    [Parameter] public string? Name { get; set; }
+
+    /// <summary>Whether a category is listing its subcategories' pages too.</summary>
+    [SupplyParameterFromQuery] public bool Deep { get; set; }
 
     /// <summary>Presence, not a value: Blazor binds a bool query parameter through
     /// bool.TryParse, which rejects "1" — and the URL wants to read as ?edit anyway.</summary>
@@ -80,23 +134,37 @@ else if (node is not null)
     private bool Editing => Edit is not null;
 
     private Node? node;
+    private CategoryView? category;
     private List<CategoryRef> categories = [];
     private List<Node> backlinks = [];
     private string fileName = "";
     private bool readable;
     private bool editable;
+    private bool unwritten;
     private bool notFound;
 
     protected override async Task OnParametersSetAsync()
     {
         try
         {
-            node = await Ops.Nodes(s => s.GetWithBodyAsync(ViewerId, Id));
+            var id = Id;
+            if (Name is not null)
+            {
+                // Resolving the name is not a visibility decision — that is the node
+                // read's job, exactly as it is for a guid somebody was handed.
+                var named = await Ops.Categories(s => s.ResolveAsync(Name))
+                    ?? throw new Gatherum.Core.NotFoundException($"No category '{Name}'.");
+                id = named.Id;
+            }
+            node = await Ops.Nodes(s => s.GetWithBodyAsync(ViewerId, id));
             categories = node.Categories
-                .Select(c => new CategoryRef(c.Category!.Path, c.Category.Name))
-                .OrderBy(c => c.Path)
+                .Select(c => new CategoryRef(c.CategoryId, c.Category!.Title))
+                .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
                 .ToList();
-            backlinks = await Ops.Nodes(s => s.GetBacklinksAsync(ViewerId, Id));
+            category = node.IsCategory
+                ? await Ops.Categories(s => s.GetAsync(ViewerId, node.Title, Deep))
+                : null;
+            backlinks = await Ops.Nodes(s => s.GetBacklinksAsync(ViewerId, node.Id));
             fileName = node.File is { Versions.Count: > 0 } file ? file.Current.FileName : "";
             // What the document surfaces can open at all — a page, a source file, a docx.
             // Reading one is what publishing a page means, so this asks nothing about who
@@ -111,11 +179,14 @@ else if (node is not null)
             // Editing is never offered to somebody who is not signed in, whatever the
             // node says — public is a publishing gesture, not an invitation.
             editable = readable && SignedIn;
+            unwritten = node.File is { Versions.Count: > 0 } body
+                && body.Current.ExtractedText.Trim().Length == 0;
             notFound = false;
         }
         catch (Gatherum.Core.NotFoundException)
         {
             node = null;
+            category = null;
             notFound = true;
         }
     }

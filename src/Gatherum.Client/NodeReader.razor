@@ -130,7 +130,7 @@
         Outline.JumpRequested += OnJumpRequestedAsync;
         PublishOutline();
         await ResolveWikiLinksAsync();
-        await SealUnreachableLinksAsync();
+        await AddressLinksAsync();
     }
 
     private void OnAppThemeChanged() => _ = InvokeAsync(() =>
@@ -140,7 +140,7 @@
             GatherumMarkdown.Dress(doc, AppTheme.IsDark);
             InkWikiLinks();
             if (reachable is not null)
-                NodeLinks.Seal(doc, reachable, ChromeInk.For(AppTheme.IsDark));
+                NodeLinks.Address(doc, reachable, ChromeInk.For(AppTheme.IsDark));
         }
         if (sourceDoc is not null)
             sourceDoc.SyntaxTheme = EditorThemes.Syntax(AppTheme.IsDark);
@@ -175,11 +175,14 @@
             WikiLinks.Mark(doc, liveTitles, ChromeInk.For(AppTheme.IsDark));
     }
 
-    /// <summary>Which of the nodes this page links the reader may open. A public page
-    /// can name a file that is private to whoever wrote it, and the id is in the page
-    /// either way — so the ones that come back unreachable are drawn locked rather than
-    /// offered as links into a 404.</summary>
-    private async Task SealUnreachableLinksAsync()
+    /// <summary>Which of the nodes this page links the reader may open, and the whole of
+    /// what makes a mention clickable. A public page can name a file that is private to
+    /// whoever wrote it, and the id is in the page either way — so the ones that come back
+    /// unreachable are drawn locked rather than offered as links into a 404, and the ones
+    /// that come back reachable get the address that opens them. A mention nobody answered
+    /// for stays what the page stored, which the read view draws as no link at all: inert
+    /// is the only safe answer to an unanswered question.</summary>
+    private async Task AddressLinksAsync()
     {
         if (doc is null)
             return;
@@ -193,12 +196,14 @@
         }
         catch (Exception)
         {
-            // Unanswered is not the same as forbidden: leave the links as the page wrote
-            // them rather than padlocking a page over a hiccup.
+            // Unanswered is not the same as forbidden, and it is not the same as allowed
+            // either: leave the links as the page wrote them. A mention stays inert rather
+            // than becoming a live link nobody vouched for, and nothing gets padlocked
+            // over a hiccup.
             return;
         }
         reachable = answer;
-        if (NodeLinks.Seal(doc, answer, ChromeInk.For(AppTheme.IsDark)))
+        if (NodeLinks.Address(doc, answer, ChromeInk.For(AppTheme.IsDark)))
             StateHasChanged();
     }
 

@@ -32,3 +32,12 @@
 
     & li { padding: 3px 0; }
 }
+
+/* What a category with nothing written in it says, in place of the document
+   surface's half-screen of blank. */
+.node-unwritten {
+    color: var(--on-surface-dim);
+    margin: 0 0 24px;
+
+    & a { margin-left: 4px; }
+}

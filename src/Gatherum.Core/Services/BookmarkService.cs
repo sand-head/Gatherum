@@ -26,7 +26,7 @@ public class BookmarkService(
         var node = await files.CreateFileNodeAsync(userId, parentId, page.FileName,
             page.MediaType, content, page.Title, ct);
         node.File!.SourceUrl = uri.AbsoluteUri;
-        nodes.RefreshSearchText(node);
+        await nodes.RefreshSearchTextAsync(node, ct);
         await db.SaveChangesAsync(ct);
         await sidecar.WriteAsync(node.Id, ct);
         return node;

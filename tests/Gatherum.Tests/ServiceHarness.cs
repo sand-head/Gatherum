@@ -102,14 +102,28 @@ public sealed class ServiceHarness : IAsyncDisposable
         Metadata = new JsonNodeMetadataStore(storage);
         Sidecar = new NodeMetadataWriter(Db, Metadata, Roots);
         Access = new AccessService(Db, Clock, Sidecar);
-        Nodes = new NodeService(Db, authorizer, Clock, Embeddings, Access);
-        Categories = new CategoryService(Db, Nodes, authorizer, Sidecar);
+        Nodes = new NodeService(Db, authorizer, Clock, Embeddings, Access, Sidecar);
         Files = new FileService(Db, Nodes, storage, Roots, Sidecar,
             [new HtmlTextExtractor(), new PlainTextExtractor(), new PdfTextExtractor(),
                 new DocxTextExtractor(), new ImageMetadataExtractor()],
             [Analyzer], AnalysisQueue, Clock, NullLogger<FileService>.Instance);
+        Categories = new CategoryService(Db, Nodes, Files, authorizer, Sidecar, Clock);
         Bookmarks = new BookmarkService(Db, Nodes, Files, Archiver, Sidecar);
         Search = new SearchService(Db, authorizer, Embeddings);
+    }
+
+    /// <summary>Files a node under a category, then nests that category under another —
+    /// which is all a subcategory is now, and what most of these tests used to spell as
+    /// "Homelab/Podman".</summary>
+    public async Task<Node> FileUnderAsync(Guid userId, Guid nodeId, string name,
+        string? nestedUnder = null)
+    {
+        await Categories.AddAsync(userId, nodeId, name);
+        var category = await Categories.ResolveAsync(name)
+            ?? throw new InvalidOperationException($"No category '{name}' after filing.");
+        if (nestedUnder is { Length: > 0 })
+            await Categories.AddAsync(userId, category.Id, nestedUnder);
+        return category;
     }
 
     public async Task<Guid> AddUserAsync(string name)
@@ -170,6 +184,15 @@ public sealed class ServiceHarness : IAsyncDisposable
     {
         Db.ChangeTracker.Clear();
         return await Nodes.GetWithBodyAsync(userId, nodeId);
+    }
+
+    /// <summary>Where a node's bytes and its sidecar entry actually live, for the tests
+    /// that check what was written down rather than what was indexed.</summary>
+    public async Task<NodePath> PathOfAsync(Guid nodeId)
+    {
+        var node = await Db.Nodes.FindAsync(nodeId)
+            ?? throw new InvalidOperationException($"No node {nodeId}.");
+        return new NodePath(await Roots.ForAsync(node.OwnerId), node.RelativePath);
     }
 
     public async ValueTask DisposeAsync()

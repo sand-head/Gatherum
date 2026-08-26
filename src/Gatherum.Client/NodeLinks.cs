@@ -15,8 +15,17 @@ namespace Gatherum.Client;
 /// question later: a wiki link asks whether a title names anything, a mention already
 /// knows the id and asks whether this particular visitor may follow it.
 ///
-/// Reading only. Sealing rewrites runs, and a document that can be saved has to write
-/// back the bytes it was read from.
+/// One pass answers both halves of that question, which is why there is one method for
+/// it. A mention is stored as <c>node://id</c> — nobody's scheme, which the read view's
+/// HTML drops, so an unaddressed mention comes out as a styled <c>span</c> with no
+/// <c>href</c> at all: nothing to click, nothing to open in a tab, nothing for the status
+/// bar to preview. That inertness is the right default and it must stay the default,
+/// because a mention becomes a real link exactly when the server has said this reader may
+/// follow it — never before. Address it earlier and a page whose reachability question
+/// went unanswered ships live links into other people's private nodes.
+///
+/// Reading only. This rewrites runs, and a document that can be saved has to write back
+/// the bytes it was read from.
 /// </summary>
 public static class NodeLinks
 {
@@ -53,21 +62,22 @@ public static class NodeLinks
         return targets;
     }
 
-    /// <summary>Lock every link and embedded picture whose node did not come back
-    /// reachable, and re-ink the ones already locked for the mode they are now being read
-    /// in. True when anything actually changed — the caller only has to repaint then.</summary>
-    public static bool Seal(RichDocument document, IReadOnlySet<Guid> reachable, ChromeInk ink)
+    /// <summary>Gives every node link in this document the address it should have for this
+    /// reader: the page it opens when they may follow it, a padlock when they may not.
+    /// Also re-inks the ones already locked for the mode they are now being read in. True
+    /// when anything actually changed — the caller only has to repaint then.</summary>
+    public static bool Address(RichDocument document, IReadOnlySet<Guid> reachable, ChromeInk ink)
     {
         var changed = false;
         foreach (var block in document.Blocks)
         {
-            if (SealPicture(block, reachable, ink))
+            if (LockPicture(block, reachable, ink))
             {
                 changed = true;
                 continue;
             }
             for (var r = 0; r < block.Runs.Count; r++)
-                changed |= SealRun(block, r, reachable, ink);
+                changed |= AddressRun(block, r, reachable, ink);
         }
         if (changed)
             document.InvalidateLayout();
@@ -77,7 +87,7 @@ public static class NodeLinks
     /// <summary>An embedded file the reader may not fetch would be a broken image and
     /// nothing else — the browser goes and gets it, and gets a 404. So the picture
     /// becomes its caption instead: the alt text, locked, in the flow where it stood.</summary>
-    private static bool SealPicture(Block block, IReadOnlySet<Guid> reachable, ChromeInk ink)
+    private static bool LockPicture(Block block, IReadOnlySet<Guid> reachable, ChromeInk ink)
     {
         if (block.Kind != BlockKind.Image || !NodeUrl.TryParse(block.ImageUrl, out var picture)
             || reachable.Contains(picture))
@@ -91,7 +101,8 @@ public static class NodeLinks
         return true;
     }
 
-    private static bool SealRun(Block block, int index, IReadOnlySet<Guid> reachable, ChromeInk ink)
+    private static bool AddressRun(Block block, int index, IReadOnlySet<Guid> reachable,
+        ChromeInk ink)
     {
         var run = block.Runs[index];
         if (IsLocked(run.Style.Link))
@@ -101,13 +112,22 @@ public static class NodeLinks
             block.Runs[index] = run with { Style = run.Style with { Color = ink.LockedLink } };
             return true;
         }
-        if (!NodeUrl.TryParse(run.Style.Link, out var target) || reachable.Contains(target))
+        if (!NodeUrl.TryParse(run.Style.Link, out var target))
             return false;
-
-        block.Runs[index] = run with
+        if (!reachable.Contains(target))
         {
-            Style = run.Style with { Link = LockedScheme + target, Color = ink.LockedLink },
-        };
+            block.Runs[index] = run with
+            {
+                Style = run.Style with { Link = LockedScheme + target, Color = ink.LockedLink },
+            };
+            return true;
+        }
+        // Reachable, and still written the way the page stores it: give it the URL a
+        // browser can act on. Only a mention — an embedded file's /api/files URL is how
+        // the browser fetches the bytes, and rewriting that turns a picture into a link.
+        if (!NodeUrl.IsMention(run.Style.Link))
+            return false;
+        block.Runs[index] = run with { Style = run.Style with { Link = NodeUrl.Page(target) } };
         return true;
     }
 

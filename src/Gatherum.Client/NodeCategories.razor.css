@@ -1,0 +1,143 @@
+/* The catlinks bar, in MediaWiki's own construction: a bordered band on a faintly
+   dimmer ground, whose content is one inline flow — "Categories:" and then the
+   list, rendered inline so the names wrap the way prose wraps and a wrapped line
+   starts at the box's edge, not hanging under the first name. The colors are the
+   app's; the shape is Wikipedia's, verbatim:
+
+     .catlinks       { border; background; padding }
+     .catlinks ul    { display: inline }
+     .catlinks li    { display: inline-block; border-left; padding: 0 .5em }
+     li:first-child  { border-left: 0 }
+
+   That first-child rule means a name that wraps onto a new line keeps its left
+   rule at the line's start — Wikipedia accepts that, and it is what makes the
+   dividers read as part of the text instead of as column borders. */
+.node-categories {
+    margin-top: 28px;
+    padding: 6px 12px;
+    border: 1px solid var(--outline-dim);
+    border-radius: var(--radius-s);
+    background: var(--surface-ground);
+    font: 400 14px/1.7 var(--font-ui);
+}
+
+.label { color: var(--on-surface-dim); }
+
+.names {
+    display: inline;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+
+    & li {
+        display: inline-block;
+        border-left: 1px solid var(--outline);
+        padding: 0 8px;
+    }
+
+    & li:first-child {
+        border-left: none;
+        padding-left: 4px;
+    }
+
+    /* The plus is not another name, so no divider announces it as one. */
+    & li.filing { border-left: none; padding-left: 0; }
+}
+
+/* Wikipedia's bar has nothing to unfile with, because its categories are edited in
+   the wikitext. This one is where filing happens, so the button has to be here —
+   quiet enough to read past, and unmistakable once you are looking for it. */
+.unfile {
+    font: inherit;
+    line-height: 1;
+    color: var(--on-surface-dim);
+    background: none;
+    border: none;
+    padding: 0 0 0 5px;
+    opacity: 0.4;
+
+    &:hover, &:focus-visible {
+        opacity: 1;
+        color: var(--danger);
+        background: none;
+    }
+}
+
+/* One glyph, at the row's own size: it opens the field, and then it is the visible
+   way to commit. */
+.file {
+    font: inherit;
+    line-height: 1;
+    color: var(--on-surface-dim);
+    background: none;
+    border: none;
+    padding: 0 4px;
+
+    &:hover, &:focus-visible { color: var(--primary); background: none; }
+}
+
+.draft {
+    font: inherit;
+    width: 11ch;
+    max-width: 100%;
+    color: var(--on-surface);
+    background: none;
+    border: none;
+    border-bottom: 1px solid var(--outline);
+    border-radius: 0;
+    padding: 0;
+    margin-right: 4px;
+
+    &:focus-visible {
+        outline: none;
+        border-bottom-color: var(--primary);
+        box-shadow: none;
+    }
+}
+
+.error {
+    margin: 4px 0 0;
+    font: 400 13px/1.6 var(--font-ui);
+    color: var(--danger);
+}
+
+/* A finger cannot hit a 14px ×, and shrinking the row to fit one would be the wrong
+   trade — so on a touch screen the inline sentence becomes a list of rows, each tall
+   enough to hit, with the unfile on the right where a list keeps its actions. */
+@media (pointer: coarse) {
+    .label { display: block; }
+
+    .names {
+        display: block;
+
+        & li {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            min-height: var(--tap);
+            border-left: none;
+            padding: 0;
+        }
+
+        /* Its own rule rather than joined to the one above: the isolation compiler
+           has been seen dropping the second selector of a nested list, which left
+           the inline layout's first-child padding standing on specificity. */
+        & li:first-child { padding: 0; }
+
+        & li + li { border-top: 1px solid var(--outline-dim); }
+
+        & li.filing { justify-content: space-between; }
+    }
+
+    .unfile, .file {
+        display: grid;
+        place-items: center;
+        width: var(--tap);
+        min-height: var(--tap);
+        padding: 0;
+        opacity: 1;
+    }
+
+    /* iOS zooms into any field under 16px and never zooms back out. */
+    .draft { font-size: 16px; flex: 1; width: auto; }
+}

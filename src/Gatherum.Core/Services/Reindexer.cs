@@ -26,14 +26,11 @@ public class Reindexer(
     TimeProvider clock,
     ILogger<Reindexer> logger)
 {
-    /// <summary>What a directory is, when it is only a place to keep things. A folder
-    /// somebody made in their file manager is a node too.</summary>
-    public const string DirectoryMediaType = "inode/directory";
-
     public async Task<ReindexReport> RunAsync(CancellationToken ct = default)
     {
         var report = new ReindexReport();
         var seen = new HashSet<Guid>();
+        var filings = new List<Filing>();
 
         foreach (var root in storage.Roots())
         {
@@ -47,13 +44,15 @@ public class Reindexer(
                 continue;
             }
 
-            var files = storage.Walk(root).OrderBy(p => p.Relative, StringComparer.Ordinal).ToList();
-            var byDirectory = await EnsureDirectoriesAsync(root, ownerId, files, seen, report, ct);
+            var walked = storage.Walk(root).OrderBy(p => p.Relative, StringComparer.Ordinal).ToList();
+            var byDirectory = await EnsureDirectoriesAsync(root, ownerId, walked, seen, report, ct);
 
-            foreach (var path in files)
+            foreach (var path in walked)
             {
-                var node = await IndexFileAsync(root, ownerId, path, byDirectory, report, ct);
+                var (node, filed) = await IndexFileAsync(root, ownerId, path, byDirectory,
+                    report, ct);
                 seen.Add(node.Id);
+                filings.Add(filed);
             }
         }
 
@@ -67,6 +66,12 @@ public class Reindexer(
         }
 
         await db.SaveChangesAsync(ct);
+        // The taxonomy is wired in one pass after every root, because it is the one thing
+        // on disk that points at other nodes: a page filed under "Podman" cannot be joined
+        // up until whichever root holds Podman's own page has been walked. Access is
+        // recomputed after it rather than before, so a category page written here — one
+        // only a sidecar knew about — gets its reach computed in the same run it appeared.
+        await WireTaxonomyAsync(filings, report, ct);
         await access.RecomputeAsync(ct);
         await db.SaveChangesAsync(ct);
         logger.LogInformation(
@@ -79,10 +84,10 @@ public class Reindexer(
     /// sees is the tree on disk. A directory that answers to a file — <c>Podman/</c> beside
     /// <c>Podman.md</c> — is that file's node rather than one of its own.</summary>
     private async Task<Dictionary<string, Node>> EnsureDirectoriesAsync(string root, Guid ownerId,
-        List<NodePath> files, HashSet<Guid> seen, ReindexReport report, CancellationToken ct)
+        List<NodePath> walked, HashSet<Guid> seen, ReindexReport report, CancellationToken ct)
     {
         var wanted = new SortedSet<string>(StringComparer.Ordinal);
-        foreach (var file in files)
+        foreach (var file in walked)
         {
             var segments = file.Relative.Split('/');
             for (var i = 1; i < segments.Length; i++)
@@ -90,7 +95,7 @@ public class Reindexer(
         }
 
         // A directory that shares a stem with a file beside it belongs to that file.
-        var fileStems = files.Select(f => NodePaths.StripExtension(f.Relative))
+        var fileStems = walked.Select(f => NodePaths.StripExtension(f.Relative))
             .ToHashSet(StringComparer.Ordinal);
 
         var byDirectory = new Dictionary<string, Node>(StringComparer.Ordinal) { [""] = null! };
@@ -107,7 +112,7 @@ public class Reindexer(
                 {
                     Id = Guid.NewGuid(),
                     Title = NodePaths.DefaultTitle(directory),
-                    MediaType = DirectoryMediaType,
+                    MediaType = MediaTypes.Directory,
                     OwnerId = ownerId,
                     RelativePath = directory,
                     CreatedAt = clock.GetUtcNow(),
@@ -131,8 +136,9 @@ public class Reindexer(
         return byDirectory;
     }
 
-    private async Task<Node> IndexFileAsync(string root, Guid ownerId, NodePath path,
-        Dictionary<string, Node> byDirectory, ReindexReport report, CancellationToken ct)
+    private async Task<(Node Node, Filing Filed)> IndexFileAsync(string root, Guid ownerId,
+        NodePath path, Dictionary<string, Node> byDirectory, ReindexReport report,
+        CancellationToken ct)
     {
         var facts = await storage.MeasureAsync(path, ct);
         var sidecar = await metadata.ReadAsync(path, ct);
@@ -175,12 +181,12 @@ public class Reindexer(
         node.ParentId = DirectoryOf(path.Relative, byDirectory, ownerId)?.Id;
         node.Access = sidecar?.Access ?? AccessMode.Private;
         node.InheritAccess = sidecar?.Inherit ?? true;
+        node.IsCategory = sidecar?.Category ?? false;
 
         await SyncVersionsAsync(node, path, facts, sidecar, mediaType, report, ct);
         await SyncGrantsAsync(node, sidecar, ct);
         await db.SaveChangesAsync(ct);
-        await SyncCategoriesAsync(node, sidecar, ownerId, ct);
-        return node;
+        return (node, new Filing(node.Id, ownerId, sidecar?.Categories ?? []));
     }
 
     private async Task SyncVersionsAsync(Node node, NodePath path, StoredBlob facts,
@@ -236,7 +242,7 @@ public class Reindexer(
         db.FileVersions.Add(fresh);
         if (head is not null)
             report.Updated++;
-        nodes.RefreshSearchText(node);
+        await nodes.RefreshSearchTextAsync(node, ct);
     }
 
     private async Task SyncGrantsAsync(Node node, NodeMetadata? sidecar, CancellationToken ct)
@@ -257,22 +263,68 @@ public class Reindexer(
         }
     }
 
-    private async Task SyncCategoriesAsync(Node node, NodeMetadata? sidecar, Guid ownerId,
+    /// <summary>Rebuilds the taxonomy from what the sidecars say, once every root has been
+    /// walked. The memberships are dropped and re-made rather than reconciled: the sidecar
+    /// is the system of record for what a node is about, so an edge the index holds that no
+    /// sidecar claims is an edge that was deleted.
+    ///
+    /// A name nothing on disk answers to — a category somebody typed into a <c>meta.json</c>
+    /// by hand and never wrote a page for — gets its page written here. That is the one
+    /// place the reindex creates a file outside <c>.gatherum</c>, and it is deliberate: a
+    /// category is a page now, and a taxonomy half of which exists only in the database
+    /// would not survive the next cold start.</summary>
+    private async Task WireTaxonomyAsync(List<Filing> filings, ReindexReport report,
         CancellationToken ct)
     {
-        foreach (var path in sidecar?.Categories ?? [])
+        var filedIds = filings.Select(f => f.NodeId).ToList();
+        db.NodeCategories.RemoveRange(await db.NodeCategories
+            .Where(m => filedIds.Contains(m.NodeId)).ToListAsync(ct));
+        await db.SaveChangesAsync(ct);
+
+        var byName = new Dictionary<string, Node>(StringComparer.Ordinal);
+        foreach (var category in await db.Nodes.Where(n => n.IsCategory).ToListAsync(ct))
+            byName.TryAdd(CategoryName.Key(category.Title), category);
+
+        var edges = new HashSet<(Guid, Guid)>();
+        foreach (var filing in filings)
         {
-            try
+            foreach (var written in filing.Categories)
             {
-                await categories.AddAsync(ownerId, node.Id, path, ct);
-            }
-            catch (ValidationException ex)
-            {
-                logger.LogWarning("Ignoring category '{Path}' on {Node}: {Reason}",
-                    path, node.Id, ex.Message);
+                var name = CategoryName.Collapse(written);
+                if (name.Length == 0 || name.Length > CategoryName.MaxLength)
+                {
+                    logger.LogWarning("Ignoring category '{Name}' on {Node}: not a name.",
+                        written, filing.NodeId);
+                    continue;
+                }
+                if (!byName.TryGetValue(CategoryName.Key(name), out var category))
+                {
+                    category = await categories.EnsureAsync(filing.OwnerId, name, ct);
+                    byName[CategoryName.Key(name)] = category;
+                    report.Added++;
+                    logger.LogInformation(
+                        "Wrote a page for category '{Name}' that only a sidecar knew.", name);
+                }
+                if (category.Id != filing.NodeId && edges.Add((filing.NodeId, category.Id)))
+                    db.NodeCategories.Add(new NodeCategory
+                    {
+                        NodeId = filing.NodeId,
+                        CategoryId = category.Id,
+                    });
             }
         }
+        await db.SaveChangesAsync(ct);
+
+        // One snapshot for the lot, now that the graph is whole: a node's search text is
+        // its categories' whole ancestry, and until this point there was no ancestry.
+        var everything = await db.Nodes.Select(n => n.Id).ToListAsync(ct);
+        await nodes.RefreshSearchTextAsync(everything, await CategoryIndex.LoadAsync(db, ct), ct);
     }
+
+    /// <summary>What one indexed file said it was about, held until every root has been
+    /// walked and the names can be resolved against the pages that answer to them.</summary>
+    private readonly record struct Filing(Guid NodeId, Guid OwnerId,
+        IReadOnlyList<string> Categories);
 
     private async Task<string> ExtractAsync(NodePath path, string mediaType, CancellationToken ct)
     {

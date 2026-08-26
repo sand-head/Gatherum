@@ -8,7 +8,7 @@ namespace Gatherum.Core.Services;
 /// <summary>The tree rules: positions, moves, privacy, and links. Bodies — bytes,
 /// versions, text — belong to FileService; the taxonomy to CategoryService.</summary>
 public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeProvider clock,
-    EmbeddingService embeddings, AccessService access)
+    EmbeddingService embeddings, AccessService access, NodeMetadataWriter sidecar)
 {
     /// <summary>Creates the tree half of a node; FileService attaches the body before
     /// saving. Position and inherited privacy are decided here so every node obeys the
@@ -98,6 +98,18 @@ public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeP
         node.Title = title;
         node.UpdatedAt = clock.GetUtcNow();
         await db.SaveChangesAsync(ct);
+        // A title that no longer matches the filename is an override, and an override
+        // only the index knows about is one a reindex would quietly undo.
+        await sidecar.WriteAsync(node.Id, ct);
+        if (!node.IsCategory)
+            return;
+        // A category's name is written into the search text of everything under it, and
+        // into the sidecar of everything filed directly in it — which is the whole price
+        // of renaming one now. Nothing is repathed, because there is no path.
+        await RefreshCategoryReachAsync(node, ct);
+        foreach (var memberId in await db.NodeCategories.Where(m => m.CategoryId == node.Id)
+            .Select(m => m.NodeId).ToListAsync(ct))
+            await sidecar.WriteAsync(memberId, ct);
     }
 
     public async Task MoveAsync(Guid? userId, Guid nodeId, Guid? newParentId, int? position = null,
@@ -129,15 +141,24 @@ public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeP
         await db.SaveChangesAsync(ct);
     }
 
+    /// <summary>Deleting a category page unfiles everything that was in it and leaves the
+    /// pages alone — which is what deleting a category has always meant here. What is new
+    /// is that its subcategories are pages too, so they are not deleted with it: they lose
+    /// a parent and become subjects of their own.</summary>
     public async Task DeleteAsync(Guid? userId, Guid nodeId, CancellationToken ct = default)
     {
         var node = await GetVisibleAsync(userId, nodeId, ct);
         EnsureOwner(node, userId);
+        // The category's name is in the search text of everything it reaches, so note who
+        // that is before the cascade takes the memberships away with it.
+        var orphaned = node.IsCategory ? await CategoryReachAsync(node.Id, ct) : [];
         db.Nodes.Remove(node);
         var siblings = await SiblingsAsync(node.ParentId, ct);
         siblings.Remove(node);
         Renumber(siblings);
         await db.SaveChangesAsync(ct);
+        orphaned.Remove(node.Id);
+        await RefreshSearchTextAsync(orphaned, await CategoryIndex.LoadAsync(db, ct), ct);
     }
 
     /// <summary>Which of these titles name a node the user can see — what a
@@ -211,8 +232,9 @@ public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeP
     /// <summary>Nodes related to this one. A body link in either direction scores four
     /// — a deliberate mention is the strongest signal there is; a category both nodes
     /// sit in scores two; a category one shares with the other's ancestry scores one,
-    /// because "somewhere under Homelab" is a weaker kinship than "in Homelab/Podman".
-    /// Ties go to the most recently updated.</summary>
+    /// because "somewhere under Homelab" is a weaker kinship than "both in Podman".
+    /// Ties go to the most recently updated. A category page is never its own
+    /// suggestion: it is what the pages have in common, not another page like them.</summary>
     public async Task<List<SimilarNode>> GetSimilarAsync(Guid? userId, Guid nodeId, int limit = 5,
         CancellationToken ct = default)
     {
@@ -221,43 +243,43 @@ public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeP
         await GetVisibleAsync(userId, nodeId, ct);
         limit = Math.Clamp(limit, 1, 20);
 
-        var subjectPaths = await db.NodeCategories
-            .Where(c => c.NodeId == nodeId).Select(c => c.Category!.Path).ToListAsync(ct);
+        var subjects = await db.NodeCategories
+            .Where(c => c.NodeId == nodeId).Select(c => c.CategoryId).ToListAsync(ct);
         var linkedIds = await db.NodeLinks
             .Where(l => l.SourceId == nodeId || l.TargetId == nodeId)
             .Select(l => l.SourceId == nodeId ? l.TargetId : l.SourceId)
             .ToListAsync(ct);
 
-        var direct = subjectPaths.ToHashSet();
-        var ancestry = subjectPaths.SelectMany(CategoryPath.Ancestry).ToHashSet();
+        // Which categories touch this node's ancestry is decided over the whole (small)
+        // taxonomy in memory, so the node query stays one Contains rather than a walk
+        // per ancestor.
+        var taxonomy = await CategoryIndex.LoadAsync(db, ct);
+        var direct = subjects.ToHashSet();
+        var ancestry = taxonomy.ClosureOf(subjects);
+        var kin = taxonomy.Ids
+            .Where(id => taxonomy.ClosureOf([id]).Any(ancestry.Contains))
+            .ToList();
 
         // What the taxonomy and the links cannot say: two pages about the same thing
         // that were never filed together and never mentioned each other.
         var likeness = await LikenessAsync(userId, nodeId, limit, ct);
         var alike = likeness.Keys.ToList();
 
-        // Which categories touch this node's ancestry is decided over the whole (small)
-        // taxonomy in memory, so the node query stays one Contains rather than a prefix
-        // match per ancestor.
-        var kin = (await db.Categories.Select(c => c.Path).ToListAsync(ct))
-            .Where(path => CategoryPath.Ancestry(path).Any(ancestry.Contains))
-            .ToHashSet();
-
         var candidates = await authorizer.VisibleTo(db.Nodes, userId)
-            .Where(n => n.Id != nodeId)
+            .Where(n => n.Id != nodeId && !n.IsCategory)
             .Where(n => linkedIds.Contains(n.Id)
                 || alike.Contains(n.Id)
-                || n.Categories.Any(c => kin.Contains(c.Category!.Path)))
+                || n.Categories.Any(c => kin.Contains(c.CategoryId)))
             .Select(n => new
             {
                 n.Id, n.Title, n.MediaType, n.UpdatedAt,
-                Paths = n.Categories.Select(c => c.Category!.Path).ToList(),
+                Subjects = n.Categories.Select(c => c.CategoryId).ToList(),
                 IsLinked = linkedIds.Contains(n.Id),
             })
             .ToListAsync(ct);
 
         return candidates
-            .OrderByDescending(c => Kinship(c.Paths) + (c.IsLinked ? 4 : 0)
+            .OrderByDescending(c => Kinship(c.Subjects) + (c.IsLinked ? 4 : 0)
                 + likeness.GetValueOrDefault(c.Id) * 4)
             .ThenByDescending(c => c.UpdatedAt)
             .Take(limit)
@@ -268,11 +290,10 @@ public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeP
         // A category the two nodes are both in is counted twice — once as itself and
         // once as the deepest thing their ancestries have in common — which is exactly
         // the two-to-one this method promises.
-        int Kinship(List<string> paths)
+        int Kinship(List<Guid> categoryIds)
         {
-            var shared = paths.Count(direct.Contains);
-            var common = paths.SelectMany(CategoryPath.Ancestry).Distinct()
-                .Count(ancestry.Contains);
+            var shared = categoryIds.Count(direct.Contains);
+            var common = taxonomy.ClosureOf(categoryIds).Count(ancestry.Contains);
             return shared + common;
         }
     }
@@ -302,17 +323,20 @@ public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeP
         return best;
     }
 
-    /// <summary>Search text is category paths + filename + description + extracted
+    /// <summary>Search text is category names + filename + description + extracted
     /// text, plus whatever a model read or heard in the file; the title contributes
-    /// through its own tsvector weight. A category path contributes every name it is
-    /// nested under, so searching "homelab" finds what sits in "homelab/podman"; a
-    /// transcript and a summary are indexed side by side on purpose, because the
-    /// transcript answers an exact phrase someone remembers seeing or hearing and the
-    /// summary answers the subject nobody said out loud.</summary>
-    public void RefreshSearchText(Node node)
+    /// through its own tsvector weight. A category contributes every category it is
+    /// nested under as well as itself, so searching "homelab" finds what sits only in
+    /// "Podman"; a transcript and a summary are indexed side by side on purpose, because
+    /// the transcript answers an exact phrase someone remembers seeing or hearing and the
+    /// summary answers the subject nobody said out loud.
+    ///
+    /// The taxonomy comes in rather than being read here, because the callers that touch
+    /// many nodes at once — a rename, a re-nesting, a reindex — would otherwise reload it
+    /// per node. <see cref="RefreshSearchTextAsync"/> is the one-node convenience.</summary>
+    public void RefreshSearchText(Node node, CategoryIndex taxonomy)
     {
-        var categories = string.Join(' ',
-            node.Categories.Select(c => CategoryPath.Words(c.Category!.Path)));
+        var categories = taxonomy.Words(node.Categories.Select(c => c.CategoryId));
         if (node.File is not { Versions.Count: > 0 } file)
         {
             node.SearchText = categories;
@@ -325,6 +349,52 @@ public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeP
         // byte-identical search text — and its embeddings — across this feature existing.
         if (file.SourceUrl.Length > 0)
             node.SearchText += '\n' + file.SourceUrl;
+    }
+
+    public async Task RefreshSearchTextAsync(Node node, CancellationToken ct = default) =>
+        RefreshSearchText(node, await CategoryIndex.LoadAsync(db, ct));
+
+    /// <summary>Rewrites the search text of everything a change to one node's filing can
+    /// reach: the node itself, and — when it is a category — every category nested under
+    /// it and every node filed in any of them, because all of them are found by its name.
+    /// One taxonomy snapshot serves the lot.</summary>
+    public async Task RefreshCategoryReachAsync(Node node, CancellationToken ct = default)
+    {
+        var reach = node.IsCategory ? await CategoryReachAsync(node.Id, ct) : [];
+        reach.Add(node.Id);
+        await RefreshSearchTextAsync(reach, await CategoryIndex.LoadAsync(db, ct), ct);
+    }
+
+    public async Task RefreshSearchTextAsync(IReadOnlyCollection<Guid> nodeIds,
+        CategoryIndex taxonomy, CancellationToken ct = default)
+    {
+        if (nodeIds.Count == 0)
+            return;
+        var wanted = nodeIds.ToList();
+        var affected = await db.Nodes
+            .Where(n => wanted.Contains(n.Id))
+            .Include(n => n.File!).ThenInclude(f => f.Versions)
+            .Include(n => n.Categories)
+            .ToListAsync(ct);
+        foreach (var node in affected)
+            RefreshSearchText(node, taxonomy);
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>Every node a category's name is part of the search text of: the category,
+    /// what is nested under it, and everything filed in any of them.</summary>
+    private async Task<HashSet<Guid>> CategoryReachAsync(Guid categoryId, CancellationToken ct)
+    {
+        var taxonomy = await CategoryIndex.LoadAsync(db, ct);
+        var subtree = taxonomy.SubtreeOf(categoryId);
+        var wanted = subtree.ToList();
+        var members = await db.NodeCategories
+            .Where(m => wanted.Contains(m.CategoryId))
+            .Select(m => m.NodeId)
+            .Distinct()
+            .ToListAsync(ct);
+        subtree.UnionWith(members);
+        return subtree;
     }
 
     public async Task ReplaceLinksAsync(Node node, IReadOnlySet<Guid> targetIds, CancellationToken ct)

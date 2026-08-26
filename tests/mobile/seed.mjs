@@ -16,7 +16,7 @@ const base = arg("--url") ?? "http://localhost:5140";
 const PAGES = [
   {
     title: "Homelab: the closet rack",
-    categories: ["Homelab", "Homelab/Podman"],
+    categories: ["Homelab", "Podman"],
     markdown: `The closet holds a four-unit rack, and everything in it runs as a Podman quadlet under a single unprivileged user.
 
 :::infobox
@@ -72,7 +72,7 @@ Text after it, so the outline has something to scroll to.
   },
   {
     title: "Reverse proxy configuration",
-    categories: ["Homelab/Networking"],
+    categories: ["Networking"],
     markdown: `Caddy terminates TLS and forwards to the container on 8080.
 
 ## Certificates
@@ -87,10 +87,15 @@ Renewal is automatic; the only manual step is the DNS challenge token.
   },
 ];
 
-const DEEP_CATEGORY = [
-  "Homelab/Networking/VLANs",
-  "Homelab/Networking/VLANs/Tagged trunks and where they terminate",
-  "Homelab/Networking/VLANs/Tagged trunks and where they terminate/Deeper still",
+// Nesting is filing a category's page under another category, so a deep taxonomy is a
+// chain of those — child first, then the one above it. The long name is deliberate: the
+// outline indents per level and a narrow screen has to survive both.
+const NESTING = [
+  ["Podman", "Homelab"],
+  ["Networking", "Homelab"],
+  ["VLANs", "Networking"],
+  ["Tagged trunks and where they terminate", "VLANs"],
+  ["Deeper still", "Tagged trunks and where they terminate"],
 ];
 
 // A real extension, so the lexer has something to say and the read view has
@@ -146,15 +151,21 @@ async function main() {
       });
       id = (await created.json()).id;
     }
-    for (const path of spec.categories)
-      await api.post(`/api/nodes/${id}/categories`, { data: { path } });
+    for (const name of spec.categories)
+      await api.post(`/api/nodes/${id}/categories`, { data: { name } });
     made.push([spec.title, id]);
   }
 
-  // Categories exist by being used, so the deep tree needs a node filed under it.
+  // A category is a page, so nesting one is filing that page — which means the deep
+  // tree is built by looking each category up by name and filing it under the next.
   const anchor = made[0][1];
-  for (const path of DEEP_CATEGORY)
-    await api.post(`/api/nodes/${anchor}/categories`, { data: { path } });
+  for (const [child] of NESTING)
+    await api.post(`/api/nodes/${anchor}/categories`, { data: { name: child } });
+  for (const [child, parent] of NESTING) {
+    const view = await api.get(`/api/categories/${encodeURIComponent(child)}`);
+    const { id } = (await view.json()).category;
+    await api.post(`/api/nodes/${id}/categories`, { data: { name: parent } });
+  }
 
   if (!byTitle.has(CODE_FILE.name)) {
     const created = await api.post("/api/files", {

@@ -133,7 +133,7 @@ public class FileService(
             }
 
             node.UpdatedAt = now;
-            nodes.RefreshSearchText(node);
+            await nodes.RefreshSearchTextAsync(node, ct);
             await RefreshLinksAsync(node, userId, ct);
             await db.SaveChangesAsync(ct);
             await sidecar.WriteAsync(node.Id, ct);
@@ -189,7 +189,7 @@ public class FileService(
             }
 
             node.UpdatedAt = now;
-            nodes.RefreshSearchText(node);
+            await nodes.RefreshSearchTextAsync(node, ct);
             await RefreshLinksAsync(node, userId, ct);
             await db.SaveChangesAsync(ct);
             await sidecar.WriteAsync(node.Id, ct);
@@ -245,7 +245,7 @@ public class FileService(
             AddVersion(node, restored);
             node.MediaType = version.MediaType;
             node.UpdatedAt = clock.GetUtcNow();
-            nodes.RefreshSearchText(node);
+            await nodes.RefreshSearchTextAsync(node, ct);
             await RefreshLinksAsync(node, userId, ct);
             await db.SaveChangesAsync(ct);
             await sidecar.WriteAsync(node.Id, ct);
@@ -303,7 +303,7 @@ public class FileService(
             record(version);
             // Deliberately not touching UpdatedAt: a model finishing its work is not
             // somebody editing, and Recent should not reshuffle hours after an upload.
-            nodes.RefreshSearchText(node);
+            await nodes.RefreshSearchTextAsync(node, ct);
             await db.SaveChangesAsync(ct);
         }
         finally
@@ -358,7 +358,7 @@ public class FileService(
         var node = await RequireEditableFileNodeAsync(userId, nodeId, ct);
         node.File!.Description = description;
         node.UpdatedAt = clock.GetUtcNow();
-        nodes.RefreshSearchText(node);
+        await nodes.RefreshSearchTextAsync(node, ct);
         await RefreshLinksAsync(node, userId, ct);
         await db.SaveChangesAsync(ct);
     }
@@ -432,7 +432,7 @@ public class FileService(
             UploadedById = userId,
             UploadedAt = clock.GetUtcNow(),
         });
-        nodes.RefreshSearchText(node);
+        await nodes.RefreshSearchTextAsync(node, ct);
         await RefreshLinksAsync(node, userId, ct);
     }
 
@@ -461,7 +461,7 @@ public class FileService(
         };
         AddVersion(node, version);
         node.UpdatedAt = clock.GetUtcNow();
-        nodes.RefreshSearchText(node);
+        await nodes.RefreshSearchTextAsync(node, ct);
         await RefreshLinksAsync(node, userId, ct);
         return version;
     }

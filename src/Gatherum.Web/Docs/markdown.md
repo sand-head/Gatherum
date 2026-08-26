@@ -72,6 +72,11 @@ node and writes one.
 A `node://<id>` URL in a *file's description* counts too — descriptions are scanned for
 mentions the same way page bodies are.
 
+`node://` is how a mention is written and stored; reading a page turns it into a real link
+to `/nodes/<id>`, so clicking, middle-clicking, "open in new tab" and "copy link address"
+all do what they do anywhere else. A mention pointing at something you may not open is
+drawn padlocked instead — see [Sharing](/docs/sharing).
+
 ### Wiki links — link by title
 
 ```markdown

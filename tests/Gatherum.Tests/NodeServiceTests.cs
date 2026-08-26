@@ -450,9 +450,9 @@ public class NodeServiceTests(PostgresFixture postgres) : IAsyncLifetime
         var subject = await NewPageAsync(jess, null, "subject");
         var sibling = await NewPageAsync(jess, null, "sibling");
         var cousin = await NewPageAsync(jess, null, "cousin");
-        await categories.AddAsync(jess, subject.Id, "Homelab/Podman");
-        await categories.AddAsync(jess, sibling.Id, "Homelab/Podman");
-        await categories.AddAsync(jess, cousin.Id, "Homelab/Backups");
+        await harness.FileUnderAsync(jess, subject.Id, "Podman", nestedUnder: "Homelab");
+        await categories.AddAsync(jess, sibling.Id, "Podman");
+        await harness.FileUnderAsync(jess, cousin.Id, "Backups", nestedUnder: "Homelab");
 
         var similar = await nodes.GetSimilarAsync(jess, subject.Id);
 
