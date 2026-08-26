@@ -19,6 +19,26 @@ export function registerSearchShortcut(input) {
   document.addEventListener('keydown', searchHotkey);
 }
 
+// One book on screen at a time, like the search box: registering replaces the
+// listener, registering nothing removes it. A chapter's frame is sandboxed to an
+// opaque origin, so a cross-chapter link in the book can only *ask* to be followed —
+// a postMessage the frame's pager sends — and only the frame actually on screen is
+// believed.
+let epubListener;
+
+export function registerEpubReader(frame, dotnet) {
+  if (epubListener) removeEventListener('message', epubListener);
+  epubListener = null;
+  if (!frame) return;
+
+  epubListener = (e) => {
+    const chapter = e.data?.gatherumEpubChapter;
+    if (e.source === frame.contentWindow && Number.isInteger(chapter))
+      dotnet.invokeMethodAsync('OnChapterLinked', chapter);
+  };
+  addEventListener('message', epubListener);
+}
+
 export function initDropZone(element, dotnet) {
   const stop = (e) => { e.preventDefault(); e.stopPropagation(); };
   ['dragenter', 'dragover'].forEach((name) =>

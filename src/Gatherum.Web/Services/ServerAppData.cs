@@ -1,6 +1,7 @@
 using Gatherum.Client;
 using Gatherum.Core.Domain;
 using Gatherum.Core.Markdown;
+using Gatherum.Infrastructure.Epub;
 using Gatherum.Web.Auth;
 using Microsoft.AspNetCore.Components.Authorization;
 
@@ -262,6 +263,17 @@ public sealed class ServerAppData(
     {
         var userId = await UserIdAsync();
         await ops.Categories(s => s.RemoveAsync(userId, nodeId, name));
+    }
+
+    public async Task<EpubInfo> GetEpubAsync(Guid nodeId)
+    {
+        var userId = await ViewerIdAsync();
+        var content = await ops.Files(s => s.OpenContentAsync(userId, nodeId));
+        await using (content.Stream)
+        {
+            using var book = await EpubBook.OpenAsync(content.Stream);
+            return new EpubInfo(book.Title, book.Chapters.Select(c => c.Title).ToList());
+        }
     }
 
     public async Task<IReadOnlyList<VersionInfo>> GetVersionsAsync(Guid nodeId)

@@ -74,6 +74,11 @@ public interface IAppData
     Task<string> AddCategoryAsync(Guid nodeId, string name);
     Task RemoveCategoryAsync(Guid nodeId, string name);
     Task<IReadOnlyList<VersionInfo>> GetVersionsAsync(Guid nodeId);
+
+    /// <summary>The reader's map of an EPUB node: the book's own title and its chapters
+    /// in reading order, named the way its table of contents names them — null where it
+    /// names nothing.</summary>
+    Task<EpubInfo> GetEpubAsync(Guid nodeId);
     Task<string> GetVersionTextAsync(Guid nodeId, int number);
     Task RestoreVersionAsync(Guid nodeId, int number);
     Task UploadVersionAsync(Guid nodeId, string fileName, string contentType, Stream content);
@@ -109,6 +114,7 @@ public record FileFacts(string FileName, string MediaType, long SizeBytes, int V
 }
 public record VersionInfo(int Number, string FileName, string MediaType, long SizeBytes,
     DateTimeOffset UploadedAt, bool IsText);
+public record EpubInfo(string? Title, IReadOnlyList<string?> Chapters);
 /// <summary>A category as a node wears it: the id is the page it is, the name is what
 /// the chip says.</summary>
 public record CategoryRef(Guid Id, string Name);
@@ -274,6 +280,9 @@ public sealed class HttpAppData(HttpClient http) : IAppData
     public async Task RemoveCategoryAsync(Guid nodeId, string name) =>
         await EnsureAsync(await http.DeleteAsync(
             $"/api/nodes/{nodeId}/categories/{CategoryUrl.For(name)}"));
+
+    public async Task<EpubInfo> GetEpubAsync(Guid nodeId) =>
+        (await http.GetFromJsonAsync<EpubInfo>($"/api/files/{nodeId}/epub"))!;
 
     public async Task<IReadOnlyList<VersionInfo>> GetVersionsAsync(Guid nodeId) =>
         await http.GetFromJsonAsync<List<VersionInfo>>($"/api/nodes/{nodeId}/versions") ?? [];

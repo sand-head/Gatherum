@@ -165,6 +165,14 @@ public record UserDto(Guid Id, string DisplayName, string Username)
 {
     public static UserDto From(User user) => new(user.Id, user.DisplayName, user.Username);
 }
+/// <summary>The reader's map of a book: its own title, and one entry per spine
+/// chapter — the name the book's contents give it, or null where they give none.</summary>
+public record EpubDto(string? Title, IReadOnlyList<string?> Chapters)
+{
+    public static EpubDto From(Gatherum.Infrastructure.Epub.EpubBook book) =>
+        new(book.Title, book.Chapters.Select(c => c.Title).ToList());
+}
+
 public record DescriptionRequest(string Description);
 public record BookmarkRequest(string Url, Guid? ParentId);
 public record PresenceDto(IReadOnlyList<string> Editors, int HeadVersion);

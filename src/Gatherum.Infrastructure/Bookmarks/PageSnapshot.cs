@@ -101,7 +101,9 @@ public static partial class PageSnapshot
         }
     }
 
-    private static void RemoveActiveContent(IDocument document)
+    /// <summary>Shared with the EPUB chapter renderer: a book's markup is stored markup
+    /// too, and inert for the same reason a snapshot is.</summary>
+    internal static void RemoveActiveContent(IDocument document)
     {
         foreach (var element in document
             .QuerySelectorAll("script, iframe, frame, frameset, object, embed, applet")
@@ -244,7 +246,7 @@ public static partial class PageSnapshot
     /// <summary>The snapshot is re-serialized as UTF-8 whatever the page declared, so
     /// the declaration has to say so — a stale charset would garble every non-ASCII
     /// character in the file.</summary>
-    private static void DeclareUtf8(IDocument document)
+    internal static void DeclareUtf8(IDocument document)
     {
         foreach (var meta in document.QuerySelectorAll("meta[charset]").ToList())
             meta.Remove();
@@ -328,7 +330,7 @@ public static partial class PageSnapshot
     }
 
     [GeneratedRegex("""url\(\s*(?<q>['"]?)(?<url>[^'")]+)\k<q>\s*\)""", RegexOptions.IgnoreCase)]
-    private static partial Regex CssUrl();
+    internal static partial Regex CssUrl();
 
     [GeneratedRegex("""@import\s+(?<q>['"])(?<url>[^'"]+)\k<q>""", RegexOptions.IgnoreCase)]
     private static partial Regex CssImport();

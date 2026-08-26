@@ -677,6 +677,45 @@ public class AppIntegrationTests(PostgresFixture postgres) : IAsyncLifetime
         Assert.Empty(literal.EnumerateArray());
     }
 
+    [Fact]
+    public async Task An_epub_upload_reads_back_as_a_manifest_and_paginated_chapters()
+    {
+        using var upload = new MultipartFormDataContent();
+        var part = new ByteArrayContent(EpubFixtures.TwoChapterBook());
+        part.Headers.ContentType =
+            new System.Net.Http.Headers.MediaTypeHeaderValue("application/epub+zip");
+        upload.Add(part, "file", "thermals.epub");
+        var created = await client.PostAsync("/api/files", upload);
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var id = (await created.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("id").GetGuid();
+
+        // The manifest is the book's own map: its title, its chapters, their names.
+        var manifest = await client.GetFromJsonAsync<JsonElement>($"/api/files/{id}/epub");
+        Assert.Equal("Closet Thermals", manifest.GetProperty("title").GetString());
+        Assert.Equal(["The Summer", "The Winter"], manifest.GetProperty("chapters")
+            .EnumerateArray().Select(c => c.GetString()));
+
+        // A chapter arrives wearing the reader and the policy that keeps it inert.
+        var chapter = await client.GetAsync($"/api/files/{id}/epub/0");
+        Assert.Equal(HttpStatusCode.OK, chapter.StatusCode);
+        Assert.StartsWith("sandbox allow-scripts;",
+            chapter.Headers.GetValues("Content-Security-Policy").Single());
+        var html = await chapter.Content.ReadAsStringAsync();
+        Assert.Contains("The closet runs hot", html);
+        Assert.Contains("id=\"epub-flow\"", html);
+
+        // Off the spine's end is not a chapter; a page is not a book.
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await client.GetAsync($"/api/files/{id}/epub/9")).StatusCode);
+        var page = await client.PostAsJsonAsync("/api/pages",
+            new { title = "Not a book", markdown = "prose" });
+        var pageId = (await page.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("id").GetGuid();
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await client.GetAsync($"/api/files/{pageId}/epub")).StatusCode);
+    }
+
     /// <summary>What EmbeddingWorker's sweep would do, driven on demand so the test does
     /// not wait out an interval.</summary>
     private async Task EmbedEverythingAsync()

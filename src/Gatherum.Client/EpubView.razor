@@ -1,0 +1,119 @@
+@inject IAppData Data
+@inject IJSRuntime Js
+@implements IAsyncDisposable
+
+@* A book, read where it lives: chapters in a paginated frame, the chapter list in a
+   bar above it. The frame's document paints its own pages and page count; what the
+   bar owns is which chapter is on the desk. A cross-chapter link inside the book
+   asks this component (over postMessage — the sandbox leaves it no other voice) to
+   turn to the chapter it names, so the bar never lies about where the reader is. *@
+
+@if (failed)
+{
+    <div class="epub-fallback">This one would not open as a book — the download below
+        still has the file as it was uploaded.</div>
+}
+else if (book is { } epub)
+{
+    <div class="epub-reader">
+        @if (epub.Chapters.Count > 1)
+        {
+            <div class="epub-toolbar">
+                <button type="button" title="Previous chapter" aria-label="Previous chapter"
+                        @onclick="() => Open(chapter - 1)" disabled="@(chapter == 0)">‹</button>
+                <select value="@chapter" @onchange="OnChapterChosen" aria-label="Chapter">
+                    @for (var i = 0; i < epub.Chapters.Count; i++)
+                    {
+                        var index = i;
+                        <option value="@index">@ChapterName(epub, index)</option>
+                    }
+                </select>
+                <button type="button" title="Next chapter" aria-label="Next chapter"
+                        @onclick="() => Open(chapter + 1)"
+                        disabled="@(chapter >= epub.Chapters.Count - 1)">›</button>
+            </div>
+        }
+        @* Sandboxed like a bookmark snapshot, plus the one concession the pager
+           needs: scripts run, but as an opaque origin the response's policy has
+           already narrowed to the pager itself. *@
+        <iframe @ref="frame" class="epub-frame" src="@($"/api/files/{NodeId}/epub/{chapter}")"
+                title="@(epub.Title ?? "Book")" sandbox="allow-scripts"></iframe>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public Guid NodeId { get; set; }
+
+    private EpubInfo? book;
+    private bool failed;
+    private int chapter;
+    private ElementReference frame;
+    private IJSObjectReference? module;
+    private DotNetObjectReference<EpubView>? self;
+    private Guid loaded;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (loaded == NodeId)
+            return;
+        loaded = NodeId;
+        chapter = 0;
+        try
+        {
+            book = await Data.GetEpubAsync(NodeId);
+        }
+        catch
+        {
+            // A truncated upload, a zip that never was a book — the file view still
+            // stands, so say so and leave the download to speak for the bytes.
+            failed = true;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (book is null)
+            return;
+        module ??= await Js.InvokeAsync<IJSObjectReference>("import", "./js/gatherum.js");
+        self ??= DotNetObjectReference.Create(this);
+        await module.InvokeVoidAsync("registerEpubReader", frame, self);
+    }
+
+    [JSInvokable]
+    public Task OnChapterLinked(int index) => InvokeAsync(() =>
+    {
+        Open(index);
+        StateHasChanged();
+    });
+
+    private void Open(int index)
+    {
+        if (book is { } epub)
+            chapter = Math.Clamp(index, 0, epub.Chapters.Count - 1);
+    }
+
+    private void OnChapterChosen(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var index))
+            Open(index);
+    }
+
+    private static string ChapterName(EpubInfo epub, int index) =>
+        epub.Chapters[index] ?? $"Chapter {index + 1}";
+
+    public async ValueTask DisposeAsync()
+    {
+        self?.Dispose();
+        if (module is null)
+            return;
+        try
+        {
+            await module.InvokeVoidAsync("registerEpubReader", (object?)null, (object?)null);
+            await module.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+            // The circuit is gone, and its listener with it.
+        }
+    }
+}
