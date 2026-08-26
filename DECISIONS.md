@@ -1272,3 +1272,20 @@ selector of a nested list (`& li, & li:first-child { … }`), so the first-child
 matched and an earlier `padding-left` won on specificity. The symptom was a first row
 indented by 4px on a phone and nowhere else. Nested selector lists get their own rules in
 scoped stylesheets until that is known fixed.
+
+## Bookmark captures block ads with a curated embedded list, not EasyList
+An ad blocker for captures wants a filter list, and the real ones (EasyList, uBlock's)
+update daily — but "nothing in Gatherum fetches the web unasked" would make a
+self-updating blocklist the first exception, and a hash-pinned build-time fetch (the
+embedding model's trick) breaks on a file that changes under it. So the list is a
+hand-curated set of ad, tracking and consent *hosts* embedded in the assembly
+(`Bookmarks/AdHosts.txt`), matched by domain suffix — no cosmetic rules, no regex
+engine. Blocking happens twice because the two halves catch different things: the
+browser archiver aborts listed hosts at the network, so ad scripts never run, never
+draw placeholders or consent overlays into the DOM, and stop costing the settle budget;
+the snapshot transform then refuses to fetch listed assets and strips elements pointing
+at them, which is what covers the plain-fetch fallback and keeps tracking pixels from
+reporting every later reading of the archive. A page whose own host is on the list is
+exempt from its own entry — bookmarking the ad company's blog still captures its logo —
+and the main-frame navigation is never blocked at all. `Gatherum__Bookmarks__BlockAds`
+turns the whole thing off.

@@ -15,13 +15,18 @@ public sealed class BrowserPageArchiverTests : IDisposable
 
     private readonly HttpListener server = new();
     private readonly string origin;
+    private readonly string adOrigin;
     private readonly CancellationTokenSource stopping = new();
 
     public BrowserPageArchiverTests()
     {
         var port = FreePort();
         origin = $"http://127.0.0.1:{port}";
+        // The same listener under a second name, so a page on 127.0.0.1 can reference
+        // an "ad host" that is really just localhost — no live network in these tests.
+        adOrigin = $"http://localhost:{port}";
         server.Prefixes.Add($"{origin}/");
+        server.Prefixes.Add($"{adOrigin}/");
         server.Start();
         _ = ServeAsync();
         // The environment may route outbound traffic through a proxy; the page under
@@ -37,13 +42,14 @@ public sealed class BrowserPageArchiverTests : IDisposable
         server.Close();
     }
 
-    private static BrowserPageArchiver? Archiver()
+    private static BrowserPageArchiver? Archiver(AdBlocklist? ads = null)
     {
         var browser = BrowserPageArchiver.ResolveBrowser("");
         if (browser is null)
             return null;
-        var fallback = new HttpPageArchiver(new HttpClient(), TimeProvider.System);
-        return new BrowserPageArchiver(browser, fallback, TimeProvider.System,
+        ads ??= AdBlocklist.None;
+        var fallback = new HttpPageArchiver(new HttpClient(), TimeProvider.System, ads);
+        return new BrowserPageArchiver(browser, fallback, ads, TimeProvider.System,
             Microsoft.Extensions.Logging.Abstractions.NullLogger<BrowserPageArchiver>.Instance);
     }
 
@@ -81,6 +87,23 @@ public sealed class BrowserPageArchiverTests : IDisposable
         Assert.Equal([0x25, 0x50, 0x44, 0x46], page.Content);
     }
 
+    [Fact]
+    public async Task A_listed_host_is_refused_before_its_script_can_draw()
+    {
+        if (Archiver(new AdBlocklist(["localhost"])) is not { } archiver)
+            return;
+
+        var page = await archiver.ArchiveAsync(new Uri($"{origin}/ad-laden"));
+        var html = Encoding.UTF8.GetString(page.Content);
+
+        Assert.Contains("the article itself", html);
+        // The script was aborted at the network, so what it would have drawn was
+        // never in the DOM — not removed from the capture, never captured.
+        Assert.DoesNotContain("the ad drew", html);
+        // And the banner it served is gone too, not even left as a live link.
+        Assert.DoesNotContain("banner.png", html);
+    }
+
     private async Task ServeAsync()
     {
         while (!stopping.IsCancellationRequested)
@@ -113,7 +136,20 @@ public sealed class BrowserPageArchiverTests : IDisposable
                     <body><p>static stub</p></body></html>
                     """)),
                 "/site.css" => ("text/css", "body{background:url('/bg.png')}"u8.ToArray()),
-                "/pic.png" or "/bg.png" => ("image/png", Png),
+                "/pic.png" or "/bg.png" or "/banner.png" => ("image/png", Png),
+                "/ad-laden" => ("text/html", Encoding.UTF8.GetBytes($"""
+                    <html><head><title>Article</title>
+                    <script src="{adOrigin}/ad.js"></script></head>
+                    <body><p>the article itself</p>
+                    <img src="{adOrigin}/banner.png"></body></html>
+                    """)),
+                "/ad.js" => ("text/javascript", Encoding.UTF8.GetBytes("""
+                    addEventListener('DOMContentLoaded', () => {
+                        const p = document.createElement('p');
+                        p.textContent = 'the ad drew';
+                        document.body.append(p);
+                    });
+                    """)),
                 "/manual.pdf" => ("application/pdf", new byte[] { 0x25, 0x50, 0x44, 0x46 }),
                 _ => ("text/plain", Array.Empty<byte>()),
             };

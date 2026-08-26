@@ -24,7 +24,7 @@ namespace Gatherum.Infrastructure.Bookmarks;
 /// failure the browser alone caused. Only the site's own answer fails a capture: a 404
 /// is a 404 however it is fetched.</summary>
 public class BrowserPageArchiver(string executablePath, HttpPageArchiver fallback,
-    TimeProvider clock, ILogger<BrowserPageArchiver> logger) : IPageArchiver
+    AdBlocklist ads, TimeProvider clock, ILogger<BrowserPageArchiver> logger) : IPageArchiver
 {
     /// <summary>Roomier than the plain fetch's budget: a render pays for a browser
     /// launch, script execution, and the settle waits on top of the network.</summary>
@@ -126,6 +126,7 @@ public class BrowserPageArchiver(string executablePath, HttpPageArchiver fallbac
         var loaded = new ConcurrentQueue<IResponse>();
         var page = await context.NewPageAsync();
         page.Response += (_, response) => loaded.Enqueue(response);
+        await RefuseAdsAsync(page, url);
 
         IResponse? arrival;
         try
@@ -172,11 +173,36 @@ public class BrowserPageArchiver(string executablePath, HttpPageArchiver fallbac
                     return found;
                 }
                 return null;
-            }, clock.GetUtcNow(), ct);
+            }, clock.GetUtcNow(), ads, ct);
 
         return new ArchivedPage(snapshot.Title,
             HttpPageArchiver.HtmlFileName(snapshot.Title, finalUrl), "text/html",
             snapshot.Content);
+    }
+
+    /// <summary>Blocking before the render is what an inert snapshot alone cannot do:
+    /// an ad script refused at the network never runs, so nothing it would have drawn —
+    /// the placeholder divs, the injected units, the consent overlay — is in the DOM
+    /// being kept, and the settle waits stop paying for an auction's traffic. The main
+    /// document is never refused, redirects included: the person asked for that page,
+    /// wherever it lives — which is also the exemption for a page on a listed host,
+    /// whose own resources load so the bookmark of the ad company is still a page.</summary>
+    private async Task RefuseAdsAsync(IPage page, Uri url)
+    {
+        if (ads.IsEmpty)
+            return;
+        var own = ads.Match(url.Host);
+        await page.RouteAsync("**/*", async route =>
+        {
+            var asked = route.Request.IsNavigationRequest
+                && route.Request.Frame == page.MainFrame;
+            if (!asked
+                && Uri.TryCreate(route.Request.Url, UriKind.Absolute, out var target)
+                && ads.Match(target.Host) is { } entry && entry != own)
+                await route.AbortAsync();
+            else
+                await route.ContinueAsync();
+        });
     }
 
     /// <summary>Lets the page finish becoming itself: wait for the network to go quiet

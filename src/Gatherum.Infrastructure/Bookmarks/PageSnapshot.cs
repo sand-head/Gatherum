@@ -27,15 +27,25 @@ public static partial class PageSnapshot
 
     public static async Task<Result> BuildAsync(Uri url, byte[] html,
         Func<Uri, CancellationToken, Task<FetchedAsset?>> fetchAsset,
-        DateTimeOffset capturedAt, CancellationToken ct = default)
+        DateTimeOffset capturedAt, AdBlocklist? ads = null, CancellationToken ct = default)
     {
         var parser = new HtmlParser();
         using var source = new MemoryStream(html);
         var document = await parser.ParseDocumentAsync(source, ct);
 
+        var blocked = BlockedBy(ads, url);
+        if (blocked is not null)
+        {
+            var fetch = fetchAsset;
+            fetchAsset = (asset, token) =>
+                blocked(asset) ? Task.FromResult<FetchedAsset?>(null) : fetch(asset, token);
+        }
+
         var baseUri = EffectiveBase(url, document);
         RemoveActiveContent(document);
         AbsolutizeReferences(document, baseUri);
+        if (blocked is not null)
+            RemoveBlockedResources(document, blocked);
         await InlineStylesheetsAsync(document, fetchAsset, ct);
         await InlineStyleElementsAsync(document, fetchAsset, ct);
         await InlineImagesAsync(document, fetchAsset, ct);
@@ -60,6 +70,35 @@ public static partial class PageSnapshot
         return declared is not null && Uri.TryCreate(url, declared, out var resolved)
             ? resolved
             : url;
+    }
+
+    /// <summary>What the blocklist means on this page: a host on the list is blocked,
+    /// unless the page itself lives under the same entry — the one time an "ad host" is
+    /// the content is when somebody bookmarked the ad company.</summary>
+    private static Func<Uri, bool>? BlockedBy(AdBlocklist? ads, Uri page)
+    {
+        if (ads is null || ads.IsEmpty)
+            return null;
+        var own = ads.Match(page.Host);
+        return target => ads.Match(target.Host) is { } entry && entry != own;
+    }
+
+    /// <summary>Drops what points at a blocked host: the images, media and stylesheets
+    /// an ad network serves have no place in the capture, not even as live links — a
+    /// leftover tracking pixel would report every reading of the archive. Anchors stay:
+    /// a link in prose is something the page says, and a saved page is inert anyway.</summary>
+    private static void RemoveBlockedResources(IDocument document, Func<Uri, bool> blocked)
+    {
+        foreach (var element in document
+            .QuerySelectorAll("img, source, link, video, audio, track").ToList())
+        {
+            var reference = element.GetAttribute("src") ?? element.GetAttribute("href");
+            if (reference is not null
+                && Uri.TryCreate(reference, UriKind.Absolute, out var target)
+                && target.Scheme is "http" or "https"
+                && blocked(target))
+                element.Remove();
+        }
     }
 
     private static void RemoveActiveContent(IDocument document)

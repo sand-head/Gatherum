@@ -82,9 +82,11 @@ public static class GatherumServiceCollectionExtensions
         var bookmarks = configuration
             .GetSection($"{GatherumOptions.Section}:{nameof(GatherumOptions.Bookmarks)}")
             .Get<BookmarkOptions>() ?? new BookmarkOptions();
+        services.AddSingleton(bookmarks.BlockAds ? AdBlocklist.Packaged() : AdBlocklist.None);
         if (BrowserPageArchiver.ResolveBrowser(bookmarks.BrowserPath) is { } browser)
             services.AddScoped<IPageArchiver>(provider => new BrowserPageArchiver(browser,
                 provider.GetRequiredService<HttpPageArchiver>(),
+                provider.GetRequiredService<AdBlocklist>(),
                 provider.GetRequiredService<TimeProvider>(),
                 provider.GetRequiredService<ILogger<BrowserPageArchiver>>()));
         else

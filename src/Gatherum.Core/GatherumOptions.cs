@@ -23,6 +23,12 @@ public class BookmarkOptions
     /// HTTP fetch when nothing is found — so a bare <c>dotnet run</c> still bookmarks,
     /// just without rendering.</summary>
     public string BrowserPath { get; set; } = "";
+
+    /// <summary>Keep ads, trackers and consent machinery out of captures: their hosts
+    /// are refused before a rendered page's scripts run and stripped from the snapshot
+    /// either way, against a curated list that ships embedded — nothing is fetched to
+    /// stay current. Off, a capture keeps the page warts and all.</summary>
+    public bool BlockAds { get; set; } = true;
 }
 
 /// <summary>What reaches people who are not signed in. A node marked

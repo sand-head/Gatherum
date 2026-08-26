@@ -58,6 +58,11 @@ changes, moves, or disappears.
   panel below restores or downloads any of them.
 - A URL that serves a document rather than a page — a PDF, an image — is kept as that
   document, source address and all.
+- Ads and trackers do not ride along: known ad, analytics and consent hosts are refused
+  before the page's scripts run — so ad units, tracking pixels and cookie overlays are
+  never in the document being kept — and anything still pointing at one is stripped
+  from the file, which would otherwise phone home on every reading. Off switch in
+  [Configuration](/docs/configuration) (`Gatherum__Bookmarks__BlockAds`).
 - To search — and to an agent reading it over MCP — a bookmark is its **Markdown
   rendering**: headings, lists, links and tables as structured prose, the same
   convention docx files follow, so a model processes the page without wading through

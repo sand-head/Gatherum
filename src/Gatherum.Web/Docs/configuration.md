@@ -35,12 +35,18 @@ is fine on a laptop and an open door anywhere else, so **outside
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `Gatherum__Bookmarks__BrowserPath` | *(empty)* | Chromium executable that renders a bookmarked page before capture. Empty looks in the usual Playwright locations; the container image sets it to its own browser |
+| `Gatherum__Bookmarks__BlockAds` | `true` | Keep ads and trackers out of captures. Their hosts are refused before a rendered page's scripts run and stripped from the snapshot either way; off, a capture keeps the page as served |
 
 With a browser, a bookmark captures the page as it stands once its scripts have run and
 settled. Without one — none installed and nothing configured — the capture is what the
 server serves to a plain fetch, so a bare `dotnet run` still bookmarks, only without
 rendering. A browser that fails to load a page degrades to the plain fetch too, with a
 warning in the log.
+
+Ad blocking works against a curated list of ad, tracking and consent hosts that ships
+inside Gatherum — it is never fetched or updated over the network, in keeping with
+nothing being fetched unasked. A page that itself lives on a listed host is exempt from
+its own entry, so bookmarking such a site still captures it whole.
 
 ## Publishing
 
