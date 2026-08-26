@@ -69,6 +69,42 @@ public static class NodePaths
         return IsLegalSegment(candidate) ? candidate : null;
     }
 
+    /// <summary>The nearest filename for a title that cannot be one verbatim: illegal
+    /// and control characters give way to spaces, whitespace folds to single spaces,
+    /// and what overflows the byte budget is cut at a character boundary — or null when
+    /// nothing spellable remains. The exact title is not lost to the respelling; it
+    /// stays on the node as the override, the same deal every unspellable title gets.</summary>
+    public static string? NearestFileNameFor(string title, string extension)
+    {
+        var spelled = new StringBuilder(title.Length);
+        foreach (var c in title)
+            spelled.Append(
+                Illegal.Contains(c) || char.IsControl(c) || char.IsWhiteSpace(c) ? ' ' : c);
+        var cleaned = string.Join(' ',
+            spelled.ToString().Split(' ', StringSplitOptions.RemoveEmptyEntries));
+        cleaned = CutToBudget(cleaned, MaxSegmentBytes - Encoding.UTF8.GetByteCount(extension))
+            .TrimEnd(' ', '.');
+        return cleaned.Length == 0 ? null : FileNameFor(cleaned, extension);
+    }
+
+    /// <summary>The longest prefix that fits a UTF-8 byte budget without splitting a
+    /// character.</summary>
+    private static string CutToBudget(string name, int budget)
+    {
+        if (Encoding.UTF8.GetByteCount(name) <= budget)
+            return name;
+        var bytes = 0;
+        var length = 0;
+        foreach (var rune in name.EnumerateRunes())
+        {
+            if (bytes + rune.Utf8SequenceLength > budget)
+                break;
+            bytes += rune.Utf8SequenceLength;
+            length += rune.Utf16SequenceLength;
+        }
+        return name[..length];
+    }
+
     /// <summary>A name that is free in this directory, suffixing " (2)", " (3)" … the way
     /// every file manager does when one is taken.</summary>
     public static string Deduplicate(string fileName, Func<string, bool> taken)

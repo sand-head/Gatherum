@@ -87,8 +87,14 @@ public class HttpPageArchiver(HttpClient http, TimeProvider clock) : IPageArchiv
             "text/html", snapshot.Content);
     }
 
+    /// <summary>The capture's filename, from the page's own title — verbatim when the
+    /// title can be a filename, respelled when it merely cannot be ("Pie Crust | Serious
+    /// Eats" carries a bar no filename may). Only a title with nothing spellable in it
+    /// falls back to the host: ten recipes from one site must not all be named for the
+    /// site.</summary>
     internal static string HtmlFileName(string title, Uri url) =>
         NodePaths.FileNameFor(title, ".html")
+            ?? NodePaths.NearestFileNameFor(title, ".html")
             ?? NodePaths.FileNameFor(url.Host, ".html")
             ?? "bookmark.html";
 
@@ -140,15 +146,23 @@ public class HttpPageArchiver(HttpClient http, TimeProvider clock) : IPageArchiv
         return buffer.ToArray();
     }
 
+    /// <summary>A document keeps the name the server suggested, or its URL's last
+    /// segment — respelled when it cannot be a filename as it stands, and the host only
+    /// when neither says anything at all.</summary>
     private static string DocumentFileName(Uri url, HttpResponseMessage response)
     {
         var suggested = response.Content.Headers.ContentDisposition?.FileNameStar
             ?? response.Content.Headers.ContentDisposition?.FileName?.Trim('"');
-        if (suggested is { Length: > 0 } && NodePaths.IsLegalSegment(suggested))
-            return suggested;
         var segment = Uri.UnescapeDataString(url.Segments[^1].Trim('/'));
-        if (segment.Length > 0 && NodePaths.IsLegalSegment(segment))
-            return segment;
+        foreach (var candidate in new[] { suggested, segment })
+        {
+            if (candidate is not { Length: > 0 })
+                continue;
+            if (NodePaths.IsLegalSegment(candidate))
+                return candidate;
+            if (NodePaths.NearestFileNameFor(candidate, "") is { } respelled)
+                return respelled;
+        }
         return url.Host;
     }
 }

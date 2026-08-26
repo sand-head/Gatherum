@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Gatherum.Tests" />
     <ProjectReference Include="..\Gatherum.Core\Gatherum.Core.csproj" />
   </ItemGroup>
 
