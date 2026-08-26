@@ -127,6 +127,7 @@ Two different tempos, and they never share a path.
 | Text, Markdown, code | The content, verbatim |
 | PDF | The text layer, via PdfPig |
 | `.docx` | Its Markdown rendering — the same text the editor shows |
+| `.epub` | Its chapters in reading order, each as its Markdown rendering |
 | Images | Embedded metadata |
 
 **Analysis** asks a model, takes minutes, and runs on a background worker after the
