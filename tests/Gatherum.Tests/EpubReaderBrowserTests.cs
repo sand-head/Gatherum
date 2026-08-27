@@ -104,6 +104,13 @@ public sealed class EpubReaderBrowserTests
             await page.WaitForFunctionAsync(
                 "() => { const t = document.getElementById('epub-page').textContent;" +
                 " const [now, all] = t.split(' / '); return now === all && +all > 1; }");
+
+            // The witness stand: absent unless asked for, and reporting the layout
+            // numbers when it is.
+            Assert.False(await page.IsVisibleAsync("#epub-debug"));
+            await page.GotoAsync("file://" + path + "?debug=1");
+            await page.WaitForSelectorAsync("#epub-debug");
+            Assert.Contains("pages=", await page.TextContentAsync("#epub-debug"));
         }
         finally
         {
