@@ -240,6 +240,11 @@ public static class EpubChapterHtml
     private const string ReaderStyle = """
         html, body { height: 100% !important; }
         body { margin: 0 !important; overflow: hidden !important; background: #f8f5ef; }
+        /* The page pans with a finger, so the browser must not claim horizontal
+           gestures for itself — Safari otherwise cancels them into overscroll and the
+           pager never hears the release. Vertical stays the browser's (a no-op here)
+           and pinch-zoom stays the reader's right. */
+        html, body { touch-action: pan-y pinch-zoom; overscroll-behavior: none; }
         #epub-box { position: absolute; inset: 0; padding: 2.75rem 4rem 3.25rem;
                     overflow: hidden; box-sizing: border-box; }
         #epub-flow { position: relative; height: 100%; column-fill: auto; column-gap: 5rem;
@@ -254,15 +259,21 @@ public static class EpubChapterHtml
         #epub-next { right: 0; }
         #epub-prev:hover, #epub-next:hover,
         #epub-prev:focus-visible, #epub-next:focus-visible { opacity: 1; }
-        @media (hover: none) { #epub-prev, #epub-next { opacity: 0.45; } }
+        /* Where fingers are the pointer, the swipe is the page turn and the arrows
+           are clutter twice over — hidden, not faded. */
+        @media (hover: none) { #epub-prev, #epub-next { display: none; } }
         #epub-page { position: absolute; left: 0; right: 0; bottom: 1rem; text-align: center;
                      font: 0.8rem/1 system-ui, sans-serif; color: rgb(0 0 0 / 0.45);
                      pointer-events: none; }
-        /* A phone's page: margins a paperback would have, not a desk's, and page
-           turns that fit under the thumbs that make them. */
+        /* A phone's page: margins a paperback would have, not a desk's, and type a
+           step smaller — 15px against the desktop's 16 — the way pocket editions set
+           it. Sized at the root so the book's relative sizing scales along. */
         @media (max-width: 40rem) {
-            #epub-box { padding: 1.75rem 2.5rem 2.75rem; }
-            #epub-prev, #epub-next { width: 2.5rem; font-size: 1.8rem; }
+            html { font-size: 93.75%; }
+            #epub-box { padding: 1.75rem 2.25rem 2.75rem; }
+            /* A narrow window on a mouse machine still shows arrows; keep them
+               inside the narrowed margin. */
+            #epub-prev, #epub-next { width: 2.25rem; font-size: 1.8rem; }
             #epub-page { bottom: 0.8rem; }
         }
         """;
@@ -318,18 +329,45 @@ public static class EpubChapterHtml
             turned = now;
             show(page + (e.deltaY > 0 || e.deltaX > 0 ? 1 : -1));
           }, { passive: true });
-          let touchX = null, touchY = null;
-          addEventListener('touchstart', (e) => {
-            touchX = e.changedTouches[0].clientX;
-            touchY = e.changedTouches[0].clientY;
+          // A finger drags the page itself: the flow follows the touch (transition
+          // suspended), then settles — forward past a quarter page or on a quick
+          // flick, back otherwise. Pointer events rather than touch events, with the
+          // stylesheet's touch-action ceding horizontal gestures, because Safari
+          // otherwise claims the swipe and cancels it mid-air.
+          let drag = null;
+          addEventListener('pointerdown', (e) => {
+            if (e.pointerType !== 'touch' || !e.isPrimary) return;
+            drag = { x: e.clientX, y: e.clientY, t: Date.now(), on: false };
           }, { passive: true });
-          addEventListener('touchend', (e) => {
-            if (touchX === null) return;
-            const dx = e.changedTouches[0].clientX - touchX;
-            const dy = e.changedTouches[0].clientY - touchY;
-            touchX = null;
-            if (Math.abs(dx) > 48 && Math.abs(dx) > Math.abs(dy) * 1.5)
-              show(page + (dx < 0 ? 1 : -1));
+          addEventListener('pointermove', (e) => {
+            if (!drag || e.pointerType !== 'touch' || !e.isPrimary) return;
+            const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+            if (!drag.on) {
+              if (Math.abs(dx) < 8 || Math.abs(dx) < Math.abs(dy)) return;
+              drag.on = true;
+              flow.style.transition = 'none';
+            }
+            // The cover and the last page drag with a shortened arm, like paper.
+            const past = (page === 0 && dx > 0) || (page === pages - 1 && dx < 0);
+            flow.style.transform =
+              'translateX(' + (-page * step + (past ? dx / 3 : dx)) + 'px)';
+          }, { passive: true });
+          const settle = (e) => {
+            if (!drag || e.pointerType !== 'touch' || !e.isPrimary) return;
+            const { x, t, on } = drag;
+            drag = null;
+            if (!on) return;
+            flow.style.transition = '';
+            const dx = e.clientX - x;
+            const flick = Date.now() - t < 300 && Math.abs(dx) > 32;
+            show(Math.abs(dx) > step / 4 || flick ? page + (dx < 0 ? 1 : -1) : page);
+          };
+          addEventListener('pointerup', settle, { passive: true });
+          addEventListener('pointercancel', () => {
+            if (!drag) return;
+            drag = null;
+            flow.style.transition = '';
+            show(page);
           }, { passive: true });
 
           document.addEventListener('click', (e) => {
