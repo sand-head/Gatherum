@@ -218,6 +218,23 @@ a wiki link keeps its URL — and `ReadOnlyHtmlTests` is the host's half of upst
 parity promise. Editing is still the canvas, which is what a caret, a selection and
 proportional hit-testing need. All slopedit packages moved to 2.2.0.
 
+### Post-revision: citations backed by the archive
+
+Wikipedia's chronic disease is link rot in its references; Gatherum already held both
+halves of the cure — footnotes native to the Markdown container, and bookmarks that
+keep a page the way an archive would — and only the connective convention was missing.
+A citation is a footnote whose note cites a node: a mention labeled with the bare
+title, and, when the node is a bookmark, `, captured 27 August 2026 — [host](url).`
+after it. No new syntax and no new storage — the note is one plain Markdown line, the
+mention backlinks (so a bookmark's backlinks answer "what cites this?") and padlocks
+like any other, and the server's link pass sees it without knowing footnotes exist.
+`Citation` builds the note's runs; the editor's *Insert… → Cite…* opens the node
+picker, inserts the footnote via the model's own `InsertFootnote()` and dresses the
+fresh note's runs directly; a pasted URL is offered as *Capture and cite* — the
+bookmark is created under the citing page, then cited like any other. The manual's
+dialect page teaches the convention, and `agents.md` tells models to capture first and
+cite the node rather than paste a bare URL.
+
 ### Shoulds — status (updated again)
 
 - Tag pages with autocomplete: **superseded** — categories, with path autocomplete.

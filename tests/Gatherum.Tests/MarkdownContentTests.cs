@@ -33,6 +33,22 @@ public class MarkdownContentTests
     }
 
     [Fact]
+    public void A_citation_footnote_backlinks_the_node_it_cites()
+    {
+        // A citation is a footnote whose note is a mention — plain Markdown, so the
+        // server's link pass sees it without knowing footnotes exist.
+        var cited = Guid.NewGuid();
+        var markdown =
+            $"""
+            The page moved on.[^1]
+
+            [^1]: [Example Domain](node://{cited}), captured 27 August 2026 — [example.com](https://example.com/page).
+            """;
+
+        Assert.Equal([cited], MarkdownContent.LinkedNodeIds(markdown));
+    }
+
+    [Fact]
     public void Descriptions_link_by_bare_node_urls()
     {
         var id = Guid.NewGuid();

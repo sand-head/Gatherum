@@ -1,5 +1,6 @@
 @implements IAsyncDisposable
 @inject IAppData Data
+@inject TreeState Tree
 @inject OutlineState Outline
 @inject ThemeState AppTheme
 @inject NavigationManager Navigation
@@ -37,6 +38,7 @@
                         @if (!sourceMode)
                         {
                             <button @onclick="InsertFootnoteAsync">Footnote</button>
+                            <button @onclick="() => OpenPicker(Picker.Cite)">Cite…</button>
                         }
                         <div class="insert-group">Callout</div>
                         @foreach (var (kind, name) in CalloutExtension.Kinds)
@@ -91,14 +93,26 @@
         <div class="mention-dialog">
             @* Escape was the only way out, which is not a way out on a phone. *@
             <button class="picker-close" title="Close" aria-label="Close"
-                    @onclick="() => picker = Picker.None">
+                    @onclick="ClosePicker">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                      stroke-width="2" stroke-linecap="round" aria-hidden="true">
                     <path d="M6 6l12 12M18 6L6 18" />
                 </svg>
             </button>
             <input placeholder="@PickerPlaceholder" value="@pickerQuery"
-                   @oninput="OnPickerQuery" @onkeydown="OnPickerKey" autofocus />
+                   @oninput="OnPickerQuery" @onkeydown="OnPickerKey" autofocus
+                   disabled="@citing" />
+            @if (picker == Picker.Cite && CiteUrl is { } citable)
+            {
+                <button class="ghost new-title" disabled="@citing"
+                        @onclick="CaptureAndCiteAsync">
+                    @(citing ? "Capturing…" : $"Capture {citable.Host} and cite it")
+                </button>
+            }
+            @if (citeError is { Length: > 0 })
+            {
+                <p class="cite-error" role="alert">@citeError</p>
+            }
             @if (picker == Picker.WikiLink && pickerQuery.Trim().Length > 0)
             {
                 <button class="ghost new-title"
@@ -151,15 +165,24 @@
     private bool IsDocx =>
         MediaType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
-    /// <summary>What the node picker is being asked for. One dialog, because all three
-    /// answers are "a node", and two of them may also be a title nobody has written yet.</summary>
-    private enum Picker { None, Mention, WikiLink, Figure }
+    /// <summary>What the node picker is being asked for. One dialog, because all four
+    /// answers are "a node", two of them may also be a title nobody has written yet,
+    /// and a citation may also be a URL nobody has captured yet.</summary>
+    private enum Picker { None, Mention, WikiLink, Figure, Cite }
 
     private Picker picker;
     private string pickerQuery = "";
     private IReadOnlyList<SearchHit> pickerResults = [];
     private bool insertOpen;
     private string? deadLink;
+    private bool citing;
+    private string? citeError;
+
+    /// <summary>The picker's query read as an address: when citing, a pasted URL is an
+    /// offer to capture the page and cite the capture.</summary>
+    private Uri? CiteUrl =>
+        Uri.TryCreate(pickerQuery.Trim(), UriKind.Absolute, out var uri) &&
+        uri.Scheme is "http" or "https" ? uri : null;
 
     /// <summary>Titles this document wiki-links that currently resolve; everything else
     /// it links is a red link. Kept so a theme change can re-ink without asking again.</summary>
@@ -169,6 +192,7 @@
     {
         Picker.WikiLink => "Title to link…",
         Picker.Figure => "Image to set beside the text…",
+        Picker.Cite => "Node to cite, or a URL to capture…",
         _ => "Search nodes…",
     };
 
@@ -511,6 +535,15 @@
         picker = mode;
         pickerQuery = "";
         pickerResults = [];
+        citeError = null;
+    }
+
+    /// <summary>A capture mid-flight keeps its dialog: dismissing it would leave the
+    /// writer wondering whether a bookmark was made.</summary>
+    private void ClosePicker()
+    {
+        if (!citing)
+            picker = Picker.None;
     }
 
     private async Task OnPickerQuery(ChangeEventArgs e)
@@ -531,7 +564,7 @@
     private void OnPickerKey(KeyboardEventArgs e)
     {
         if (e.Key == "Escape")
-            picker = Picker.None;
+            ClosePicker();
     }
 
     private async Task ChooseAsync(SearchHit hit)
@@ -553,6 +586,9 @@
                     {hit.Title}
                     :::
                     """);
+                break;
+            case Picker.Cite:
+                await CiteNodeAsync(hit.Id);
                 break;
         }
     }
@@ -602,6 +638,85 @@
         if (richDoc is null || docView is null)
             return;
         richDoc.InsertFootnote();
+        OnChanged("");
+        await docView.FocusAsync();
+        docView.RevealCaret();
+    }
+
+    /// <summary>Capture the pasted URL as a bookmark — filed under the page doing the
+    /// citing, so a reference lives with the article that leans on it — then cite the
+    /// capture. Slow by nature (it is somebody else's server), so the dialog stays up
+    /// and says so, and a refusal is shown in the server's own words.</summary>
+    private async Task CaptureAndCiteAsync()
+    {
+        if (CiteUrl is not { } url)
+            return;
+        citing = true;
+        citeError = null;
+        try
+        {
+            var id = await Data.BookmarkAsync(NodeId, url.AbsoluteUri);
+            await Tree.RefreshAsync();
+            picker = Picker.None;
+            await CiteNodeAsync(id);
+        }
+        catch (Exception ex)
+        {
+            citeError = ex.Message;
+        }
+        finally
+        {
+            citing = false;
+        }
+    }
+
+    /// <summary>Cite a node the tree already holds. A bookmark's citation carries its
+    /// source address and the day of its newest capture — the archive's answer to a
+    /// reference that would otherwise rot with the web — while a page or an uploaded
+    /// file cites as a plain mention: nothing about it needs a date to stay true.</summary>
+    private async Task CiteNodeAsync(Guid nodeId)
+    {
+        picker = Picker.None;
+        string title;
+        string? sourceUrl;
+        DateTimeOffset? capturedAt = null;
+        try
+        {
+            var info = await Data.GetNodeAsync(nodeId);
+            title = info.Title;
+            sourceUrl = info.File?.SourceUrl;
+            if (sourceUrl is { Length: > 0 })
+            {
+                var versions = await Data.GetVersionsAsync(nodeId);
+                capturedAt = versions.Count > 0 ? versions[0].UploadedAt : null;
+            }
+        }
+        catch (Exception)
+        {
+            saveLabel = "Couldn't reach the server";
+            return;
+        }
+        await InsertCitationAsync(title, nodeId, sourceUrl, capturedAt);
+    }
+
+    /// <summary>The citation is a footnote wearing the note <see cref="Citation"/>
+    /// spells: the model picks the key and places the marker at the caret, and the
+    /// fresh note — created empty — is given the citation's runs directly, the way
+    /// <see cref="WikiLinks"/> and <see cref="NodeLinks"/> rewrite runs. Undo reverses
+    /// the footnote op, and the note's runs go with the note.</summary>
+    private async Task InsertCitationAsync(string title, Guid nodeId, string? sourceUrl,
+        DateTimeOffset? capturedAt)
+    {
+        if (richDoc is null || docView is null || sourceMode)
+            return;
+        var key = richDoc.InsertFootnote();
+        var note = richDoc.Blocks.FirstOrDefault(b => b.Footnote == key);
+        if (note is null)
+            return;
+        note.Runs.Clear();
+        foreach (var run in Citation.Runs(title, nodeId, sourceUrl, capturedAt))
+            note.Runs.Add(run);
+        richDoc.InvalidateLayout();
         OnChanged("");
         await docView.FocusAsync();
         docView.RevealCaret();

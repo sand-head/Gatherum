@@ -39,7 +39,11 @@ page-turner.
   from, and "capture again" records a fresh capture as a new version with every old
   one kept, like an archive's older crawls. A URL that serves a document — a PDF, an
   image — is kept as that document; with no browser to be found, the capture degrades
-  to what the server serves a plain fetch.
+  to what the server serves a plain fetch. And a page can **cite** the archive:
+  *Insert… → Cite…* writes a footnote whose mention opens the kept capture — dated,
+  with the source's own address trailing it — so a claim's reference outlives the page
+  it quotes; paste a URL instead of picking a node and it is captured and cited in one
+  motion, the way a citation should have always worked.
 - **Multimedia**: point `Gatherum__Analysis__Endpoint` at a model you run — llama.cpp's
   server, or anything else speaking the OpenAI API — and uploads that carry no text of
   their own get some. Still images are read (the writing on a photographed whiteboard),

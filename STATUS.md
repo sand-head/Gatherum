@@ -116,6 +116,20 @@ browser sessions — including against the built container).
   version's text, the convention docx set — so `get_node` hands agents structured prose.
   New: `POST /api/bookmarks`, `POST /api/bookmarks/{id}/capture`, MCP
   `bookmark_page`/`capture_bookmark`, and `text/html` served inline is CSP-sandboxed.
+- **Citations backed by the archive** — a citation is a footnote whose note cites a
+  node, in the vocabulary the dialect already had: a mention labeled with the bare
+  title and, when the cited node is a bookmark, the day of its newest capture and the
+  source's own address — `[^1]: [Title](node://id), captured 27 August 2026 —
+  [example.com](https://…).` — so the claim points at the capture Gatherum keeps
+  rather than at a URL that may rot. No new syntax: the note is one plain Markdown
+  line, the mention backlinks (a bookmark's backlinks answer "what cites this?") and
+  locks for a reader who may not open it, and the server's link pass sees it without
+  knowing footnotes exist. *Insert… → Cite…* in the editor cites any node picked from
+  search; a pasted URL is offered as *Capture and cite* — captured as a bookmark under
+  the citing page, then cited, in one motion. Document mode only, like Footnote,
+  because the model picks the key and places the marker. The manual's dialect page
+  teaches the convention and `agents.md` tells models to `bookmark_page` first rather
+  than paste a bare URL.
 - **Multimedia analysis** — optional, off unless `Gatherum__Analysis__Endpoint` names an
   OpenAI-compatible model you run. Still images are read (OCR), audio and video are
   transcribed (video split by ffmpeg into its audio track and sampled frames), and each
