@@ -308,7 +308,12 @@ public static class ApiEndpoints
                 return Results.NotFound();
             using var book = await EpubBook.OpenAsync(stream);
             var position = await files.GetReadingPositionAsync(http.User.GetUserIdOrNull(), id);
-            return Results.Ok(EpubDto.From(book, position));
+            var served = version
+                ?? await files.GetHeadVersionAsync(http.User.GetUserIdOrNull(), id);
+            // Never cached: it carries the reader's own position, and it is what
+            // hands out the version and renderer keys the chapter URLs pin.
+            http.Response.Headers.CacheControl = "no-store";
+            return Results.Ok(EpubDto.From(book, position, served));
         }).AllowAnonymous().RequireRateLimiting(AnonymousRateLimits.Read);
 
         // The ribbon moves as the reader reads. A write, so never anonymous: a
@@ -336,6 +341,14 @@ public static class ApiEndpoints
                 return Results.NotFound();
             var html = await EpubChapterHtml.RenderAsync(book, chapter);
             http.Response.Headers.ContentSecurityPolicy = EpubChapterHtml.ContentSecurityPolicy;
+            // A request that pinned the book's version may keep the answer forever —
+            // the reader's URLs also carry the render stamp, so everything the bytes
+            // depend on is in the key. The bare URL means "the latest", which no
+            // cache can promise: an unpinned chapter cached across a deploy is
+            // exactly how a phone keeps swiping against last week's pager.
+            http.Response.Headers.CacheControl = version is null
+                ? "no-store"
+                : "private, max-age=31536000, immutable";
             return Results.Content(html, "text/html; charset=utf-8");
         }).AllowAnonymous().RequireRateLimiting(AnonymousRateLimits.Read);
 

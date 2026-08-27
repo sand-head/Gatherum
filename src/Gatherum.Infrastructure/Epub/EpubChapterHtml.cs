@@ -45,6 +45,13 @@ public static class EpubChapterHtml
         $"script-src 'sha256-{Convert.ToBase64String(
             SHA256.HashData(Encoding.UTF8.GetBytes(PagerScript)))}'";
 
+    /// <summary>A fingerprint of the reader itself — the pager and its dress. The
+    /// chapter URL carries it, so a chapter cached against one build of the reader can
+    /// never answer for the next: fixing the pager re-keys every chapter without
+    /// anybody clearing a cache.</summary>
+    public static string RenderStamp { get; } = Convert.ToHexStringLower(
+        SHA256.HashData(Encoding.UTF8.GetBytes(PagerScript + ReaderStyle)))[..12];
+
     private static void InlineResources(IDocument document, EpubBook book, string directory)
     {
         foreach (var link in document.QuerySelectorAll("link[rel~='stylesheet'][href]").ToList())

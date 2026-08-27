@@ -690,17 +690,31 @@ public class AppIntegrationTests(PostgresFixture postgres) : IAsyncLifetime
         var id = (await created.Content.ReadFromJsonAsync<JsonElement>())
             .GetProperty("id").GetGuid();
 
-        // The manifest is the book's own map: its title, its chapters, their names.
-        var manifest = await client.GetFromJsonAsync<JsonElement>($"/api/files/{id}/epub");
+        // The manifest is the book's own map: its title, its chapters, their names —
+        // and the version and renderer keys the chapter URLs pin. Never cached: it
+        // carries the reader's position.
+        var manifestResponse = await client.GetAsync($"/api/files/{id}/epub");
+        Assert.Equal("no-store", manifestResponse.Headers.CacheControl!.ToString());
+        var manifest = await manifestResponse.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal("Closet Thermals", manifest.GetProperty("title").GetString());
         Assert.Equal(["The Summer", "The Winter"], manifest.GetProperty("chapters")
             .EnumerateArray().Select(c => c.GetString()));
+        Assert.Equal(1, manifest.GetProperty("version").GetInt32());
+        var renderer = manifest.GetProperty("renderer").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(renderer));
 
         // A chapter arrives wearing the reader and the policy that keeps it inert.
+        // Bare, it means "the latest" and must not be cached — an unpinned chapter
+        // held across a deploy is a phone swiping against last week's pager. Pinned
+        // to a version (the reader's own URLs always are), it may be kept forever.
         var chapter = await client.GetAsync($"/api/files/{id}/epub/0");
         Assert.Equal(HttpStatusCode.OK, chapter.StatusCode);
         Assert.StartsWith("sandbox allow-scripts;",
             chapter.Headers.GetValues("Content-Security-Policy").Single());
+        Assert.Equal("no-store", chapter.Headers.CacheControl!.ToString());
+        var pinned = await client.GetAsync($"/api/files/{id}/epub/0?version=1&r={renderer}");
+        Assert.Contains("immutable", pinned.Headers.CacheControl!.ToString());
+        Assert.Contains("private", pinned.Headers.CacheControl!.ToString());
         var html = await chapter.Content.ReadAsStringAsync();
         Assert.Contains("The closet runs hot", html);
         Assert.Contains("id=\"epub-flow\"", html);

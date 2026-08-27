@@ -119,8 +119,11 @@ public record FileFacts(string FileName, string MediaType, long SizeBytes, int V
 }
 public record VersionInfo(int Number, string FileName, string MediaType, long SizeBytes,
     DateTimeOffset UploadedAt, bool IsText);
+/// <summary>Version and Renderer are the two keys a chapter URL pins, so a browser may
+/// cache chapters hard without ever holding a stale one: the book's version changes
+/// when the file does, the renderer stamp when the reader itself does.</summary>
 public record EpubInfo(string? Title, IReadOnlyList<string?> Chapters,
-    EpubPosition? Position);
+    EpubPosition? Position, int Version, string Renderer);
 /// <summary>A ribbon in a book: the chapter, and how far through it (0..1).</summary>
 public record EpubPosition(int Chapter, double Progress);
 /// <summary>A category as a node wears it: the id is the page it is, the name is what

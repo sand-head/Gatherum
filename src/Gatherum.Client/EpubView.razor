@@ -63,7 +63,8 @@ else if (book is { } epub)
 
     /// <summary>The chapter's URL, carrying the saved fraction as a fragment on the
     /// first opening only — the pager cashes it in once it knows its page count.</summary>
-    private string FrameSrc => $"/api/files/{NodeId}/epub/{chapter}{restoreAt}";
+    private string FrameSrc =>
+        $"/api/files/{NodeId}/epub/{chapter}?version={book?.Version ?? 0}&r={book?.Renderer}{restoreAt}";
 
     protected override async Task OnParametersSetAsync()
     {
