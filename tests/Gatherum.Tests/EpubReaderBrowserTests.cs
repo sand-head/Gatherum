@@ -75,6 +75,20 @@ public sealed class EpubReaderBrowserTests
             await page.ClickAsync("#epub-next");
             await page.WaitForFunctionAsync("() => typeof window.__progress === 'number'");
 
+            // A finger's drag leftward settles onto the next page.
+            await page.EvaluateAsync("""
+                () => {
+                  const fire = (type, x, y) => window.dispatchEvent(new PointerEvent(type,
+                    { pointerType: 'touch', isPrimary: true, clientX: x, clientY: y, bubbles: true }));
+                  fire('pointerdown', 320, 300);
+                  fire('pointermove', 250, 302);
+                  fire('pointermove', 120, 305);
+                  fire('pointerup', 100, 306);
+                }
+                """);
+            await page.WaitForFunctionAsync(
+                "() => document.getElementById('epub-page').textContent.startsWith('3 /')");
+
             // A saved fraction arrives as a fragment and reopens the chapter there:
             // #at=1 is the last page. (The reload is what a fresh visit is; a bare
             // hash change would be a same-document navigation the pager never sees.)
