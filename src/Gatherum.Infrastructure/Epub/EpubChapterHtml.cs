@@ -331,39 +331,44 @@ public static class EpubChapterHtml
           }, { passive: true });
           // A finger drags the page itself: the flow follows the touch (transition
           // suspended), then settles — forward past a quarter page or on a quick
-          // flick, back otherwise. Pointer events rather than touch events, with the
-          // stylesheet's touch-action ceding horizontal gestures, because Safari
-          // otherwise claims the swipe and cancels it mid-air.
+          // flick, back otherwise. Raw touch events, classified on the FIRST move and
+          // held with preventDefault from a non-passive listener: iOS Safari does not
+          // reliably honor touch-action inside a frame, and lets a hidden-overflow
+          // document pan anyway — a cancelable touchmove is the one claim it always
+          // respects. A second finger, or a first move more down than across, hands
+          // the gesture straight back to the browser.
           let drag = null;
-          addEventListener('pointerdown', (e) => {
-            if (e.pointerType !== 'touch' || !e.isPrimary) return;
-            drag = { x: e.clientX, y: e.clientY, t: Date.now(), on: false };
+          addEventListener('touchstart', (e) => {
+            drag = e.touches.length === 1
+              ? { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now(), on: false }
+              : null;
           }, { passive: true });
-          addEventListener('pointermove', (e) => {
-            if (!drag || e.pointerType !== 'touch' || !e.isPrimary) return;
-            const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+          addEventListener('touchmove', (e) => {
+            if (!drag) return;
+            if (e.touches.length !== 1) { drag = null; return; }
+            const dx = e.touches[0].clientX - drag.x, dy = e.touches[0].clientY - drag.y;
             if (!drag.on) {
-              if (Math.abs(dx) < 8 || Math.abs(dx) < Math.abs(dy)) return;
+              if (Math.abs(dx) <= Math.abs(dy)) { drag = null; return; }
               drag.on = true;
               flow.style.transition = 'none';
             }
+            if (e.cancelable) e.preventDefault();
             // The cover and the last page drag with a shortened arm, like paper.
             const past = (page === 0 && dx > 0) || (page === pages - 1 && dx < 0);
             flow.style.transform =
               'translateX(' + (-page * step + (past ? dx / 3 : dx)) + 'px)';
-          }, { passive: true });
-          const settle = (e) => {
-            if (!drag || e.pointerType !== 'touch' || !e.isPrimary) return;
+          }, { passive: false });
+          addEventListener('touchend', (e) => {
+            if (!drag) return;
             const { x, t, on } = drag;
             drag = null;
             if (!on) return;
             flow.style.transition = '';
-            const dx = e.clientX - x;
+            const dx = e.changedTouches[0].clientX - x;
             const flick = Date.now() - t < 300 && Math.abs(dx) > 32;
             show(Math.abs(dx) > step / 4 || flick ? page + (dx < 0 ? 1 : -1) : page);
-          };
-          addEventListener('pointerup', settle, { passive: true });
-          addEventListener('pointercancel', () => {
+          }, { passive: true });
+          addEventListener('touchcancel', () => {
             if (!drag) return;
             drag = null;
             flow.style.transition = '';
