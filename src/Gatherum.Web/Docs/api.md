@@ -95,8 +95,8 @@ the latest one.
 | `POST /api/files/{id}/versions` | Multipart `file` — a new version of an existing node |
 | `GET /api/files/{id}/content?version=` | The bytes, inline, range requests supported — *anonymous* |
 | `GET /api/files/{id}/download?version=` | The bytes, as an attachment — *anonymous* |
-| `GET /api/files/{id}/epub?version=` | An EPUB's map: `{ title, chapters: [name…], position }` — *anonymous*, though only a signed-in reader gets a `position` |
-| `GET /api/files/{id}/epub/{chapter}?version=` | One chapter as a self-contained, paginated page — *anonymous* |
+| `GET /api/files/{id}/epub?version=` | An EPUB's map: `{ title, chapters: [name…], position, version, renderer }` — *anonymous*, though only a signed-in reader gets a `position`; never cached |
+| `GET /api/files/{id}/epub/{chapter}?version=` | One chapter as a self-contained, paginated page — *anonymous*. With `version` pinned the response is cacheable forever; bare it means "the latest" and is `no-store` |
 | `PUT /api/files/{id}/epub/position` | `{ "chapter": 3, "progress": 0.5 }` — where this reader left off |
 | `PUT /api/files/{id}/description` | `{ "description": "…" }` |
 

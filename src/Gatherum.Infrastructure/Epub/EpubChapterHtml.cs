@@ -45,6 +45,13 @@ public static class EpubChapterHtml
         $"script-src 'sha256-{Convert.ToBase64String(
             SHA256.HashData(Encoding.UTF8.GetBytes(PagerScript)))}'";
 
+    /// <summary>A fingerprint of the reader itself — the pager and its dress. The
+    /// chapter URL carries it, so a chapter cached against one build of the reader can
+    /// never answer for the next: fixing the pager re-keys every chapter without
+    /// anybody clearing a cache.</summary>
+    public static string RenderStamp { get; } = Convert.ToHexStringLower(
+        SHA256.HashData(Encoding.UTF8.GetBytes(PagerScript + ReaderStyle)))[..12];
+
     private static void InlineResources(IDocument document, EpubBook book, string directory)
     {
         foreach (var link in document.QuerySelectorAll("link[rel~='stylesheet'][href]").ToList())
@@ -265,6 +272,10 @@ public static class EpubChapterHtml
         #epub-page { position: absolute; left: 0; right: 0; bottom: 1rem; text-align: center;
                      font: 0.8rem/1 system-ui, sans-serif; color: rgb(0 0 0 / 0.45);
                      pointer-events: none; }
+        #epub-debug { position: absolute; top: 0; left: 0; right: 0; margin: 0;
+                      padding: 0.5rem 0.75rem; font: 10px/1.5 ui-monospace, monospace;
+                      color: #fff; background: rgb(0 0 0 / 0.65); white-space: pre-wrap;
+                      pointer-events: none; }
         /* A phone's page: margins a paperback would have, not a desk's, and type a
            step smaller — 15px against the desktop's 16 — the way pocket editions set
            it. Sized at the root so the book's relative sizing scales along. */
@@ -290,6 +301,21 @@ public static class EpubChapterHtml
           const label = document.getElementById('epub-page');
           let page = 0, pages = 1, step = 1;
 
+          // The reader's own witness stand, for the day a device disagrees with every
+          // emulator: ?debug on the chapter URL overlays a log of the layout numbers
+          // and every gesture decision, so a phone can say what actually happened
+          // instead of being theorized about. Off unless asked for; renders nothing
+          // and costs nothing otherwise.
+          const debug = /[?&]debug/.test(location.search) ? (() => {
+            const panel = document.createElement('pre');
+            panel.id = 'epub-debug';
+            document.body.appendChild(panel);
+            return (line) => {
+              panel.textContent = (new Date().toISOString().slice(11, 23) + ' ' + line
+                + '\n' + panel.textContent).split('\n').slice(0, 14).join('\n');
+            };
+          })() : () => {};
+
           const show = (n) => {
             page = Math.max(0, Math.min(n, pages - 1));
             flow.style.transform = 'translateX(' + (-page * step) + 'px)';
@@ -305,6 +331,8 @@ public static class EpubChapterHtml
             flow.style.columnWidth = width + 'px';
             step = width + gap;
             pages = Math.max(1, Math.round((flow.scrollWidth + gap) / step));
+            debug('layout vp=' + innerWidth + 'x' + innerHeight + ' w=' + width
+              + ' sw=' + flow.scrollWidth + ' pages=' + pages);
             if (Number.isFinite(restore)) {
               page = Math.round(Math.min(restore, 1) * (pages - 1));
               restore = NaN;
@@ -342,15 +370,22 @@ public static class EpubChapterHtml
             drag = e.touches.length === 1
               ? { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now(), on: false }
               : null;
+            debug('touchstart n=' + e.touches.length);
           }, { passive: true });
           addEventListener('touchmove', (e) => {
             if (!drag) return;
             if (e.touches.length !== 1) { drag = null; return; }
             const dx = e.touches[0].clientX - drag.x, dy = e.touches[0].clientY - drag.y;
             if (!drag.on) {
-              if (Math.abs(dx) <= Math.abs(dy)) { drag = null; return; }
+              if (Math.abs(dx) <= Math.abs(dy)) {
+                drag = null;
+                debug('released dx=' + Math.round(dx) + ' dy=' + Math.round(dy));
+                return;
+              }
               drag.on = true;
               flow.style.transition = 'none';
+              debug('claimed dx=' + Math.round(dx) + ' dy=' + Math.round(dy)
+                + ' cancelable=' + e.cancelable);
             }
             if (e.cancelable) e.preventDefault();
             // The cover and the last page drag with a shortened arm, like paper.
@@ -366,9 +401,11 @@ public static class EpubChapterHtml
             flow.style.transition = '';
             const dx = e.changedTouches[0].clientX - x;
             const flick = Date.now() - t < 300 && Math.abs(dx) > 32;
+            debug('touchend dx=' + Math.round(dx) + (flick ? ' flick' : ''));
             show(Math.abs(dx) > step / 4 || flick ? page + (dx < 0 ? 1 : -1) : page);
           }, { passive: true });
           addEventListener('touchcancel', () => {
+            debug('touchcancel — the browser took the gesture');
             if (!drag) return;
             drag = null;
             flow.style.transition = '';

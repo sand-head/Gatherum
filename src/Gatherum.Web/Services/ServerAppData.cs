@@ -273,8 +273,10 @@ public sealed class ServerAppData(
         {
             using var book = await EpubBook.OpenAsync(content.Stream);
             var position = await ops.Files(s => s.GetReadingPositionAsync(userId, nodeId));
+            var version = await ops.Files(s => s.GetHeadVersionAsync(userId, nodeId));
             return new EpubInfo(book.Title, book.Chapters.Select(c => c.Title).ToList(),
-                position is null ? null : new EpubPosition(position.Chapter, position.Progress));
+                position is null ? null : new EpubPosition(position.Chapter, position.Progress),
+                version, EpubChapterHtml.RenderStamp);
         }
     }
 

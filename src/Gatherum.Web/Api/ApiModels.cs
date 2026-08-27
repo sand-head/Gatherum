@@ -166,15 +166,18 @@ public record UserDto(Guid Id, string DisplayName, string Username)
     public static UserDto From(User user) => new(user.Id, user.DisplayName, user.Username);
 }
 /// <summary>The reader's map of a book: its own title, one entry per spine chapter —
-/// the name the book's contents give it, or null where they give none — and where this
-/// reader left off, when they are somebody the instance can remember.</summary>
+/// the name the book's contents give it, or null where they give none — where this
+/// reader left off, when they are somebody the instance can remember, and the two
+/// keys a chapter URL pins so a cache can hold chapters without ever holding stale
+/// ones: which version of the book, and which build of the reader.</summary>
 public record EpubDto(string? Title, IReadOnlyList<string?> Chapters,
-    EpubPositionDto? Position)
+    EpubPositionDto? Position, int Version, string Renderer)
 {
     public static EpubDto From(Gatherum.Infrastructure.Epub.EpubBook book,
-        ReadingPosition? position) =>
+        ReadingPosition? position, int version) =>
         new(book.Title, book.Chapters.Select(c => c.Title).ToList(),
-            EpubPositionDto.From(position));
+            EpubPositionDto.From(position), version,
+            Gatherum.Infrastructure.Epub.EpubChapterHtml.RenderStamp);
 }
 
 /// <summary>A ribbon in a book: the chapter, and how far through it (0..1).</summary>

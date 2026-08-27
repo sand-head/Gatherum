@@ -1,5 +1,6 @@
 @inject IAppData Data
 @inject IJSRuntime Js
+@inject NavigationManager Navigation
 @implements IAsyncDisposable
 
 @* A book, read where it lives: chapters in a paginated frame, the chapter list in a
@@ -63,7 +64,15 @@ else if (book is { } epub)
 
     /// <summary>The chapter's URL, carrying the saved fraction as a fragment on the
     /// first opening only — the pager cashes it in once it knows its page count.</summary>
-    private string FrameSrc => $"/api/files/{NodeId}/epub/{chapter}{restoreAt}";
+    private string FrameSrc =>
+        $"/api/files/{NodeId}/epub/{chapter}?version={book?.Version ?? 0}&r={book?.Renderer}{DebugFlag}{restoreAt}";
+
+    /// <summary>Opening the node page with ?debug=1 hands the flag to the chapter, and
+    /// the pager overlays its event log — the way to ask a misbehaving device what is
+    /// actually happening in the frame, in place, without tooling.</summary>
+    private string DebugFlag =>
+        Navigation.Uri.Contains("debug=1", StringComparison.OrdinalIgnoreCase)
+            ? "&debug=1" : "";
 
     protected override async Task OnParametersSetAsync()
     {
