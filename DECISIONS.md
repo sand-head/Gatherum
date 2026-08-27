@@ -1335,3 +1335,44 @@ endpoint like every other write. A visitor's place is kept by their own browser
 instead (`localStorage`, written on every save as the fallback the server never is,
 read only when the server had nothing) — so a stranger still resumes their reading,
 and nothing about them ever lands in the instance.
+
+## A citation is a convention, not a construct
+Archive-backed citations — a claim's reference pointing at the capture Gatherum keeps
+rather than at a URL that will someday 404 — landed as no new syntax at all. A citation
+is a footnote whose note cites a node: `[^1]: [Title](node://id), captured 27 August
+2026 — [example.com](https://…).` Every word of that is vocabulary the dialect already
+had (Pandoc's footnote, a mention, prose, an external link), which buys the whole
+feature its properties for free: the note round-trips because footnotes round-trip, the
+mention backlinks because `RefreshLinksAsync` reads links wherever they sit — Markdig
+parses the definition line as a paragraph and finds the link without a footnotes
+extension, pinned by test — and a citation into a private bookmark padlocks because
+`NodeLinks` walks every block and a note is blocks. `Citation` (Client) is the one
+place the sentence is spelled.
+
+Judgment calls in the spelling. The mention is labeled with the bare title, not the
+`@Title` a mention dialog inserts: a reference list names its source rather than
+addressing it, and the label was never what made a mention a mention. The external
+link is labeled with the source's host — a reference names its publisher — and kept
+last, the way "archived from the original" trails a reference that expects the
+original to rot. The date is the capture's UTC day, spelled out invariantly: it is
+prose both readers must agree about, whatever locale either browser is in. And the
+citation deliberately does *not* pin a capture version. The note's link is the plain
+`node://id` every other mention is; the date names the capture that backed the claim,
+and the bookmark bar's capture picker can page back to it. A version-pinned URL shape
+would have rippled through `NodeUrl`, `MarkdownContent`, `LinkRouter` and the node
+page for a distinction the date already records — revisit if captures ever diverge
+faster than a dated note can disambiguate.
+
+The editor's *Insert… → Cite…* is the node picker again, with one addition: a query
+that parses as an absolute http(s) URL is offered as *Capture and cite* — the URL is
+bookmarked first (inside the dialog, with the same waiting-and-refusal manners as the
+Bookmark dialog, since it is somebody else's server) and the fresh capture cited like
+any picked node. The captured bookmark files under the page doing the citing, so a
+reference lives with the article that leans on it. Insertion rides the model's own
+`InsertFootnote()` — the model owns key and numbering — and then dresses the fresh
+note's runs directly, the run-rewriting `WikiLinks` and `NodeLinks` already practice;
+the write-out-and-reread the fence constructs pay (and the undo stack it costs) is
+not needed, because a footnote is not read out of source. Document mode only, like
+Footnote, and for the same reason. A node with no source URL cites as the mention
+alone: only a capture has a date worth quoting, and citing pages and PDFs was too
+useful to refuse for want of one.

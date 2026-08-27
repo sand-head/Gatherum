@@ -34,6 +34,10 @@ The caption
 
 > [!NOTE] Optional title              note, tip, important, warning, caution
 > The body of the callout.
+
+Prose.[^1]                            a footnote marker
+[^1]: [Title](node://<node-id>), captured 27 August 2026 — [host](https://…).
+                                      …whose note is a citation of a kept capture
 ```
 
 The traps, all of which are quiet rather than loud:
@@ -61,6 +65,10 @@ The traps, all of which are quiet rather than loud:
    subject are two subjects. Match the existing capitalization.
 5. **Link outward.** Mention or wiki-link the pages this one talks about. Backlinks are
    recorded on save and are most of what makes the wiki navigable.
+   To cite the web, don't paste a bare URL: `bookmark_page` first, then write a
+   [citation](/docs/markdown#citations) footnote mentioning the node that came back —
+   the claim then points at a capture that cannot rot, and the bookmark's backlinks
+   answer "what cites this?".
 6. **Lead with the answer.** An infobox for the facts, a first paragraph that says what
    the thing is, then the detail.
 

@@ -172,6 +172,14 @@
     padding: 6px 10px;
 }
 
+/* The server's own sentence when a capture-and-cite is refused. */
+.cite-error {
+    margin: 4px 10px;
+    color: var(--danger);
+    font-size: 13px;
+    overflow-wrap: anywhere;
+}
+
 .dead-link {
     & p { margin: 4px 6px 12px; }
 }

@@ -41,6 +41,7 @@ can, including inside an aside or a callout.
 | Emphasis | `**bold**`, `*italic*`, `~~strikethrough~~`, `` `code` `` |
 | Scripts | `x^2^` superscript, `H~2~O` subscript — Pandoc's spelling, no unescaped spaces inside; one tilde, two are strikethrough |
 | Footnote | `[^key]` in prose, `[^key]: The note` on a line of its own — see [Footnotes](#footnotes) |
+| Citation | A footnote whose note cites a bookmark's capture — see [Citations](#citations) |
 | Links | `[label](https://example.org)` |
 | Images | `![alt text](url)` on a line of its own |
 | Bulleted list | `- item`, nested by indentation |
@@ -247,10 +248,40 @@ The NAS reboots nightly.[^why]
 - **Insert… → Footnote** drops a marker at the caret and lands the caret in a fresh
   note at the end of the page, as one undoable edit.
 
+## Citations
+
+A citation is not new syntax. It is a footnote whose note cites a node — written
+entirely in the vocabulary above, so it is one plain Markdown line in the file:
+
+```markdown
+The closet runs hot in summer.[^1]
+
+[^1]: [Server closet thermals](node://8f6b1f5e-9a5a-4a2e-9d16-6b8a1c2d3e4f), captured 27 August 2026 — [example.com](https://example.com/thermals).
+```
+
+What makes it *archive-backed* is what the note points at. When the cited node is a
+[bookmark](/docs/pages-and-files#bookmarks), the mention opens the capture Gatherum
+keeps — the page as it stood, not the URL as it now answers — the date names the
+capture that backed the claim (the saved copy's capture history can page back to it),
+and the source's own address trails the note the way "archived from the original"
+trails a reference that expects the original to rot. Because the mention is an
+ordinary node link, the bookmark's **backlinks** answer "what cites this?", and a
+citation into a node the reader may not open draws padlocked like any other mention.
+
+A node that is no bookmark — a page, an uploaded PDF — cites as the mention alone:
+nothing about it needs a date to stay true.
+
+**Insert… → Cite…** writes all of this for you: pick any node to cite it, or paste a
+URL and Gatherum captures the page as a bookmark first — filed under the page doing
+the citing — and cites the fresh capture. Agents write the same line over
+[MCP](/docs/mcp) with `bookmark_page` and `update_page`: capture first, then cite the
+node that came back.
+
 ## Writing all this by hand
 
 You do not have to. In the editor, **Insert…** writes the fences for you — an infobox
-skeleton, a figure around a file you pick, a footnote, a callout of each kind, and a
+skeleton, a figure around a file you pick, a footnote, a citation of a node or of a
+URL captured on the spot, a callout of each kind, and a
 wiki link with a search box behind it. **Link node…** inserts a mention. `Ctrl+.` and
 `Ctrl+,` toggle superscript and subscript at the caret, beside the usual `Ctrl+B`/`I`/
 `E` for bold, italic and code. The **Source** toggle swaps the
@@ -325,4 +356,6 @@ The caption
 x^2^  H~2~O                           superscript, subscript
 Prose.[^key]                          a footnote marker — readers see a derived number
 [^key]: The note                      its note, on a line of its own
+[^key]: [Title](node://<node-id>), captured 27 August 2026 — [host](https://…).
+                                      a citation: the mention opens the kept capture
 ```
