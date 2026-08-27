@@ -78,12 +78,19 @@ public sealed class EpubReaderBrowserTests
             // A finger's drag leftward settles onto the next page.
             await page.EvaluateAsync("""
                 () => {
-                  const fire = (type, x, y) => window.dispatchEvent(new PointerEvent(type,
-                    { pointerType: 'touch', isPrimary: true, clientX: x, clientY: y, bubbles: true }));
-                  fire('pointerdown', 320, 300);
-                  fire('pointermove', 250, 302);
-                  fire('pointermove', 120, 305);
-                  fire('pointerup', 100, 306);
+                  const fire = (type, x, y) => {
+                    const touch = new Touch({ identifier: 1, target: document.body,
+                      clientX: x, clientY: y });
+                    window.dispatchEvent(new TouchEvent(type, {
+                      bubbles: true, cancelable: true,
+                      touches: type === 'touchend' ? [] : [touch],
+                      changedTouches: [touch],
+                    }));
+                  };
+                  fire('touchstart', 320, 300);
+                  fire('touchmove', 280, 301);
+                  fire('touchmove', 150, 304);
+                  fire('touchend', 120, 306);
                 }
                 """);
             await page.WaitForFunctionAsync(
