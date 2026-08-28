@@ -55,7 +55,11 @@
   /* Type */
   --font-ui: "Google Sans Text", Roboto, "Segoe UI", system-ui, -apple-system,
              "Helvetica Neue", Arial, sans-serif;
-  --font-serif: "Linux Libertine", Georgia, "Iowan Old Style", "Times New Roman", serif;
+  /* Liberation Serif ships with the app (see the @font-face block below), so the
+     serif is the same face on every machine — and the same file slopedit's canvas
+     registers, which is what keeps the two article renderers wrapping alike. */
+  --font-serif: "Liberation Serif", "Linux Libertine", Georgia, "Iowan Old Style",
+                "Times New Roman", serif;
   --font-mono: "Roboto Mono", ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
 
   /* Shape */
@@ -82,6 +86,39 @@
 
 :root[data-theme="light"] { color-scheme: light; }
 :root[data-theme="dark"] { color-scheme: dark; }
+
+/* The shipped serif: the same four Liberation Serif files DocumentFonts registers
+   for the canvas, served from the client's static assets (OFL-licensed; the license
+   sits beside them). font-display: block, because a heading that swaps faces after
+   paint would wrap differently than the canvas measured. */
+@font-face {
+  font-family: "Liberation Serif";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("_content/Gatherum.Client/fonts/LiberationSerif-Regular.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Liberation Serif";
+  font-style: normal;
+  font-weight: 700;
+  font-display: block;
+  src: url("_content/Gatherum.Client/fonts/LiberationSerif-Bold.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Liberation Serif";
+  font-style: italic;
+  font-weight: 400;
+  font-display: block;
+  src: url("_content/Gatherum.Client/fonts/LiberationSerif-Italic.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Liberation Serif";
+  font-style: italic;
+  font-weight: 700;
+  font-display: block;
+  src: url("_content/Gatherum.Client/fonts/LiberationSerif-BoldItalic.ttf") format("truetype");
+}
 
 /* Base */
 

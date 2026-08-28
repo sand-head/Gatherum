@@ -269,8 +269,9 @@
 
     private void OnChanged(string changedText)
     {
-        // Decorations and floats are pinned to block indices, and typing moves them:
-        // the chrome is re-derived from the blocks' own tags after every edit.
+        // slopedit anchors decorations and floats through every splice now, but the
+        // tags stay the truth about what a construct is: re-deriving after every edit
+        // keeps membership, small print and callout ink honest — see DocumentChrome.
         if (richDoc is not null && !sourceMode)
             DocumentChrome.Apply(richDoc, AppTheme.IsDark);
         PublishOutline();
@@ -517,6 +518,9 @@
     {
         if (richDoc is null || docView is null)
             return;
+        // A Contents jump must not land inside a folded section: unfold whatever
+        // hides the target first, the way ScrollToBlock does for its own jumps.
+        richDoc.RevealBlock(block);
         for (var row = 0; row < richDoc.LineCount; row++)
         {
             var info = richDoc.RowInfoAt(row);
@@ -580,10 +584,16 @@
                 await InsertWikiLinkAsync(hit.Title);
                 break;
             case Picker.Figure:
-                await InsertConstructAsync($"""
+                // The caption is the image's own: the trailing {…} is what makes the
+                // bracket text a caption rather than alt text (slopedit 2.5.11), so
+                // picture and caption are one block — selected, deleted and dragged
+                // together, the caption wrapped to the picture's width. The centering
+                // is spelled out because it is the file's word now that the dialect
+                // has a spelling for it; the older paragraph-under-the-picture form
+                // still reads fine.
+                await InsertConstructAsync($$"""
                     :::figure right 320
-                    ![{hit.Title}](/api/files/{hit.Id}/content)
-                    {hit.Title}
+                    ![{{hit.Title}}](/api/files/{{hit.Id}}/content){align=center}
                     :::
                     """);
                 break;
@@ -777,13 +787,14 @@
     }
 
     /// <summary>Where the caret goes after a construct is inserted: its first block that
-    /// holds text, so a figure lands on its caption rather than inside its picture —
-    /// an image block has nothing to type into.</summary>
+    /// holds text, so a figure lands on its caption rather than inside its picture. A
+    /// captioned image counts — the caption is the image block's own text — while a
+    /// bare picture still has nothing to type into.</summary>
     private int FirstWritableBlock(int from)
     {
         for (var i = from; richDoc is not null && i < richDoc.Blocks.Count; i++)
         {
-            if (richDoc.Blocks[i].Kind != BlockKind.Image)
+            if (richDoc.Blocks[i].Kind != BlockKind.Image || richDoc.Blocks[i].Length > 0)
                 return i;
         }
         return from;

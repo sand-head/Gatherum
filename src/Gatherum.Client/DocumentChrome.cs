@@ -8,11 +8,14 @@ namespace Gatherum.Client;
 /// sharing a <see cref="BlockTags">tag</see> becomes a float (an aside leaves the
 /// vertical flow and the prose wraps past it) and a decoration (the card behind it).
 ///
-/// Derived, never pinned. slopedit declares both against block indices, and block
-/// indices move the moment anyone types a paragraph above them — so the answer is
-/// recomputed from the tags after every change and every theme switch, rather than
-/// installed once at parse. That also makes the extensions colorblind: they say what a
-/// construct is, this says what it currently looks like.
+/// Derived, never pinned. slopedit anchors declared ranges through every splice now
+/// (2.5.11) — an edit above an infobox no longer slides its card — but the tags stay
+/// the one source of truth for what a construct <em>is</em>: recomputing from them
+/// after every change and every theme switch keeps membership honest at the seams a
+/// splice cannot speak to (a paste that brings tagged blocks with it, a construct
+/// deleted whole), restamps the small print on blocks typed into a card, and re-inks
+/// a callout title whose runs an edit replaced. The extensions stay colorblind: they
+/// say what a construct is, this says what it currently looks like.
 /// </summary>
 public static class DocumentChrome
 {
@@ -78,11 +81,14 @@ public static class DocumentChrome
             TopMarginPx: 8f, BottomMarginPx: 8f));
         boxes.Add(new BlockDecoration(first, count, Background: ink.CardFill,
             Border: ink.CardBorder, BorderWidth: 1f, PadPx: 8f));
-        if (kind != BlockTags.Infobox)
-            return;
         for (var b = first; b < first + count; b++)
         {
-            if (blocks[b].Kind == BlockKind.Heading)
+            // The card is small print wherever its blocks came from: parse stamps the
+            // scale, this keeps it on blocks an edit added — Enter splitting a row,
+            // a paragraph typed under the picture. (An edit invalidates layout
+            // anyway, so restating the same value costs nothing.)
+            blocks[b].FontScale = AsideExtension.SmallPrint;
+            if (kind == BlockTags.Infobox && blocks[b].Kind == BlockKind.Heading)
                 boxes.Add(new BlockDecoration(b, 1, Background: ink.Band, PadPx: 3f));
         }
     }

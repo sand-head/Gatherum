@@ -122,6 +122,22 @@ public class ReadOnlyHtmlTests
     }
 
     [Fact]
+    public void A_captioned_picture_reads_as_the_figure_it_is()
+    {
+        var html = Html("""
+            :::figure right 320
+            ![Before the rewire](/api/files/8f6b1f5e-9a5a-4a2e-9d16-6b8a1c2d3e4f/content){align=center}
+            :::
+            """);
+
+        // The caption form arrives as a real <figure> with a <figcaption> — the
+        // caption can never drift from its picture, in either renderer.
+        Assert.Contains("<figure class=\"se-figure\"", html);
+        Assert.Contains("<figcaption class=\"se-caption\"", html);
+        Assert.Contains("Before the rewire", html);
+    }
+
+    [Fact]
     public void A_footnote_reads_as_a_superscript_link_and_its_note_links_back()
     {
         var html = Html("""

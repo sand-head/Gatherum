@@ -41,8 +41,17 @@ browser sessions — including against the built container).
   see — they make link rows, so they backlink exactly like `node://` mentions, and a
   title nothing answers to inks red and offers to write the page on click; `:::infobox`
   and `:::figure` fences, floated at a margin with the prose wrapping past them, dressed
-  with a card, a header band and (for a figure) a centered picture and caption;
-  `> [!NOTE]`-style callouts in GitHub's five kinds, tinted in each kind's accent. An
+  with a card, a header band and Wikipedia's 0.88 em small print (a figure's picture
+  carries its caption as the image block's own text — `![caption](url){width=300
+  align=center}`, pandoc's attribute form, with the paragraph-under-the-picture spelling
+  still read — so picture and caption select, delete and render as one unit, a real
+  `<figure>` in HTML); `> [!NOTE]`-style callouts in GitHub's five kinds, tinted in each
+  kind's accent; and tables that keep their delimiter row's `:---:`/`---:` column
+  alignments, every row at once. Article section titles wear the app's serif in both
+  renderers — Liberation Serif ships with the app, registered for the canvas and
+  `@font-face`d for the browser from the same files — and every heading folds its
+  section behind a chevron in the editor (view state only; the caret entering a hidden
+  region unfolds it, and a Contents jump reveals its target first). An
   Insert menu writes the fences (the document editor can't type one into being), the
   node picker doubles as a wiki-link and figure chooser, and links now go somewhere at
   all: a mention or an embedded file opens its node, a wiki link resolves by title, an

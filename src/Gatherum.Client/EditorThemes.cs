@@ -21,6 +21,11 @@ public static class EditorThemes
         GutterForeground = new SKColor(0x5f, 0x63, 0x68),  // --on-surface-dim
         ScrollbarTrack = SKColors.Transparent,
         ScrollbarThumb = new SKColor(0x5f, 0x63, 0x68, 0x80),
+        // The app's serif on the article's own section titles — the same family
+        // list app.css calls --font-serif, led by the face DocumentFonts ships so
+        // canvas and browser resolve the same file. Body and code keep slopedit's
+        // embedded defaults, which are already guaranteed on both renderers.
+        HeadingFontFamily = DocumentFonts.HeadingFamilies,
     };
 
     public static readonly EditorTheme Dark = new()
@@ -33,6 +38,7 @@ public static class EditorThemes
         GutterForeground = new SKColor(0x9a, 0xa0, 0xa6),
         ScrollbarTrack = SKColors.Transparent,
         ScrollbarThumb = new SKColor(0x9a, 0xa0, 0xa6, 0x80),
+        HeadingFontFamily = DocumentFonts.HeadingFamilies,
     };
 
     public static EditorTheme For(bool isDark) => isDark ? Dark : Light;

@@ -1392,3 +1392,67 @@ the srcdoc copy, which no header can accompany, carries the pinning half as a me
 policy (meta may not carry `sandbox` — the frame's sandbox attribute supplies that)
 and the saved fraction and debug flag follow as postMessages, since a srcdoc
 document has no URL to put them on.
+
+## slopedit 2.5.11: the serif lands, captions stop pretending, sections fold under the caret
+The five features between 2.5.0 and 2.5.11 were, again, mostly built for this wiki, and
+the adoption is one bump plus the wiki's half of each.
+
+**Typefaces.** `EditorTheme` speaks font families now, resolved through a process-wide
+`FontRegistry` (fonts a host ships as bytes) before installed fonts — the only channel
+that reaches Skia in WASM, where no fonts are installed at all. Gatherum ships the four
+Liberation Serif faces (OFL, license beside them) once, in `Gatherum.Client/wwwroot/fonts`:
+embedded in the assembly for `DocumentFonts.EnsureRegistered()` — called from `Dress`, so
+no document lays out before its faces exist, on the server circuit, in WASM, and in the
+read view's static pass alike — and served as static web assets for app.css's
+`@font-face`, the same files both ways, which is upstream's parity rule for fonts. Both
+themes set `HeadingFontFamily` to that family list, and `--font-serif` now leads with the
+shipped face: the article's own section titles finally wear the serif the design
+("what if Google made Wikipedia") had so far only put on the page title, in the canvas
+and the browser from the same file. Body and code stay slopedit's embedded defaults —
+already guaranteed everywhere, so shipping replacements would buy nothing.
+
+**Small print.** `Block.FontScale` reaches layout as well as paint, so
+`AsideExtension.Style` sets every aside block at Wikipedia's 0.88 em — infobox rows,
+figure captions, the heading's own multiplier riding on top — and `DocumentChrome`
+restamps it each edit so a row typed into a card wears it too. Presentation only: no
+serializer stores a scale.
+
+**Captions are the image's own.** The serializer's dialect grew pandoc's attribute form,
+`![caption](url){width=300 align=center}` — a trailing `{…}`, even empty, makes the
+bracket text a caption: the image block's own styled runs, wrapped to the picture's
+width, one unit with it for selection and deletion, a real `<figure>`/`<figcaption>` in
+the HTML view. *Insert… → Figure* writes that form now (with `align=center` spelled out,
+because it is the file's word once the dialect has a spelling for it); the older
+paragraph-under-the-picture figure still reads as it always did, and merging it into the
+image on parse was considered and declined — the un-merge is not byte-faithful in every
+case, and the round trip outranks the upgrade. One defensive move came with this:
+`WriteImage` serializes alignment, so the centering `Style` stamps on a *bare* picture in
+an aside would have written `{align=center}` into files that never said it — caught by
+the round-trip tests on the day of the bump — and `AsideExtension.Untagged` now sheds
+exactly that stamp (bare spelling, centered) while leaving any alignment the file did
+say alone.
+
+**Tables keep their delimiter row's word.** `|:---:|` and `|---:|` parse onto every row
+(`Block.ColumnAlignments`), lay out, and write back; the context menu grew the *Align
+column* verbs on its own. Nothing was Gatherum's to build — the tests pin that an
+aligned table round-trips (explicit left normalizes to the plain dash, the delimiter
+row's one liberty) — and per-cell docx shading now survives the rich door in both
+directions for the same price. colspan upstream declined on purpose; nothing here
+mourns it.
+
+**Sections fold in the editor.** `Dress` sets `FoldableHeadings`: every heading wears a
+drawn chevron and folds its section to the next equal-or-shallower heading — the
+editor-side answer to the read view's `CollapseSectionsBelow`, and the reversal of "the
+editor never hides the text the caret lives in" *because upstream answered the
+objection*: fold state is view state (no Version, no serialization, no collab op), fold
+indices ride splices like the caret, and the caret entering a hidden region unfolds it,
+so content is never unreachable. A Contents jump calls `RevealBlock` first, the way
+upstream's own `ScrollToBlock` does. The HTML renderers ignore the flag, so read-only
+documents dress identically for free.
+
+And the fix that cost nothing to adopt: declared decorations and floats now ride every
+splice the way the caret does, so an edit above an infobox no longer slides its card
+between derivations. `DocumentChrome`'s per-keystroke pass stays — the tags are still
+the truth about what a construct *is* (membership at the seams, small print on new
+blocks, callout title ink) — but its comment now says what it is for, not what upstream
+could not do.

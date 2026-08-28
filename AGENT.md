@@ -70,7 +70,8 @@ auto-login. Migrations: `dotnet ef migrations add <Name> -p src/Gatherum.Infrast
   the foot of a page (`NodeCategories`), version panel, file view, and settings keys — plus Gatherum's Markdown dialect, which lives
   here because it is the editor's word: `GatherumMarkdown` (the extension set and the
   only read/write door), `AsideExtension`/`CalloutExtension`/`BlockTags`,
-  `DocumentChrome` (floats and decorations derived from tags), `ChromeInk`, `WikiLinks`,
+  `DocumentChrome` (floats and decorations derived from tags), `ChromeInk`,
+  `DocumentFonts` (the shipped serif, embedded for Skia and served for `@font-face`), `WikiLinks`,
   `NodeLinks` (the padlock a link the reader may not follow wears) and `NodeUrl`. `IAppData` (`AppData.cs`) is their only view of the world —
   implemented by `ServerAppData` over the services on the server circuit and by
   `HttpAppData` over `/api` in WebAssembly.

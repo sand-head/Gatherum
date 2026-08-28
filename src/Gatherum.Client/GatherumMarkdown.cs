@@ -58,12 +58,21 @@ public static class GatherumMarkdown
     /// changes or the blocks move.</summary>
     public static void Dress(RichDocument document, bool isDark)
     {
+        // The faces the themes name have to exist before the first measure.
+        DocumentFonts.EnsureRegistered();
         // The encyclopedia's dress: the hairline under h1 and h2 and the breath
         // around every section title. Presentation, so it is said here rather than
         // stored in the file — and worn by both renderers, canvas and HTML alike,
         // because the layout is what spends it.
         document.HeadingRuleLevels = 2;
         document.HeadingSpacing = 1.5f;
+        // Every heading wears a disclosure chevron in the canvas and folds its
+        // section away — the editor-side answer to the read view's
+        // CollapseSectionsBelow. View state only: no Version, no serialization, no
+        // collab op, and the caret entering a hidden region unfolds it, so content
+        // is never unreachable. The HTML renderers ignore it, so dressing a
+        // read-only document with it costs nothing.
+        document.FoldableHeadings = true;
         EditorThemes.ApplyInk(document, isDark);
         DocumentChrome.Apply(document, isDark);
     }

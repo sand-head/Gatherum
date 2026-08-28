@@ -98,6 +98,93 @@ public class GatherumMarkdownTests
     }
 
     [Fact]
+    public void A_figures_caption_is_the_images_own_block_and_round_trips()
+    {
+        // The pandoc attribute form (slopedit 2.5.11): the trailing {…} makes the
+        // bracket text a caption — one block with its picture — and the alignment is
+        // the file's word, so it comes back exactly as written.
+        var source = """
+            :::figure right 320
+            ![The homelab, before the rewire](/api/files/0f8f6e1a-0000-0000-0000-000000000001/content){align=center}
+            :::
+            """;
+
+        var doc = Parse(source);
+
+        var image = Assert.Single(doc.Blocks, b => b.Kind == BlockKind.Image);
+        Assert.Equal("The homelab, before the rewire", image.Text);
+        Assert.Equal(BlockAlignment.Center, image.Alignment);
+        Assert.Equal(source, GatherumMarkdown.ToMarkdown(doc));
+    }
+
+    [Fact]
+    public void An_images_width_hint_survives_the_trip()
+    {
+        var source = """
+            :::figure left 360
+            ![The rack](/api/files/0f8f6e1a-0000-0000-0000-000000000001/content){width=200}
+            :::
+            """;
+
+        var doc = Parse(source);
+
+        var image = Assert.Single(doc.Blocks, b => b.Kind == BlockKind.Image);
+        Assert.Equal(200f, image.ImageWidthPx);
+        Assert.Equal(source, GatherumMarkdown.ToMarkdown(doc));
+    }
+
+    [Fact]
+    public void A_tables_column_alignments_are_finally_kept()
+    {
+        // Markdown's own delimiter row, in the writer's spelling (explicit left
+        // normalizes to the plain dash): parsed onto every row, written back out.
+        var source = """
+            | Service | Port |
+            | --- | ---: |
+            | Gatherum | 8080 |
+            """;
+
+        var doc = Parse(source);
+
+        var rows = doc.Blocks.Where(b => b.Kind == BlockKind.TableRow).ToList();
+        Assert.Equal(2, rows.Count);
+        Assert.All(rows, r => Assert.Equal(
+            new[] { BlockAlignment.Left, BlockAlignment.Right }, r.ColumnAlignments));
+        Assert.Equal(source, GatherumMarkdown.ToMarkdown(doc));
+    }
+
+    [Fact]
+    public void An_aside_is_small_print_and_stays_small_print_as_it_is_edited()
+    {
+        var doc = Parse("""
+            :::infobox
+            # Chapter 12
+            | Words | 4,210 |
+            :::
+            """);
+
+        Assert.All(doc.Blocks.Where(b => b.Tag is not null),
+            b => Assert.Equal(AsideExtension.SmallPrint, b.FontScale));
+
+        // A block typed into the card inherits the run's tag; the chrome pass is
+        // what dresses it in the card's scale.
+        var fresh = new Block { Kind = BlockKind.Paragraph, Tag = doc.Blocks[^1].Tag };
+        doc.Load([.. doc.Blocks, fresh]);
+        DocumentChrome.Apply(doc, isDark: false);
+        Assert.Equal(AsideExtension.SmallPrint, fresh.FontScale);
+    }
+
+    [Fact]
+    public void Dress_makes_headings_foldable_without_touching_the_file()
+    {
+        var source = "# Top\n\nProse.";
+        var doc = Parse(source);
+
+        Assert.True(doc.FoldableHeadings);
+        Assert.Equal(source, GatherumMarkdown.ToMarkdown(doc));
+    }
+
+    [Fact]
     public void An_unterminated_fence_is_just_text()
     {
         var doc = Parse("""
