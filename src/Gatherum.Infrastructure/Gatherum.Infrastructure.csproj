@@ -23,7 +23,7 @@
     <PackageReference Include="Microsoft.ML.Tokenizers" Version="2.0.0" />
     <PackageReference Include="Microsoft.Playwright" Version="1.62.0" />
     <PackageReference Include="PdfPig" Version="0.1.15" />
-    <PackageReference Include="SlopEdit.Docx" Version="2.6.0" />
+    <PackageReference Include="SlopEdit.Docx" Version="2.6.2" />
   </ItemGroup>
 
   <!-- The packaged embedding model. Twenty-three megabytes of weights don't belong in

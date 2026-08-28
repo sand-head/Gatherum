@@ -54,7 +54,8 @@ browser sessions — including against the built container).
   made the canvas disclosure the read view's own (down says "expand", the hairline
   runs under it). Folding is view state: no version, no serialization, no collab op;
   the caret entering a hidden region unfolds it, and a Contents jump reveals its
-  target first. An
+  target first. An aside's own heading is not a section — no chevron on an infobox,
+  and a card no longer ends the article section it sits in (slopedit 2.6.2). An
   Insert menu writes the fences (the document editor can't type one into being), the
   node picker doubles as a wiki-link and figure chooser, and links now go somewhere at
   all: a mention or an embedded file opens its node, a wiki link resolves by title, an

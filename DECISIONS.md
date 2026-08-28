@@ -1512,3 +1512,29 @@ the bug; the canvas agrees with it now. And `BlockDecoration` grew a real box mo
 a half-a-border-width shift for cards positioned against the old behaviour —
 `DocumentChrome` draws at `BorderWidth: 1f`, so the shift is half a pixel and nothing
 here moved. The room is there if an aside ever wants a leading rule down one edge.
+
+## slopedit 2.6.2: an aside's heading is not a section
+The infobox wore a fold chevron, which it should not: a declared float is its own flow
+and its heading names the card — Gatherum has always said as much on its own side,
+where the outline builder skips a tagged heading because "an aside's own headings title
+the card, not the page." There was no way to say it to slopedit, so it went upstream,
+and 2.6.2 carries both halves.
+
+The second half was a bug found by chasing the first, and worth more than it. A
+heading's section ran to the next heading of equal or shallower level *including one
+inside a float* — and an encyclopedia titles its infobox at h1 inside an h2 article. So
+on a real page here, the page-title's section ended at the infobox two blocks in, and
+its chevron folded one empty paragraph. Now the scan walks past an aside's headings and
+a section closes only at a heading of the flow: folding the title folds the article.
+
+Upstream declined the `FoldFloatedHeadings` knob offered with the patch, and the reason
+is the better one: `RichHtmlWriter` never emitted a `<details>` for a section a float
+touches, so the HTML view has never folded an aside's heading, and a knob would have had
+no setting the read view could honour — the same canvas-vs-HTML disagreement the
+previous release closed. They also kept the float clamp this end had called
+belt-and-braces, having found the ordering that reaches it (`RevealBlock` walks the
+folded set without forcing a layout first), and added the worse case of the same
+ordering: a float declared over a section that was *already folded* now drops the fold
+as stale rather than leaving content hidden behind a chevron that no longer exists.
+`DocumentChrome` re-declares floats on every edit, so that ordering is reachable here;
+the direction it now fails in is the safe one.
