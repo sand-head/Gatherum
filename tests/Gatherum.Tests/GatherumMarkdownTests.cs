@@ -175,14 +175,16 @@ public class GatherumMarkdownTests
     }
 
     [Fact]
-    public void Folding_belongs_to_the_read_view_alone()
+    public void Dress_makes_headings_foldable_without_touching_the_file()
     {
-        // Deliberate: the app's one folding affordance is the mobile read view's
-        // Minerva-style fold. The canvas draws its own chevron — different glyph,
-        // different direction, not host-stylable — so FoldableHeadings stays off
-        // until upstream's disclosure matches. Pinned so a future bump doesn't
-        // quietly reintroduce the second style.
-        Assert.False(Parse("# Top\n\nProse.").FoldableHeadings);
+        // On since 2.6.0 made the canvas chevron the read view's own: one folding
+        // style, both surfaces. Fold state is never the file's — no serializer
+        // stores it — so dressing a document with it changes nothing on disk.
+        var source = "# Top\n\nProse.";
+        var doc = Parse(source);
+
+        Assert.True(doc.FoldableHeadings);
+        Assert.Equal(source, GatherumMarkdown.ToMarkdown(doc));
     }
 
     [Fact]

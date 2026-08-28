@@ -1476,3 +1476,39 @@ into the pane on a −24px margin) went with it. Everything else from 2.5.11 sta
 way back is upstream: a canvas disclosure drawn to Minerva's glyph and direction (or a
 host-stylable one), at which point the flag is one line and the gutter is the comment
 already sitting next to it.
+
+## slopedit 2.6.0: the chevron comes back, in the read view's own hand
+Upstream took the fold affordance the reversal above asked for, and the editor's
+folding is on again. `DrawDisclosure` now draws Minerva's chevron — the same
+`M5 9l7 7 7-7` glyph in the same 14px box the HTML fold's `ChevronSvg` uses, with the
+same direction convention (down says "expand", up says "open") — and the ruled
+heading's hairline runs underneath it, spanning the fold gutter the way the mobile
+summary's `border-bottom` does. One affordance, two renderers, so `Dress` sets
+`FoldableHeadings` again and a Contents jump calls `RevealBlock` before it lands.
+
+The gutter is the host's to provide, and it is the thing that will look broken if it
+is missing: the chevron hangs `MarkerGap + DisclosureSizePx` — 23px — left of a
+heading's text origin, so a canvas at `ContentPadding=0` clips the affordance away
+entirely and the fold silently has no handle. The editor passes 24 and the surface
+leans 24px back into the pane's padding (`margin-inline`, `--fold-lean`), which buys
+the gutter without moving the text column: the canvas grows by 48, the padding gives
+48 back, and the two surfaces still wrap at identical points — measured in the
+running app at 888px canvas against the reader's 840px column.
+
+Below the shell breakpoint the lean is the pane's own 16px instead, because a phone
+cannot spare eight more pixels of column and the read view's margin is not the
+editor's to widen. The cost is that the editor's column on a phone is 16px narrower
+than the reader's, so a page wraps slightly differently between the two there. That is
+the affordable half of the trade; a clipped chevron, or a canvas painted out over the
+sheet's rounded edge, is not.
+
+Two upstream changes rode along that nobody here asked for. The canvas **paints in
+CSS's order** now — in-flow chrome, then each float entire, then the flow's content
+over the top (CSS 2.1 §E.2) — which fixes a thing this app had been looking at
+without naming: a ruled heading's hairline drew straight across a floated infobox,
+because the float's card went down before the body's chrome. The read view never had
+the bug; the canvas agrees with it now. And `BlockDecoration` grew a real box model
+(per-side padding and borders via `BoxEdges`, plus `CornerRadiusPx`), which comes with
+a half-a-border-width shift for cards positioned against the old behaviour —
+`DocumentChrome` draws at `BorderWidth: 1f`, so the shift is half a pixel and nothing
+here moved. The room is there if an aside ever wants a leading rule down one edge.

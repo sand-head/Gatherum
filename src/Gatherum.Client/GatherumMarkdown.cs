@@ -66,12 +66,15 @@ public static class GatherumMarkdown
         // because the layout is what spends it.
         document.HeadingRuleLevels = 2;
         document.HeadingSpacing = 1.5f;
-        // FoldableHeadings stays off on purpose: the app's one folding affordance
-        // is the read view's Minerva-style fold (CollapseSectionsBelow), and the
-        // canvas draws its own chevron — different glyph, different direction
-        // convention, not stylable by a host — so turning it on put two disagreeing
-        // affordances on the same feature. It comes back the day slopedit's drawn
-        // disclosure matches the Minerva one (or lets the host restyle it).
+        // Every heading folds its section away, in the same chevron the read view's
+        // mobile fold wears: slopedit 2.6.0 made the canvas disclosure Minerva's —
+        // one glyph, one size, one direction convention (down says "expand"), and
+        // the heading's hairline running under it — so the editor and the article
+        // now fold alike rather than in two styles. View state only: no Version, no
+        // serialization, no collab op, and the caret entering a hidden region
+        // unfolds it, so content is never unreachable. The HTML renderers ignore
+        // the flag, so dressing a read-only document with it costs nothing.
+        document.FoldableHeadings = true;
         EditorThemes.ApplyInk(document, isDark);
         DocumentChrome.Apply(document, isDark);
     }
