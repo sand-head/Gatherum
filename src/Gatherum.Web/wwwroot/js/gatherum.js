@@ -26,9 +26,14 @@ export function registerSearchShortcut(input) {
 // believed.
 let epubListener;
 
+let epubRelay = [];
+
 export function registerEpubReader(frame, dotnet) {
   if (epubListener) removeEventListener('message', epubListener);
   epubListener = null;
+  for (const [type, handler, options] of epubRelay)
+    document.removeEventListener(type, handler, options);
+  epubRelay = [];
   if (!frame) return;
 
   epubListener = (e) => {
@@ -42,6 +47,70 @@ export function registerEpubReader(frame, dotnet) {
       dotnet.invokeMethodAsync('OnProgress', progress);
   };
   addEventListener('message', epubListener);
+
+  // The swipe relay. A touch delivered into the chapter's document is handled
+  // there and never bubbles out, so these listeners cannot fire for it — which
+  // makes them a pure fallback: they only ever see a swipe the browser refused to
+  // route into the frame (iOS has been observed doing exactly that to a sandboxed
+  // frame it happily renders). A horizontal drag that starts over the reader and
+  // lands here instead is claimed the same way the pager claims one — classified
+  // on the first move, held with preventDefault — and streamed to the pager over
+  // postMessage, the one channel the sandbox always leaves open.
+  let touch = null;
+  const post = (data) => frame.contentWindow.postMessage(data, '*');
+  const relay = (type, options, handler) => {
+    document.addEventListener(type, handler, options);
+    epubRelay.push([type, handler, options]);
+  };
+  relay('touchstart', { capture: true, passive: true }, (e) => {
+    touch = null;
+    if (e.touches.length !== 1) return;
+    const at = e.touches[0];
+    const box = frame.getBoundingClientRect();
+    if (at.clientX < box.left || at.clientX > box.right
+      || at.clientY < box.top || at.clientY > box.bottom) return;
+    touch = { x: at.clientX, y: at.clientY, t: Date.now(), on: false };
+  });
+  relay('touchmove', { capture: true, passive: false }, (e) => {
+    if (!touch) return;
+    if (e.touches.length !== 1) { touch = null; return; }
+    const dx = e.touches[0].clientX - touch.x, dy = e.touches[0].clientY - touch.y;
+    if (!touch.on) {
+      if (Math.abs(dx) <= Math.abs(dy)) { touch = null; return; }
+      touch.on = true;
+    }
+    if (e.cancelable) e.preventDefault();
+    post({ gatherumEpubDrag: dx });
+  });
+  relay('touchend', { capture: true, passive: true }, (e) => {
+    if (!touch) return;
+    const { x, t, on } = touch;
+    touch = null;
+    if (!on) return;
+    const dx = e.changedTouches[0].clientX - x;
+    post({ gatherumEpubSettle: { dx, flick: Date.now() - t < 300 && Math.abs(dx) > 32 } });
+  });
+  relay('touchcancel', { capture: true, passive: true }, () => {
+    if (!touch) return;
+    touch = null;
+    post({ gatherumEpubSettle: { cancel: true } });
+  });
+}
+
+// The chapter rides into its frame as srcdoc rather than by navigation. A
+// network-src sandboxed frame is a cross-origin document, and iOS has been seen
+// withholding the raw touch stream from exactly those — taps still arrive, because
+// click synthesis is a separate pipeline — while a srcdoc document stays with its
+// parent and demonstrably receives touches on the affected hardware. The saved
+// fraction and the debug flag ride behind it as messages, since a srcdoc document
+// has no URL to carry them. Written here rather than bound in Blazor: a chapter
+// with its images folded in runs to megabytes, which is no string to diff.
+export function loadEpubChapter(frame, html, restore, debug) {
+  frame.addEventListener('load', () => {
+    if (debug) frame.contentWindow.postMessage({ gatherumEpubDebug: true }, '*');
+    if (restore > 0) frame.contentWindow.postMessage({ gatherumEpubRestore: restore }, '*');
+  }, { once: true });
+  frame.srcdoc = html;
 }
 
 // An anonymous reader's ribbon. A signed-in reader's place lives on the server — any

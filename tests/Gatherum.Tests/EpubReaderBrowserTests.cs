@@ -105,12 +105,40 @@ public sealed class EpubReaderBrowserTests
                 "() => { const t = document.getElementById('epub-page').textContent;" +
                 " const [now, all] = t.split(' / '); return now === all && +all > 1; }");
 
+            // A swipe the browser routed to the hosting page instead arrives over the
+            // relay and turns the page all the same. (Top-level, window.parent is the
+            // window itself, so the pager accepts the test's own messages.) A settle
+            // with no drag before it is noise, not a gesture, and turns nothing.
+            await page.GotoAsync("file://" + path);
+            await page.WaitForFunctionAsync(
+                "() => document.getElementById('epub-page').textContent.startsWith('1 /')");
+            await page.EvaluateAsync(
+                "() => postMessage({ gatherumEpubSettle: { dx: -200, flick: false } }, '*')");
+            await Task.Delay(200);
+            Assert.StartsWith("1 /", await page.TextContentAsync("#epub-page"));
+            await page.EvaluateAsync("() => { postMessage({ gatherumEpubDrag: -400 }, '*');" +
+                " postMessage({ gatherumEpubSettle: { dx: -400, flick: false } }, '*'); }");
+            await page.WaitForFunctionAsync(
+                "() => document.getElementById('epub-page').textContent.startsWith('2 /')");
+
             // The witness stand: absent unless asked for, and reporting the layout
             // numbers when it is.
             Assert.False(await page.IsVisibleAsync("#epub-debug"));
             await page.GotoAsync("file://" + path + "?debug=1");
             await page.WaitForSelectorAsync("#epub-debug");
             Assert.Contains("pages=", await page.TextContentAsync("#epub-debug"));
+
+            // A srcdoc chapter has no URL, so the saved fraction and the debug flag
+            // arrive as messages instead — and land the same.
+            await page.GotoAsync("file://" + path);
+            await page.WaitForFunctionAsync(
+                "() => document.getElementById('epub-page').textContent.startsWith('1 /')");
+            await page.EvaluateAsync("() => postMessage({ gatherumEpubRestore: 1 }, '*')");
+            await page.WaitForFunctionAsync(
+                "() => { const t = document.getElementById('epub-page').textContent;" +
+                " const [now, all] = t.split(' / '); return now === all && +all > 1; }");
+            await page.EvaluateAsync("() => postMessage({ gatherumEpubDebug: true }, '*')");
+            await page.WaitForSelectorAsync("#epub-debug");
         }
         finally
         {

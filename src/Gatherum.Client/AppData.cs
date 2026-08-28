@@ -81,6 +81,12 @@ public interface IAppData
     /// stopped anywhere.</summary>
     Task<EpubInfo> GetEpubAsync(Guid nodeId);
 
+    /// <summary>One chapter as the self-contained page the reader's frame shows —
+    /// fetched by the component and handed to the frame as srcdoc, never navigated to,
+    /// because iOS withholds the touch stream from a network-src sandboxed frame. The
+    /// version and renderer keys make the fetch cache-safe forever.</summary>
+    Task<string> GetEpubChapterAsync(Guid nodeId, int chapter, int version, string renderer);
+
     /// <summary>Remembers where the reader is in a book, so coming back — on any
     /// device — reopens it there.</summary>
     Task SaveEpubPositionAsync(Guid nodeId, int chapter, double progress);
@@ -294,6 +300,11 @@ public sealed class HttpAppData(HttpClient http) : IAppData
 
     public async Task<EpubInfo> GetEpubAsync(Guid nodeId) =>
         (await http.GetFromJsonAsync<EpubInfo>($"/api/files/{nodeId}/epub"))!;
+
+    public async Task<string> GetEpubChapterAsync(Guid nodeId, int chapter, int version,
+        string renderer) =>
+        await http.GetStringAsync(
+            $"/api/files/{nodeId}/epub/{chapter}?version={version}&r={renderer}");
 
     public async Task SaveEpubPositionAsync(Guid nodeId, int chapter, double progress) =>
         (await http.PutAsJsonAsync($"/api/files/{nodeId}/epub/position",

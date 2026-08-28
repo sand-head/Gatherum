@@ -1376,3 +1376,19 @@ not needed, because a footnote is not read out of source. Document mode only, li
 Footnote, and for the same reason. A node with no source URL cites as the mention
 alone: only a capture has a date worth quoting, and citing pages and PDFs was too
 useful to refuse for want of one.
+
+## The chapter rides into its frame as srcdoc
+The reader's frame is never navigated to the chapter URL; the component fetches the
+rendered chapter and hands it over as `srcdoc`. The reason is an iOS behavior no
+emulator shows: a *network-src* sandboxed frame is a cross-origin document, and iOS
+Safari was observed withholding the raw touch stream from exactly that shape — taps
+still arrived (click synthesis is a separate pipeline; the reader's old arrows
+worked), swipes never did, and the identical document received touches when loaded
+top-level. A six-variant embedding matrix run on the affected phone showed every
+srcdoc shape — parser-created, script-inserted, sandboxed, content-swapped —
+receiving touches, so srcdoc is the transport the hardware itself validated. The
+response header keeps `sandbox` plus the hash-pinned `script-src` for direct opens;
+the srcdoc copy, which no header can accompany, carries the pinning half as a meta
+policy (meta may not carry `sandbox` — the frame's sandbox attribute supplies that)
+and the saved fraction and debug flag follow as postMessages, since a srcdoc
+document has no URL to put them on.
