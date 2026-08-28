@@ -344,10 +344,18 @@ public class GatherumMarkdownTests
         Assert.Equal(FloatSide.Right, floated.Side);
         Assert.Equal(2, floated.BlockCount);
         Assert.Equal(doc.Blocks.Count - 2, floated.FirstBlock);
-        // The card, then the band behind the heading.
-        Assert.Equal(2, doc.Decorations.Count);
-        Assert.Equal(ChromeInk.For(false).CardFill, doc.Decorations[0].Background);
-        Assert.Equal(1, doc.Decorations[1].BlockCount);
+
+        // One card over the whole run, in the app's recipe: a tonal fill inside a
+        // rounded hairline. No band behind the title — the heading's own rule is the
+        // divider, and the title takes the accent instead (see DocumentChrome).
+        var card = Assert.Single(doc.Decorations);
+        var ink = ChromeInk.For(false);
+        Assert.Equal(ink.CardFill, card.Background);
+        Assert.Equal(ink.CardBorder, card.Border);
+        Assert.True(card.RadiusPx > 0f);
+        Assert.Equal(2, card.BlockCount);
+        var title = doc.Blocks.First(b => b.Kind == BlockKind.Heading && b.Tag is not null);
+        Assert.All(title.Runs, r => Assert.Equal(ink.OnBand, r.Style.Color));
     }
 
     [Fact]

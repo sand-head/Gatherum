@@ -22,6 +22,15 @@ public static class DocumentChrome
     private const float InfoboxWidthPx = 280f;
     private const float FigureWidthPx = 320f;
 
+    // The app's card, in the vocabulary a decoration speaks since slopedit 2.6.0.
+    // Every inset block in Gatherum is a tonal fill behind a rounded hairline — the
+    // content sheet at --radius-l, a code band at --radius-s — and an aside is one of
+    // those, sized between the two. Roomier flanks than crown, because a 280px column
+    // of small print is read down its middle and the card should not crowd it.
+    private const float CardRadiusPx = 12f;             // --radius
+    private static readonly BoxEdges CardPad = BoxEdges.Symmetric(10f, 12f);
+
+
     public static void Apply(RichDocument document, bool isDark)
     {
         var ink = ChromeInk.For(isDark);
@@ -56,9 +65,10 @@ public static class DocumentChrome
             document.SetDecorations([.. boxes]);
     }
 
-    /// <summary>An infobox or a figure: a column at one margin, a card behind the whole
-    /// run, and — for an infobox — a band behind each heading, which is most of what
-    /// makes one look like one.</summary>
+    /// <summary>An infobox or a figure: a column at one margin and the app's card
+    /// behind the whole run — a tonal fill inside a rounded hairline, the same recipe
+    /// the content sheet and a code band are drawn with, at a radius between theirs.
+    /// An infobox's title takes the accent its rows are filed under.</summary>
     private static void Aside(IReadOnlyList<Block> blocks, int first, int count, string kind,
         string[] arguments, ChromeInk ink, List<FloatedRun> floats, List<BlockDecoration> boxes)
     {
@@ -80,7 +90,8 @@ public static class DocumentChrome
         floats.Add(new FloatedRun(first, count, side, width, GutterPx: 20f,
             TopMarginPx: 8f, BottomMarginPx: 8f));
         boxes.Add(new BlockDecoration(first, count, Background: ink.CardFill,
-            Border: ink.CardBorder, BorderWidth: 1f, PadPx: 8f));
+            Border: ink.CardBorder, BorderWidth: 1f, Padding: CardPad,
+            CornerRadiusPx: CardRadiusPx));
         for (var b = first; b < first + count; b++)
         {
             // The card is small print wherever its blocks came from: parse stamps the
@@ -88,8 +99,16 @@ public static class DocumentChrome
             // a paragraph typed under the picture. (An edit invalidates layout
             // anyway, so restating the same value costs nothing.)
             blocks[b].FontScale = AsideExtension.SmallPrint;
+            // The title is the app's accent over the hairline the heading already
+            // rules, rather than an encyclopedia's tinted band. A band wants to reach
+            // the card's edges, and a card with rounded corners has no edges to reach
+            // — inset it and it reads as a chip that missed, keep the tint and the
+            // rule and you get two dividers doing one job. So: no band, the chip's own
+            // ink on the title, and that rule is the divider. Inked here rather than
+            // at parse for the reason the card is — the mode can change under a
+            // document that is already open.
             if (kind == BlockTags.Infobox && blocks[b].Kind == BlockKind.Heading)
-                boxes.Add(new BlockDecoration(b, 1, Background: ink.Band, PadPx: 3f));
+                Recolor(blocks[b], ink.OnBand);
         }
     }
 
@@ -100,8 +119,10 @@ public static class DocumentChrome
         string[] arguments, ChromeInk ink, List<BlockDecoration> boxes)
     {
         var (fill, border, titleInk) = ink.Callout(arguments is [var kind] ? kind : "note");
+        // Same card as an aside wears, in the kind's accent — two constructs that sit
+        // in one page should not disagree about what a card is.
         boxes.Add(new BlockDecoration(first, count, Background: fill, Border: border,
-            BorderWidth: 1f, PadPx: 8f));
+            BorderWidth: 1f, Padding: CardPad, CornerRadiusPx: CardRadiusPx));
         Recolor(blocks[first], titleInk);
     }
 

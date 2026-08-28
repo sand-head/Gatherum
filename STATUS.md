@@ -41,7 +41,8 @@ browser sessions — including against the built container).
   see — they make link rows, so they backlink exactly like `node://` mentions, and a
   title nothing answers to inks red and offers to write the page on click; `:::infobox`
   and `:::figure` fences, floated at a margin with the prose wrapping past them, dressed
-  with a card, a header band and Wikipedia's 0.88 em small print (a figure's picture
+  with the app's own card (a tonal fill inside a rounded hairline, the title in the
+  accent its chips wear) and Wikipedia's 0.88 em small print (a figure's picture
   carries its caption as the image block's own text — `![caption](url){width=300
   align=center}`, pandoc's attribute form, with the paragraph-under-the-picture spelling
   still read — so picture and caption select, delete and render as one unit, a real

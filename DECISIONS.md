@@ -1538,3 +1538,37 @@ ordering: a float declared over a section that was *already folded* now drops th
 as stale rather than leaving content hidden behind a chevron that no longer exists.
 `DocumentChrome` re-declares floats on every edit, so that ordering is reachable here;
 the direction it now fails in is the safe one.
+
+## The infobox joins the app: a tonal card, a rounded hairline, an accent title
+`BlockDecoration` grew a real box model in 2.6.0 — per-side padding and borders through
+`BoxEdges`, plus `CornerRadiusPx` — and the infobox had been the one thing on a Gatherum
+page still drawn as a hard rectangle. Everything else the app insets is a tonal fill
+behind a rounded hairline: the content sheet at `--radius-l`, a code band at
+`--radius-s`. An aside is one of those, so it is drawn like one, at `--radius` between
+them, with roomier flanks than crown (`BoxEdges.Symmetric(10, 12)`) because a 280px
+column of small print is read down its middle.
+
+The palette moved with it, in both cases toward what the tokens already said. `CardFill`
+was documented as `--surface-dim` and had drifted to a near-white that only read as a
+card because of its outline; it is `--surface-dim` now, and the outline stepped back to
+`--outline-dim`, the weight the content sheet is drawn with. A tonal card wants an edge
+you can find, not one you read.
+
+**The title band is gone, and that is the design rather than a subtraction.** The first
+attempt kept it as one of the app's chips — a rounded tint inset from the card's flanks.
+Rendered, it failed twice over: a band wants to reach the card's edges and a rounded card
+has no edges to reach, so an inset one reads as a chip that missed; and the hairline the
+h1 already rules landed *inside* it, two dividers doing one job. The heading's rule is
+level-driven in both renderers with no per-block opt-out, and the level is the file's
+word (`# Podman`) — not something to rewrite for a paint decision. So the band went and
+the rule stayed: the title takes `--on-chip`, the accent its own category chips wear, and
+the rule under it is the divider. Fewer parts, and both renderers already agreed about
+every one of them.
+
+Callouts took the same card in their own accent. Two constructs sitting in one page
+should not disagree about what a card is, and a rounded infobox beside a square callout
+would have been worse than leaving both square.
+
+Verified in the running app in all four combinations — canvas and HTML, light and dark —
+because a decoration is the one thing both renderers draw from the same numbers, and the
+point of the box model is that they land in the same place.
