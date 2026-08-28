@@ -412,6 +412,35 @@ public static class EpubChapterHtml
             show(page);
           }, { passive: true });
 
+          // The other end of the hosting page's swipe relay: a touch the browser
+          // refused to route into this document lands in the parent instead, which
+          // classifies it and streams the drag here. Same follow, same settle — the
+          // reader cannot tell which door the swipe came through.
+          let relayed = false;
+          addEventListener('message', (e) => {
+            if (e.source !== window.parent) return;
+            const dx = e.data?.gatherumEpubDrag;
+            if (typeof dx === 'number' && Number.isFinite(dx)) {
+              if (!relayed) {
+                relayed = true;
+                flow.style.transition = 'none';
+                debug('parent relay engaged');
+              }
+              const past = (page === 0 && dx > 0) || (page === pages - 1 && dx < 0);
+              flow.style.transform =
+                'translateX(' + (-page * step + (past ? dx / 3 : dx)) + 'px)';
+              return;
+            }
+            const settle = e.data?.gatherumEpubSettle;
+            if (!settle || !relayed) return;
+            relayed = false;
+            flow.style.transition = '';
+            debug('parent settle ' + (settle.cancel ? 'cancel' : 'dx=' + Math.round(settle.dx)));
+            if (settle.cancel || typeof settle.dx !== 'number') show(page);
+            else show(Math.abs(settle.dx) > step / 4 || settle.flick
+              ? page + (settle.dx < 0 ? 1 : -1) : page);
+          });
+
           document.addEventListener('click', (e) => {
             const anchor = e.target.closest('a');
             if (!anchor) return;
