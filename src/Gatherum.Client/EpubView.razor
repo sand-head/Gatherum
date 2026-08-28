@@ -35,9 +35,13 @@ else if (book is { } epub)
             </div>
         }
         @* Sandboxed like a bookmark snapshot, plus the one concession the pager
-           needs: scripts run, but as an opaque origin the response's policy has
-           already narrowed to the pager itself. *@
-        <iframe @ref="frame" class="epub-frame" src="@FrameSrc"
+           needs: scripts run, but as an opaque origin whose policy (carried inside
+           the document as a meta tag) has already narrowed to the pager itself.
+           The chapter is fetched here and handed over as srcdoc, never navigated
+           to: iOS withholds the touch stream from a network-src sandboxed frame —
+           taps click, swipes vanish — while a srcdoc document receives touches on
+           the same hardware. *@
+        <iframe @ref="frame" class="epub-frame"
                 title="@(epub.Title ?? "Book")" sandbox="allow-scripts"></iframe>
     </div>
 }
@@ -60,19 +64,14 @@ else if (book is { } epub)
     private bool remember = true;
     private bool localChecked;
     private System.Threading.Timer? saveDebounce;
-    private string restoreAt = "";
-
-    /// <summary>The chapter's URL, carrying the saved fraction as a fragment on the
-    /// first opening only — the pager cashes it in once it knows its page count.</summary>
-    private string FrameSrc =>
-        $"/api/files/{NodeId}/epub/{chapter}?version={book?.Version ?? 0}&r={book?.Renderer}{DebugFlag}{restoreAt}";
+    private double restoreFraction;
+    private int loadedChapter = -1;
 
     /// <summary>Opening the node page with ?debug=1 hands the flag to the chapter, and
     /// the pager overlays its event log — the way to ask a misbehaving device what is
     /// actually happening in the frame, in place, without tooling.</summary>
-    private string DebugFlag =>
-        Navigation.Uri.Contains("debug=1", StringComparison.OrdinalIgnoreCase)
-            ? "&debug=1" : "";
+    private bool Debugging =>
+        Navigation.Uri.Contains("debug=1", StringComparison.OrdinalIgnoreCase);
 
     protected override async Task OnParametersSetAsync()
     {
@@ -80,7 +79,8 @@ else if (book is { } epub)
             return;
         loaded = NodeId;
         chapter = 0;
-        restoreAt = "";
+        restoreFraction = 0;
+        loadedChapter = -1;
         localChecked = false;
         try
         {
@@ -120,6 +120,23 @@ else if (book is { } epub)
                 StateHasChanged();
             }
         }
+
+        if (loadedChapter != chapter)
+            await LoadChapterAsync();
+    }
+
+    /// <summary>Fetches the chapter's rendered page and hands it to the frame as
+    /// srcdoc, with the saved fraction and the debug flag following as messages —
+    /// a srcdoc document has no URL to carry either.</summary>
+    private async Task LoadChapterAsync()
+    {
+        if (book is not { } epub || module is null)
+            return;
+        loadedChapter = chapter;
+        var at = restoreFraction;
+        restoreFraction = 0;
+        var html = await Data.GetEpubChapterAsync(NodeId, chapter, epub.Version, epub.Renderer);
+        await module.InvokeVoidAsync("loadEpubChapter", frame, html, at, Debugging);
     }
 
     private void Restore(EpubPosition position)
@@ -127,9 +144,7 @@ else if (book is { } epub)
         if (book is not { } epub)
             return;
         chapter = Math.Clamp(position.Chapter, 0, epub.Chapters.Count - 1);
-        if (position.Progress > 0.0005)
-            restoreAt = "#at=" + position.Progress.ToString("0.####",
-                System.Globalization.CultureInfo.InvariantCulture);
+        restoreFraction = Math.Clamp(position.Progress, 0, 1);
     }
 
     [JSInvokable]
@@ -157,9 +172,10 @@ else if (book is { } epub)
         if (target == chapter)
             return;
         chapter = target;
-        // The fragment belonged to the chapter that was restored; a fresh chapter
-        // starts at its first page.
-        restoreAt = "";
+        // The saved fraction belonged to the chapter that was restored; a fresh
+        // chapter starts at its first page. The load itself happens after this
+        // render settles, in OnAfterRenderAsync.
+        restoreFraction = 0;
         progress = 0;
         dirty = true;
         QueueSave();

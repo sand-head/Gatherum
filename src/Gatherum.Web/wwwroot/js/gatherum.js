@@ -97,6 +97,22 @@ export function registerEpubReader(frame, dotnet) {
   });
 }
 
+// The chapter rides into its frame as srcdoc rather than by navigation. A
+// network-src sandboxed frame is a cross-origin document, and iOS has been seen
+// withholding the raw touch stream from exactly those — taps still arrive, because
+// click synthesis is a separate pipeline — while a srcdoc document stays with its
+// parent and demonstrably receives touches on the affected hardware. The saved
+// fraction and the debug flag ride behind it as messages, since a srcdoc document
+// has no URL to carry them. Written here rather than bound in Blazor: a chapter
+// with its images folded in runs to megabytes, which is no string to diff.
+export function loadEpubChapter(frame, html, restore, debug) {
+  frame.addEventListener('load', () => {
+    if (debug) frame.contentWindow.postMessage({ gatherumEpubDebug: true }, '*');
+    if (restore > 0) frame.contentWindow.postMessage({ gatherumEpubRestore: restore }, '*');
+  }, { once: true });
+  frame.srcdoc = html;
+}
+
 // An anonymous reader's ribbon. A signed-in reader's place lives on the server — any
 // device, either user — but a visitor on a public book is deliberately never
 // remembered there (no write is anonymous), so their place lives in the one place

@@ -280,6 +280,18 @@ public sealed class ServerAppData(
         }
     }
 
+    public async Task<string> GetEpubChapterAsync(Guid nodeId, int chapter, int version,
+        string renderer)
+    {
+        var userId = await ViewerIdAsync();
+        var content = await ops.Files(s => s.OpenContentAsync(userId, nodeId, version));
+        await using (content.Stream)
+        {
+            using var book = await EpubBook.OpenAsync(content.Stream);
+            return await EpubChapterHtml.RenderAsync(book, chapter);
+        }
+    }
+
     public async Task SaveEpubPositionAsync(Guid nodeId, int chapter, double progress)
     {
         var userId = await UserIdAsync();

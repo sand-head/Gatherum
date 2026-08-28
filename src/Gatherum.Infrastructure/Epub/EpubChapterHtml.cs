@@ -45,6 +45,14 @@ public static class EpubChapterHtml
         $"script-src 'sha256-{Convert.ToBase64String(
             SHA256.HashData(Encoding.UTF8.GetBytes(PagerScript)))}'";
 
+    /// <summary>The pinning half of the policy, carried inside the document as a meta
+    /// tag: when the hosting page hands a chapter to its frame as srcdoc, the response
+    /// header cannot ride along, and a meta policy may say everything but the sandbox
+    /// directive — which the frame's sandbox attribute supplies there. A direct open
+    /// gets both halves from the header.</summary>
+    public static string MetaContentSecurityPolicy { get; } =
+        ContentSecurityPolicy["sandbox allow-scripts; ".Length..];
+
     /// <summary>A fingerprint of the reader itself — the pager and its dress. The
     /// chapter URL carries it, so a chapter cached against one build of the reader can
     /// never answer for the next: fixing the pager re-keys every chapter without
@@ -170,6 +178,10 @@ public static class EpubChapterHtml
 
         if (document.Head is { } head)
         {
+            var policy = document.CreateElement("meta");
+            policy.SetAttribute("http-equiv", "Content-Security-Policy");
+            policy.SetAttribute("content", MetaContentSecurityPolicy);
+            head.InsertBefore(policy, head.FirstChild);
             if (document.QuerySelector("meta[name='viewport']") is null)
             {
                 var viewport = document.CreateElement("meta");
@@ -302,19 +314,26 @@ public static class EpubChapterHtml
           let page = 0, pages = 1, step = 1;
 
           // The reader's own witness stand, for the day a device disagrees with every
-          // emulator: ?debug on the chapter URL overlays a log of the layout numbers
-          // and every gesture decision, so a phone can say what actually happened
-          // instead of being theorized about. Off unless asked for; renders nothing
-          // and costs nothing otherwise.
-          const debug = /[?&]debug/.test(location.search) ? (() => {
-            const panel = document.createElement('pre');
-            panel.id = 'epub-debug';
-            document.body.appendChild(panel);
-            return (line) => {
-              panel.textContent = (new Date().toISOString().slice(11, 23) + ' ' + line
-                + '\n' + panel.textContent).split('\n').slice(0, 14).join('\n');
-            };
-          })() : () => {};
+          // emulator: an overlay logging the layout numbers and every gesture
+          // decision, so a phone can say what actually happened instead of being
+          // theorized about. Lines are buffered always (cheap) and shown only when
+          // asked — ?debug on a directly-opened chapter URL, or a message from the
+          // hosting page, since a srcdoc document has no URL to put a flag on.
+          const debugLines = [];
+          let debugPanel = null;
+          const debug = (line) => {
+            debugLines.unshift(new Date().toISOString().slice(11, 23) + ' ' + line);
+            if (debugLines.length > 14) debugLines.pop();
+            if (debugPanel) debugPanel.textContent = debugLines.join('\n');
+          };
+          const enableDebug = () => {
+            if (debugPanel) return;
+            debugPanel = document.createElement('pre');
+            debugPanel.id = 'epub-debug';
+            document.body.appendChild(debugPanel);
+            debugPanel.textContent = debugLines.join('\n');
+          };
+          if (/[?&]debug/.test(location.search)) enableDebug();
 
           const show = (n) => {
             page = Math.max(0, Math.min(n, pages - 1));
@@ -419,6 +438,14 @@ public static class EpubChapterHtml
           let relayed = false;
           addEventListener('message', (e) => {
             if (e.source !== window.parent) return;
+            // A srcdoc chapter has no URL, so its saved fraction and its debug flag
+            // arrive from the hosting page instead of the address bar.
+            const fraction = e.data?.gatherumEpubRestore;
+            if (typeof fraction === 'number' && Number.isFinite(fraction)) {
+              show(Math.round(Math.min(Math.max(fraction, 0), 1) * (pages - 1)));
+              return;
+            }
+            if (e.data?.gatherumEpubDebug === true) { enableDebug(); return; }
             const dx = e.data?.gatherumEpubDrag;
             if (typeof dx === 'number' && Number.isFinite(dx)) {
               if (!relayed) {

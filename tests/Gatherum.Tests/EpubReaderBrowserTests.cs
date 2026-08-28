@@ -127,6 +127,18 @@ public sealed class EpubReaderBrowserTests
             await page.GotoAsync("file://" + path + "?debug=1");
             await page.WaitForSelectorAsync("#epub-debug");
             Assert.Contains("pages=", await page.TextContentAsync("#epub-debug"));
+
+            // A srcdoc chapter has no URL, so the saved fraction and the debug flag
+            // arrive as messages instead — and land the same.
+            await page.GotoAsync("file://" + path);
+            await page.WaitForFunctionAsync(
+                "() => document.getElementById('epub-page').textContent.startsWith('1 /')");
+            await page.EvaluateAsync("() => postMessage({ gatherumEpubRestore: 1 }, '*')");
+            await page.WaitForFunctionAsync(
+                "() => { const t = document.getElementById('epub-page').textContent;" +
+                " const [now, all] = t.split(' / '); return now === all && +all > 1; }");
+            await page.EvaluateAsync("() => postMessage({ gatherumEpubDebug: true }, '*')");
+            await page.WaitForSelectorAsync("#epub-debug");
         }
         finally
         {
