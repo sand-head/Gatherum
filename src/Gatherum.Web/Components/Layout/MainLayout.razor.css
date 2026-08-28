@@ -285,7 +285,7 @@
         scrollbar-gutter: auto;
         /* The editor surface can only lean out as far as this padding goes
            (see .document-surface in app.css); here that is 16, not 24. */
-        --fold-lean: var(--pane-pad);
+        --doc-lean: var(--pane-pad);
     }
 
     /* The drawer. Everything here undoes a [popover] UA default — the centered

@@ -1572,3 +1572,23 @@ would have been worse than leaving both square.
 Verified in the running app in all four combinations — canvas and HTML, light and dark —
 because a decoration is the one thing both renderers draw from the same numbers, and the
 point of the box model is that they land in the same place.
+
+### The card needed a page margin to pad against
+The rule under an infobox's title sat visibly off-centre, and the cause was geometry
+rather than paint. A decoration may not outset past the page's edge — slopedit clamps
+it, because a box drawn there is drawn nowhere — and a right-floated infobox's column
+*is* that edge. So the card padded 12px on the left and 0 on the right, and the rule,
+which spans the text column, sat 12px from one border and 1px from the other. Worse,
+the two surfaces disagreed about it: the editor already spent 24px of `ContentPadding`
+on the fold gutter and so had room, while the read view spent 0 and did not.
+
+`ContentPadding` is the page margin in slopedit's sense — the room a document has
+outside its text column — and it turns out two things need it: the gutter a fold
+chevron hangs in, and the room a card at the margin outsets into. Both surfaces spend
+`DocumentChrome.PagePaddingPx` now and lean it back into the pane, so the text column
+is where it always was (both measure 840 against the same pane, checked in the running
+app) and the card pads evenly. One constant, referenced by both, with the invariant it
+has to satisfy — the margin covers the card's outset — asserted beside the emitted
+padding in `An_asides_card_pads_evenly_on_both_sides`. That test was run against the
+old geometry first and fails there with a right padding of `0px`, so it pins the bug
+rather than agreeing with the fix.

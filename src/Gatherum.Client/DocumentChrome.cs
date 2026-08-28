@@ -30,6 +30,24 @@ public static class DocumentChrome
     private const float CardRadiusPx = 12f;             // --radius
     private static readonly BoxEdges CardPad = BoxEdges.Symmetric(10f, 12f);
 
+    /// <summary>The page margin both document surfaces hand slopedit as
+    /// <c>ContentPadding</c>, and lean back into the pane so the text column does not
+    /// move (app.css). A decoration may not outset past the page's edge — the box
+    /// would be drawn nowhere — so an aside floated flush at a margin can only pad the
+    /// side the page has room on: at zero, a right-floated infobox pads its card on
+    /// the left and not on the right, and its rule sits visibly off-centre. This is
+    /// the room that buys the other side, which is why it must not be less than the
+    /// card's own horizontal padding (<see cref="PageMarginCoversTheCard"/> keeps it
+    /// honest). It doubles as the gutter a heading's fold chevron hangs in.</summary>
+    public const float PagePaddingPx = 24f;
+
+    /// <summary>The card's horizontal outset, for the invariant above.</summary>
+    public static float CardSidePaddingPx => CardPad.Left;
+
+    /// <summary>Whether the page margin can cover the card's outset on both sides.</summary>
+    public static bool PageMarginCoversTheCard =>
+        PagePaddingPx >= MathF.Max(CardPad.Left, CardPad.Right);
+
 
     public static void Apply(RichDocument document, bool isDark)
     {

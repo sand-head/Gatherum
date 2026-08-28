@@ -68,16 +68,15 @@
     @if (richDoc is not null && !sourceMode)
     {
         <div class="document-surface">
-            @* ContentPadding is the fold gutter: a heading's chevron hangs 23px
-               (MarkerGap + DisclosureSizePx) left of its text, so a zero-padding
-               canvas would clip the affordance away entirely — upstream's own README
-               says 24 for a folding host. The surface leans the same 24px back into
-               the pane's padding (app.css, margin-inline: -24px — the two numbers are
-               one decision), so the text column sits exactly where the read view puts
-               it and the measure the layout wraps to is unchanged: the canvas grows by
-               48, the padding gives 48 back. *@
+            @* ContentPadding is the page margin, and it buys two things: the gutter a
+               heading's fold chevron hangs in (23px left of its text, clipped away
+               entirely at zero — upstream's README says 24 for a folding host) and the
+               room a card outsets into at the page's edge. The read view spends the
+               same 24 for the same reasons, and both surfaces lean it back into the
+               pane's padding (app.css) so the text column never moves. *@
             <DocumentView @ref="docView" Grid="richDoc" OnChange="OnChanged"
-                          Theme="EditorThemes.For(AppTheme.IsDark)" ContentPadding="24"
+                          Theme="EditorThemes.For(AppTheme.IsDark)"
+                          ContentPadding="@DocumentChrome.PagePaddingPx"
                           ImageSource="Data.GetImageAsync" OnLinkActivated="FollowLinkAsync"
                           AriaLabel="Document editor" />
         </div>
