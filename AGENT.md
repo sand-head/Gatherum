@@ -1,7 +1,9 @@
 # AGENT.md — the standing brief
 
 Read this before touching the repo. It stays true across milestones; update it when a
-milestone changes something it describes.
+milestone changes something it describes. `CLAUDE.md` is a symlink to this file, so a
+coding agent that looks for its own name finds the one brief rather than a second copy
+to drift from.
 
 ## What Gatherum is
 
