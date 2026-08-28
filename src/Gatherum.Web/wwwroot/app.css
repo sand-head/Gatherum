@@ -400,12 +400,6 @@ a.category:hover { text-decoration: none; box-shadow: var(--shadow-1); }
   min-height: 40vh;
   border-radius: var(--radius-s);
   overflow: clip;
-  /* The editor's fold gutter: NodeEditor gives DocumentView ContentPadding=24 so
-     heading chevrons have a margin to hang in, and the surface leans the same 24px
-     into the pane's padding so the text column never moves and the measure the
-     layout wraps to is unchanged. The pane's horizontal padding is never below
-     24px (MainLayout.razor.css), so the sheet is never overhung. */
-  margin-inline: -24px;
 }
 
 .text-danger { color: var(--danger); }

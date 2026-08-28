@@ -12,8 +12,8 @@ page-turner.
   [slopedit](https://git.sand.town/sand_head/slopedit)'s rich document editor — a
   Google-Docs-style C# editor on a SkiaSharp canvas (proportional text, serif section
   titles from a typeface the app ships, markdown auto-format as you type, tables with
-  per-column alignment, images that carry their caption and display width, headings
-  that fold their sections behind a chevron), with a Source-mode toggle for pages;
+  per-column alignment, images that carry their caption and display width), with a
+  Source-mode toggle for pages;
   code and text files edit in its code editor with syntax highlighting. Autosave,
   mention insertion that links nodes together, and every save is a version — old
   versions downloadable, restorable, and viewable as HTML rather than as a canvas, so a

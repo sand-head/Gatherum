@@ -1456,3 +1456,23 @@ between derivations. `DocumentChrome`'s per-keystroke pass stays — the tags ar
 the truth about what a construct *is* (membership at the seams, small print on new
 blocks, callout title ink) — but its comment now says what it is for, not what upstream
 could not do.
+
+## Folding folds back to the read view: one affordance, and it is Minerva's
+Same-day reversal, on the owner's word. Turning `FoldableHeadings` on put a second
+folding affordance next to the one the app already had, and the two disagree about
+everything a reader can see: the mobile read fold is Minerva's — a 14px chevron in a
+36px gutter that indents the heading, pointing down to say "expand" and up when open —
+while the canvas draws its own 10px chevron hanging in the heading's margin, down when
+open and *right* when folded. Both are upstream's designs; the HTML one is host-stylable
+CSS (`se-sec`/`se-shead` are API the way the padlock's anchor is), but the canvas one is
+`DrawDisclosure`, private, on `const` metrics, with no theme knob — so the styles cannot
+be reconciled from this side of the package boundary, and the preference between them is
+the mobile one.
+
+So the editor's folding is off again — `Dress` says why in place, and a test pins it so
+a future bump doesn't quietly reintroduce the second style — and the fold-gutter
+arrangement that existed only to house the canvas chevrons (ContentPadding 24 leaning
+into the pane on a −24px margin) went with it. Everything else from 2.5.11 stays. The
+way back is upstream: a canvas disclosure drawn to Minerva's glyph and direction (or a
+host-stylable one), at which point the flag is one line and the gutter is the comment
+already sitting next to it.

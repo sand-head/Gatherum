@@ -212,9 +212,7 @@
         padding: 8px 10px 6px 14px;
     }
     .shell { --sidebar-w: 236px; }
-    /* Horizontal padding holds at 24px: the editor surface leans 24px into it
-       for the fold-chevron gutter (see .document-surface in app.css). */
-    .content { margin: 0 6px 6px 0; padding: 20px 24px; }
+    .content { margin: 0 6px 6px 0; padding: 20px; }
 }
 
 /* The shell breakpoint. Below it the sidebar cannot share the width with a

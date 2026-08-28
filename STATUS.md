@@ -49,9 +49,10 @@ browser sessions — including against the built container).
   kind's accent; and tables that keep their delimiter row's `:---:`/`---:` column
   alignments, every row at once. Article section titles wear the app's serif in both
   renderers — Liberation Serif ships with the app, registered for the canvas and
-  `@font-face`d for the browser from the same files — and every heading folds its
-  section behind a chevron in the editor (view state only; the caret entering a hidden
-  region unfolds it, and a Contents jump reveals its target first). An
+  `@font-face`d for the browser from the same files. Folding stays the mobile read
+  view's affordance alone (Minerva-style, under the 480px measure): the editor's
+  drawn chevron is a different style upstream owns, so it stays off until the two
+  match. An
   Insert menu writes the fences (the document editor can't type one into being), the
   node picker doubles as a wiki-link and figure chooser, and links now go somewhere at
   all: a mention or an embedded file opens its node, a wiki link resolves by title, an

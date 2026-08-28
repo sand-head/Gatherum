@@ -68,15 +68,13 @@
     @if (richDoc is not null && !sourceMode)
     {
         <div class="document-surface">
-            @* ContentPadding is the fold chevrons' home: a heading's disclosure hangs
-               in the margin left of its text, so a zero-padding canvas would draw it
-               off its own edge. The surface pulls itself 24px into the pane's padding
-               (app.css, margin-inline: -24px — the two numbers are one decision) so
-               the text column sits exactly where the read view puts it and the
-               measure is unchanged: canvas width grows by 48, padding takes 48 back,
-               and the two surfaces still wrap at the same points. *@
+            @* ContentPadding: 0 to match the read view. It sets the column the layout
+               measures, so the two surfaces wrap at the same points only while they
+               agree about it — the pane's own padding is the article's margin. (If
+               FoldableHeadings ever comes back, the chevrons need a real gutter here:
+               ContentPadding=24 paired with margin-inline: -24px on the surface.) *@
             <DocumentView @ref="docView" Grid="richDoc" OnChange="OnChanged"
-                          Theme="EditorThemes.For(AppTheme.IsDark)" ContentPadding="24"
+                          Theme="EditorThemes.For(AppTheme.IsDark)" ContentPadding="0"
                           ImageSource="Data.GetImageAsync" OnLinkActivated="FollowLinkAsync"
                           AriaLabel="Document editor" />
         </div>
@@ -522,9 +520,6 @@
     {
         if (richDoc is null || docView is null)
             return;
-        // A Contents jump must not land inside a folded section: unfold whatever
-        // hides the target first, the way ScrollToBlock does for its own jumps.
-        richDoc.RevealBlock(block);
         for (var row = 0; row < richDoc.LineCount; row++)
         {
             var info = richDoc.RowInfoAt(row);
