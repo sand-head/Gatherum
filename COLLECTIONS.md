@@ -160,34 +160,96 @@ No new relation, no new visibility rule, no new sidecar.
 
 ## The anonymous half of the ask
 
-Anonymous participation is designed in [GROUPS.md](GROUPS.md), because it changes the
-access model rather than the list feature. The short version, and the part that matters
-here:
+The rule this meets is `AGENT.md`'s: *an API endpoint is authenticated unless it says
+`.AllowAnonymous()`, and no write ever does.* Underneath it sits a structural fact that is
+easier to miss and matters more: **ownership is the path, and a signed-out visitor has no
+root.** Their file has nowhere on disk to live without inventing an owner for it.
 
-**Ticking without signing in is free, and stores nothing.** A signed-out visitor to a
-public catalogue ticks whatever they like, their ticks live in their own browser, and they
-see their own column plus every shared column. This is exactly how a signed-out reader's
-place in a book is already kept, so it needs no new concept and no spam story. For "let me
-check off sprites on someone's public list", this alone is the entire feature, and it
+So this comes in two tiers, and the first one is most of the value.
+
+### Ticking stores nothing
+
+A signed-out visitor to a public catalogue ticks whatever they like, their ticks live in
+their own browser, and they see their own column plus every shared column. This is exactly
+how a signed-out reader's place in a book is already kept — written as the fallback the
+server never is, read only when the server had nothing — so it needs no new concept, no
+storage, no rate limit, and no spam story.
+
+For "let me check off sprites on someone's public list", this is the whole feature. It
 should ship first and by itself.
 
-**Showing your column to everyone else is a second, deliberate act.** The obstacle is not
-really the "no anonymous writes" rule — it is that ownership is the path and a visitor has
-no root, so their file has nowhere to live. The answer is that it lives under the
-*catalogue owner's* root, in a `.guests` directory beside the catalogue: Alice is hosting a
-guestbook, she owns those files, and they are hers to delete. The write is authorized by a
-hashed capability token scoped to that one node — `ApiKeys` narrowed, not a new
-authentication concept — and pointedly **not** by the node id, since the aggregate works by
-enumerating exactly those links and would otherwise publish every guest's write key.
+### Publishing your column is a second, deliberate act
 
-That last part is a real amendment to a rule that doesn't bend, with caps, rate limits and
-an off-by-default switch attached. GROUPS.md spells out all of it.
+The part localStorage cannot do is show your progress to everybody else. Make that an
+explicit "share my list", which mints a guest tally under the **catalogue owner's** root:
 
-**Group-shared catalogues.** With OIDC group grants (also GROUPS.md), a catalogue shared
-with `collectors` shows the columns of everyone in `collectors` who published a tally,
-without naming them one at a time. That is what makes this feature work for a group rather
-than for a pair, and it needs no change to anything above: the aggregate is still backlinks
-filtered through `VisibleTo`.
+```
+alice/Collections/Override sprites.guests/<slug>.md
+```
+
+Alice owns those files because they sit in her tree — she is hosting a guestbook. They are
+in her backup, count against her storage, and are hers to delete. Ownership-is-the-path
+stays literally true and nobody had to invent a rootless user.
+
+Because promotion is deliberate and rate-limited, a drive-by visitor creates nothing: the
+ambient spam surface for the common case is zero.
+
+**The write is authorized; it just carries no identity.** Mint a hashed capability token
+scoped to that one node — `ApiKeys` narrowed to a single node rather than a new
+authentication concept, and `ApiKeys` is already a table-only exception, so the shape is
+precedented. The rule then reads *no write is ever unauthenticated*, where a capability
+carrying no identity still counts. That is a real amendment to a rule that doesn't bend and
+belongs in `DECISIONS.md` as one.
+
+**Do not reuse the node id as the secret.** `Unlisted` makes a node's id the secret for
+*reads*, and it cannot be reused here: a guest tally links to the catalogue, and the
+aggregate column works by enumerating exactly those links — so the feature that displays
+everyone's progress would hand out every guest's write key with it. Separate token, hashed
+at rest, shown once.
+
+**Controls that ship with it, not after:** off by default per catalogue plus an instance
+switch beside `Sharing.AllowPublic`; caps on guest tallies per catalogue and bytes per
+tally; the anonymous limiter, which partitions on client address and behind a proxy means
+`X-Forwarded-For` trusted from any peer — the loopback bind is what stops spoofing, so this
+is another reason not to publish the port wider; guest display names treated as untrusted
+text from the open internet, length-capped and removable by the owner; and a plain warning
+at mint time that losing the token loses the list.
+
+## Sharing a catalogue with everyone who can sign in
+
+Signing in is gated on an Authelia group, so "everyone with an account here" is already the
+set the owner means when they share a list with their people. But the access modes go from
+`Shared` — which names people one at a time — straight to `Unlisted` and `Public`, which
+mean the open internet. There is no mode for *anyone who got past the front door*.
+
+With more than a handful of participants that gap is the thing that will actually hurt: a
+twenty-person catalogue means twenty grants, or publishing it to the internet.
+
+The fix is a reach between the two, and it is worth flagging that it does **not** slot
+neatly into the existing ordered scale. `NodeReach` is ordered because inheritance is a
+maximum and the two questions are comparisons — but "any signed-in user" and "anyone holding
+the link" are not comparable: the second includes strangers, the first excludes them. So it
+is either a second axis or a deliberate placement, and either way it is a change to the one
+type every visibility query filters on. Not free, not huge, and probably the next thing to
+decide after this feature's shape.
+
+## What group scale breaks that two people hid
+
+None of this blocks the work above, but several accepted trade-offs are written into the
+docs with "two people" as their justification, and that premise has changed:
+
+1. **Semantic search starves.** Visibility is filtered *after* the HNSW index picks its
+   neighbours, and `STATUS.md` is explicit that over-fetching makes starvation "unlikely at
+   two people's scale; it is not a proof." Twenty people with twenty private subtrees is
+   where that stops being unlikely. The one I would fix first.
+2. **Presence is in-process**, and documents itself as enough "for a single-instance
+   deployment."
+3. **Save gates are in-process semaphores** — `STATUS.md` already names a database-level
+   lock as the prerequisite for a second app instance.
+4. **Signed-in callers are never rate-limited** (`AnonymousRateLimits`), which is a sound
+   call for two authenticated people and gives a leaked API key no ceiling at all.
+5. **File bytes are never garbage-collected** when nodes are deleted (`STATUS.md`). Storage
+   growth now scales with the number of people.
 
 ## What it would touch
 
@@ -220,6 +282,12 @@ filtered through `VisibleTo`.
    after the item enough? Prose is free; structure is a format.
 4. **Is there an import path?** With a roster that grows weekly, "paste a list, make the
    nodes" may matter more than the grid does.
+5. **Does a catalogue need a "everyone who can sign in" reach?** See above — it is the
+   difference between one sharing gesture and twenty, and it is the only part of this that
+   touches `NodeReach`, the type every visibility query filters on.
+6. **Do guest tallies appear in the aggregate immediately, or after the owner approves
+   each?** Approval is the strongest anti-spam answer and also the most work; it matters
+   only if a catalogue is ever linked somewhere busy.
 
 ## Sources for the worked example
 
