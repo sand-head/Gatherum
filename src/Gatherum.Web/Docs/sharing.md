@@ -4,6 +4,16 @@ Gatherum is private by default. A node nobody has said anything about is its own
 alone, and so is everything under it — which is also what an unprepared directory means
 when Gatherum first scans one.
 
+## Who can sign in
+
+Gatherum authenticates against your identity provider and can be told to admit only one of
+its groups — the usual arrangement for an instance shared by a team. Membership stays the
+provider's to know: it is read from the sign-in and remembered nowhere, so removing somebody
+there removes them here at their next attempt. A second group can carry admin the same way.
+
+Groups decide who gets *in*. They are not a sharing primitive: inside Gatherum, sharing
+names people.
+
 ## Ownership is the path
 
 Whoever owns the root directory a node was found under owns the node. Ownership is read

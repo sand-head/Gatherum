@@ -25,6 +25,9 @@ first time.
 | `Gatherum__Oidc__ClientSecret` | *(empty)* | Client secret |
 | `Gatherum__Oidc__Scopes` | `openid profile email` | Requested scopes |
 | `Gatherum__Oidc__RequestOfflineAccess` | `false` | Additionally request `offline_access` |
+| `Gatherum__Oidc__GroupsClaim` | `groups` | Claim the provider puts group names in |
+| `Gatherum__Oidc__RequiredGroup` | *(empty)* | Sign-in requires this group; empty admits every account the provider authenticates |
+| `Gatherum__Oidc__AdminGroup` | *(empty)* | Membership grants admin on every sign-in; empty leaves it with the first account seen |
 
 With no authority configured the app signs anyone in as a local development user. That
 is fine on a laptop and an open door anywhere else, so **outside

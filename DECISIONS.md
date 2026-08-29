@@ -1592,3 +1592,31 @@ has to satisfy — the margin covers the card's outset — asserted beside the e
 padding in `An_asides_card_pads_evenly_on_both_sides`. That test was run against the
 old geometry first and fails there with a right padding of `0px`, so it pins the bug
 rather than agreeing with the fix.
+
+## An OIDC group gates sign-in; Gatherum still has no groups
+Sharing with a group is the obvious next thought once an instance holds more than a
+couple of people, and it was designed once — a grant naming a principal rather than a
+user, group ids derived from names, the closure keyed on both — before the owner's
+correction: what is wanted is the normal thing, which is the identity provider deciding
+who may sign in at all. So there is no group in the domain. `Gatherum__Oidc__RequiredGroup`
+is read from the token as each person arrives and remembered nowhere, which is what makes
+removal take effect at the provider rather than needing to be mirrored here, and sharing
+still names people one at a time.
+
+Two calls inside that. The gate **fails closed**: a required group with no claim to answer
+it turns everybody away, because the alternative is an instance that silently admits every
+account the provider has the day a scope stops being sent — and the warning it logs names
+the claim and the scope, since "I configured the group and nobody can log in" has exactly
+one cause worth printing. And the refusal happens **before** `GetOrCreateAsync`, so
+somebody the provider authenticated but this instance does not admit leaves behind no user
+row and no root directory.
+
+`Gatherum__Oidc__AdminGroup` works the same way and is authoritative when set: it grants
+admin and takes it away on every sign-in, because a claim read per request is only
+meaningful if the answer is allowed to change. Left empty, admin stays where it was — with
+the first account ever seen.
+
+What this deliberately leaves undone: the access modes still go from `Shared`, which names
+people, straight to `Unlisted` and `Public`, which mean the open internet. There is no mode
+for "anyone who got past the front door", and once the front door is a group that is the
+gap that will be felt first — see COLLECTIONS.md, which ran into it.

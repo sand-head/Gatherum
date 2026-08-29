@@ -124,9 +124,29 @@ if (oidc.IsConfigured)
             var username = oidcIdentity.FindFirst("preferred_username")?.Value ?? subject;
             var name = oidcIdentity.FindFirst("name")?.Value ?? username;
 
+            var groups = OidcGroups.From(oidcIdentity, oidc.GroupsClaim);
+            if (oidc.RequiredGroup.Length > 0 && !OidcGroups.IsMember(groups, oidc.RequiredGroup))
+            {
+                // Refused before GetOrCreateAsync on purpose: somebody the provider
+                // authenticated but this instance does not admit gets no user row and no
+                // root directory out of the attempt.
+                context.HttpContext.RequestServices
+                    .GetRequiredService<ILoggerFactory>()
+                    .CreateLogger("Gatherum.Auth")
+                    .LogWarning(
+                        "Sign-in refused: {Subject} is not in {RequiredGroup}. The token carried " +
+                        "{GroupCount} group claim(s) in '{GroupsClaim}'; none at all usually means " +
+                        "the scope that sends them is missing from Gatherum__Oidc__Scopes.",
+                        subject, oidc.RequiredGroup, groups.Count, oidc.GroupsClaim);
+                context.HandleResponse();
+                context.Response.Redirect("/auth/denied");
+                return;
+            }
+
             var users = context.HttpContext.RequestServices
                 .GetRequiredService<Gatherum.Core.Services.UserService>();
-            var user = await users.GetOrCreateAsync(subject, email, name, username);
+            var user = await users.GetOrCreateAsync(subject, email, name, username,
+                oidc.AdminGroup.Length > 0 ? OidcGroups.IsMember(groups, oidc.AdminGroup) : null);
             context.Principal = new System.Security.Claims.ClaimsPrincipal(
                 user.ToIdentity(CookieAuthenticationDefaults.AuthenticationScheme));
         };

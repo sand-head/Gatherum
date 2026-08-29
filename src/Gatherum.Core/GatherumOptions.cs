@@ -90,6 +90,22 @@ public class OidcOptions
     public string Scopes { get; set; } = "openid profile email";
     public bool RequestOfflineAccess { get; set; }
 
+    /// <summary>The claim the provider puts group names in. Authelia, Keycloak and Authentik
+    /// all say <c>groups</c>; nothing here needs changing unless yours does not.</summary>
+    public string GroupsClaim { get; set; } = "groups";
+
+    /// <summary>Sign-in requires this group when set. Empty means every account the provider
+    /// authenticates may use Gatherum, which is the behaviour that predates this setting.
+    ///
+    /// Asking for it means asking for the claim: add <c>groups</c> to <see cref="Scopes"/>,
+    /// or the provider sends nothing and the gate — which fails closed on purpose — turns
+    /// everybody away.</summary>
+    public string RequiredGroup { get; set; } = "";
+
+    /// <summary>Membership grants admin, and non-membership takes it away, on every sign-in.
+    /// Empty leaves admin where it was: the first account ever seen has it.</summary>
+    public string AdminGroup { get; set; } = "";
+
     public bool IsConfigured => Authority.Length > 0 && ClientId.Length > 0;
 }
 

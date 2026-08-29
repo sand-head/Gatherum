@@ -196,6 +196,9 @@ that reason. If you publish the port more widely than that, set
 | `Gatherum__Oidc__ClientSecret` | *(empty)* | OIDC client secret |
 | `Gatherum__Oidc__Scopes` | `openid profile email` | Requested scopes |
 | `Gatherum__Oidc__RequestOfflineAccess` | `false` | Additionally request `offline_access` (only if your IdP allows it) |
+| `Gatherum__Oidc__GroupsClaim` | `groups` | Claim the provider puts group names in |
+| `Gatherum__Oidc__RequiredGroup` | *(empty)* | Sign-in requires this group; empty admits every account the provider authenticates |
+| `Gatherum__Oidc__AdminGroup` | *(empty)* | Membership grants admin on every sign-in; empty leaves it with the first account seen |
 | `Gatherum__Analysis__Endpoint` | *(empty)* | Base URL of an OpenAI-compatible API (e.g. `http://localhost:8080/v1`); empty leaves multimedia analysis off |
 | `Gatherum__Analysis__Model` | *(empty)* | Model that reads images and writes summaries |
 | `Gatherum__Analysis__AudioModel` | *(falls back to `Model`)* | Model that transcribes speech, if a different one has the ears |
@@ -285,6 +288,13 @@ identity_providers:
 
 Then set `Gatherum__Oidc__Authority=https://auth.example.org`, the client id, and the
 **plaintext** client secret on the Gatherum container.
+
+To admit only one Authelia group, add `groups` to the client's `scopes` above **and** to
+`Gatherum__Oidc__Scopes`, then set `Gatherum__Oidc__RequiredGroup=gatherum`. The gate fails
+closed: if the claim never arrives — the usual cause being the scope missing from one of
+those two places — nobody is admitted, and the log line says so by name. Add
+`Gatherum__Oidc__AdminGroup` to have a second group decide who is an admin, checked afresh
+at every sign-in.
 
 ## Backups
 

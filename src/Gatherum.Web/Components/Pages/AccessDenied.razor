@@ -1,0 +1,16 @@
+@page "/auth/denied"
+@layout MainLayout
+@using Microsoft.AspNetCore.Authorization
+@* Where a sign-in lands when the identity provider authenticated somebody this instance
+   does not admit. Anonymous by necessity: they have no session, and sending them back to
+   the login they just failed would bounce them between the two forever. *@
+@attribute [AllowAnonymous]
+
+<PageTitle>No access — Gatherum</PageTitle>
+
+<h1>No access</h1>
+<p>
+    You signed in successfully, but this Gatherum does not admit your account. Access is
+    granted by group membership at the identity provider, so whoever administers it can
+    add you.
+</p>
