@@ -7,7 +7,7 @@ to drift from.
 
 ## What Gatherum is
 
-A self-hosted knowledge base for two people where **pages and files are the same kind
+A self-hosted knowledge base for a person or a group where **pages and files are the same kind
 of thing**: every item is a `Node` in one tree with categories, links, versions, and
 searchable text — and a page is simply a node whose file is Markdown. One tree, one
 search, one login, one API, plus an MCP server so agents are first-class users.

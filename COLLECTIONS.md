@@ -160,31 +160,34 @@ No new relation, no new visibility rule, no new sidecar.
 
 ## The anonymous half of the ask
 
-"Users or anonymous, configurable by sharing" runs straight into a rule that doesn't bend:
-**no write is ever anonymous**, and anonymous is not an identity — it reaches public nodes
-read-only through `VisibleTo(nodes, null)` and nothing else.
+Anonymous participation is designed in [GROUPS.md](GROUPS.md), because it changes the
+access model rather than the list feature. The short version, and the part that matters
+here:
 
-Gatherum has already answered this exact question once, for reading positions: a signed-out
-reader's place in a book is kept **in their own browser's `localStorage`**, written as the
-fallback the server never is, so a stranger still resumes their reading and nothing about
-them ever lands in the instance.
+**Ticking without signing in is free, and stores nothing.** A signed-out visitor to a
+public catalogue ticks whatever they like, their ticks live in their own browser, and they
+see their own column plus every shared column. This is exactly how a signed-out reader's
+place in a book is already kept, so it needs no new concept and no spam story. For "let me
+check off sprites on someone's public list", this alone is the entire feature, and it
+should ship first and by itself.
 
-The same answer works here, and I think it is the right one rather than a consolation
-prize. A signed-out visitor to a public catalogue can tick freely; their ticks live in
-their browser; they see their own column *and* every shared column. The instance stores
-nothing about them.
+**Showing your column to everyone else is a second, deliberate act.** The obstacle is not
+really the "no anonymous writes" rule — it is that ownership is the path and a visitor has
+no root, so their file has nowhere to live. The answer is that it lives under the
+*catalogue owner's* root, in a `.guests` directory beside the catalogue: Alice is hosting a
+guestbook, she owns those files, and they are hers to delete. The write is authorized by a
+hashed capability token scoped to that one node — `ApiKeys` narrowed, not a new
+authentication concept — and pointedly **not** by the node id, since the aggregate works by
+enumerating exactly those links and would otherwise publish every guest's write key.
 
-What that deliberately does not give you is a stranger's column visible to others. Getting
-that requires a per-visitor secret to write under — which is an identity, and rebuilding
-identity next to an OIDC-only auth model is how you end up with local accounts by accident.
-It also imports spam, an anonymous write path past the rate limiter, and other people's
-data inside the backup of your storage root.
+That last part is a real amendment to a rule that doesn't bend, with caps, rate limits and
+an off-by-default switch attached. GROUPS.md spells out all of it.
 
-Worth saying plainly: Gatherum has two users, OIDC-only, no self-signup. "See what everyone
-else has" is a handful of people with Authelia accounts, plus signed-out visitors who see
-only themselves. If the thing you actually want is a public collection tracker with
-thousands of strangers on it, that's a different application, and I'd rather say so than
-bend four rules to approximate it here.
+**Group-shared catalogues.** With OIDC group grants (also GROUPS.md), a catalogue shared
+with `collectors` shows the columns of everyone in `collectors` who published a tally,
+without naming them one at a time. That is what makes this feature work for a group rather
+than for a pair, and it needs no change to anything above: the aggregate is still backlinks
+filtered through `VisibleTo`.
 
 ## What it would touch
 

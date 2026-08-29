@@ -1,6 +1,6 @@
 # Gatherum
 
-A self-hosted, web-first knowledge base for two people, built on one idea: **pages and
+A self-hosted, web-first knowledge base for a person or a group, built on one idea: **pages and
 files are the same kind of thing.** Every item is a *node* — it has a title, a place in
 one tree, categories, links, backlinks, version history, and searchable text. A page is
 simply a node whose file is Markdown; a fic chapter, a Podman quadlet, a PDF, and a
