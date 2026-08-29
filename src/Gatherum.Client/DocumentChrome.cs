@@ -8,16 +8,46 @@ namespace Gatherum.Client;
 /// sharing a <see cref="BlockTags">tag</see> becomes a float (an aside leaves the
 /// vertical flow and the prose wraps past it) and a decoration (the card behind it).
 ///
-/// Derived, never pinned. slopedit declares both against block indices, and block
-/// indices move the moment anyone types a paragraph above them — so the answer is
-/// recomputed from the tags after every change and every theme switch, rather than
-/// installed once at parse. That also makes the extensions colorblind: they say what a
-/// construct is, this says what it currently looks like.
+/// Derived, never pinned. slopedit anchors declared ranges through every splice now
+/// (2.5.11) — an edit above an infobox no longer slides its card — but the tags stay
+/// the one source of truth for what a construct <em>is</em>: recomputing from them
+/// after every change and every theme switch keeps membership honest at the seams a
+/// splice cannot speak to (a paste that brings tagged blocks with it, a construct
+/// deleted whole), restamps the small print on blocks typed into a card, and re-inks
+/// a callout title whose runs an edit replaced. The extensions stay colorblind: they
+/// say what a construct is, this says what it currently looks like.
 /// </summary>
 public static class DocumentChrome
 {
     private const float InfoboxWidthPx = 280f;
     private const float FigureWidthPx = 320f;
+
+    // The app's card, in the vocabulary a decoration speaks since slopedit 2.6.0.
+    // Every inset block in Gatherum is a tonal fill behind a rounded hairline — the
+    // content sheet at --radius-l, a code band at --radius-s — and an aside is one of
+    // those, sized between the two. Roomier flanks than crown, because a 280px column
+    // of small print is read down its middle and the card should not crowd it.
+    private const float CardRadiusPx = 12f;             // --radius
+    private static readonly BoxEdges CardPad = BoxEdges.Symmetric(10f, 12f);
+
+    /// <summary>The page margin both document surfaces hand slopedit as
+    /// <c>ContentPadding</c>, and lean back into the pane so the text column does not
+    /// move (app.css). A decoration may not outset past the page's edge — the box
+    /// would be drawn nowhere — so an aside floated flush at a margin can only pad the
+    /// side the page has room on: at zero, a right-floated infobox pads its card on
+    /// the left and not on the right, and its rule sits visibly off-centre. This is
+    /// the room that buys the other side, which is why it must not be less than the
+    /// card's own horizontal padding (<see cref="PageMarginCoversTheCard"/> keeps it
+    /// honest). It doubles as the gutter a heading's fold chevron hangs in.</summary>
+    public const float PagePaddingPx = 24f;
+
+    /// <summary>The card's horizontal outset, for the invariant above.</summary>
+    public static float CardSidePaddingPx => CardPad.Left;
+
+    /// <summary>Whether the page margin can cover the card's outset on both sides.</summary>
+    public static bool PageMarginCoversTheCard =>
+        PagePaddingPx >= MathF.Max(CardPad.Left, CardPad.Right);
+
 
     public static void Apply(RichDocument document, bool isDark)
     {
@@ -53,9 +83,10 @@ public static class DocumentChrome
             document.SetDecorations([.. boxes]);
     }
 
-    /// <summary>An infobox or a figure: a column at one margin, a card behind the whole
-    /// run, and — for an infobox — a band behind each heading, which is most of what
-    /// makes one look like one.</summary>
+    /// <summary>An infobox or a figure: a column at one margin and the app's card
+    /// behind the whole run — a tonal fill inside a rounded hairline, the same recipe
+    /// the content sheet and a code band are drawn with, at a radius between theirs.
+    /// An infobox's title takes the accent its rows are filed under.</summary>
     private static void Aside(IReadOnlyList<Block> blocks, int first, int count, string kind,
         string[] arguments, ChromeInk ink, List<FloatedRun> floats, List<BlockDecoration> boxes)
     {
@@ -77,13 +108,25 @@ public static class DocumentChrome
         floats.Add(new FloatedRun(first, count, side, width, GutterPx: 20f,
             TopMarginPx: 8f, BottomMarginPx: 8f));
         boxes.Add(new BlockDecoration(first, count, Background: ink.CardFill,
-            Border: ink.CardBorder, BorderWidth: 1f, PadPx: 8f));
-        if (kind != BlockTags.Infobox)
-            return;
+            Border: ink.CardBorder, BorderWidth: 1f, Padding: CardPad,
+            CornerRadiusPx: CardRadiusPx));
         for (var b = first; b < first + count; b++)
         {
-            if (blocks[b].Kind == BlockKind.Heading)
-                boxes.Add(new BlockDecoration(b, 1, Background: ink.Band, PadPx: 3f));
+            // The card is small print wherever its blocks came from: parse stamps the
+            // scale, this keeps it on blocks an edit added — Enter splitting a row,
+            // a paragraph typed under the picture. (An edit invalidates layout
+            // anyway, so restating the same value costs nothing.)
+            blocks[b].FontScale = AsideExtension.SmallPrint;
+            // The title is the app's accent over the hairline the heading already
+            // rules, rather than an encyclopedia's tinted band. A band wants to reach
+            // the card's edges, and a card with rounded corners has no edges to reach
+            // — inset it and it reads as a chip that missed, keep the tint and the
+            // rule and you get two dividers doing one job. So: no band, the chip's own
+            // ink on the title, and that rule is the divider. Inked here rather than
+            // at parse for the reason the card is — the mode can change under a
+            // document that is already open.
+            if (kind == BlockTags.Infobox && blocks[b].Kind == BlockKind.Heading)
+                Recolor(blocks[b], ink.OnBand);
         }
     }
 
@@ -94,8 +137,10 @@ public static class DocumentChrome
         string[] arguments, ChromeInk ink, List<BlockDecoration> boxes)
     {
         var (fill, border, titleInk) = ink.Callout(arguments is [var kind] ? kind : "note");
+        // Same card as an aside wears, in the kind's accent — two constructs that sit
+        // in one page should not disagree about what a card is.
         boxes.Add(new BlockDecoration(first, count, Background: fill, Border: border,
-            BorderWidth: 1f, PadPx: 8f));
+            BorderWidth: 1f, Padding: CardPad, CornerRadiusPx: CardRadiusPx));
         Recolor(blocks[first], titleInk);
     }
 

@@ -80,6 +80,11 @@ public class DocsTests
         Assert.Contains("[^key]", dialect, StringComparison.Ordinal);
         Assert.Contains("x^2^", dialect, StringComparison.Ordinal);
         Assert.Contains("H~2~O", dialect, StringComparison.Ordinal);
+        // And the 2.5.11 additions: image captions with their attributes, and the
+        // delimiter-row alignments the tables finally keep.
+        Assert.Contains("{width=", dialect, StringComparison.Ordinal);
+        Assert.Contains("align=center", dialect, StringComparison.Ordinal);
+        Assert.Contains(":---:", dialect, StringComparison.Ordinal);
     }
 
     [Fact]

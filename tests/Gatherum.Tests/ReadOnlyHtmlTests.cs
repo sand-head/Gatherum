@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Gatherum.Client;
 using SlopEdit.Core.Rich;
 
@@ -119,6 +120,57 @@ public class ReadOnlyHtmlTests
         doc.InvalidateLayout();
         Assert.Equal(RichHtmlWriter.WriteBody(doc, new RichHtmlOptions()),
             RichHtmlWriter.WriteBody(doc, reader));
+    }
+
+    [Fact]
+    public void An_asides_card_pads_evenly_on_both_sides()
+    {
+        // The bug this pins: a decoration may not outset past the page's edge, and a
+        // right-floated infobox's column *is* that edge — so with no page margin the
+        // card padded on the left and not on the right, and the rule under its title
+        // sat visibly off-centre. The margin both surfaces spend is what buys the
+        // other side, so the padding it emits has to be symmetric.
+        Assert.True(DocumentChrome.PageMarginCoversTheCard,
+            "the page margin must cover the card's outset, or a flush card pads one side only");
+
+        var doc = GatherumMarkdown.Parse("""
+            Intro paragraph, long enough to run beside the card it sits next to.
+
+            :::infobox
+            # Podman
+            | **Kind** | Container engine |
+            :::
+            """, isDark: false);
+        doc.Measurer = new FakeMeasurer();
+        doc.WrapWidthPx = 840f;
+        var html = RichHtmlWriter.WriteBody(doc,
+            new RichHtmlOptions { ContentPaddingPx = DocumentChrome.PagePaddingPx });
+
+        // The emitter always spells four values, CSS's top/right/bottom/left, so the
+        // regression is readable straight off them: before the page margin, the right
+        // was clamped to 0 while the left kept its 11.
+        var padding = Regex.Match(html, @"padding:([^;""]+)").Groups[1].Value.Trim();
+        var sides = padding.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal(4, sides.Length);
+        Assert.Equal(sides[3], sides[1]);   // left == right
+        Assert.Equal(sides[2], sides[0]);   // top == bottom
+        Assert.NotEqual("0px", sides[1]);
+    }
+
+    [Fact]
+    public void A_captioned_picture_reads_as_the_figure_it_is()
+    {
+        var html = Html("""
+            :::figure right 320
+            ![Before the rewire](/api/files/8f6b1f5e-9a5a-4a2e-9d16-6b8a1c2d3e4f/content){align=center}
+            :::
+            """);
+
+        // The caption form arrives as a real <figure> with a <figcaption> — the
+        // caption can never drift from its picture, in either renderer.
+        Assert.Contains("<figure class=\"se-figure\"", html);
+        Assert.Contains("<figcaption class=\"se-caption\"", html);
+        Assert.Contains("Before the rewire", html);
     }
 
     [Fact]

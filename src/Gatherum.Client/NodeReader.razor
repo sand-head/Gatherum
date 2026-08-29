@@ -28,8 +28,12 @@
             @* ContentPadding is slopedit's own parameter, not a style override, and
                the host is entitled to set it — but it decides the column the layout
                measures, so it has to be the same number the editor passes or the two
-               wrap in different places. The article's breathing room is .content's
-               padding; the document does not need its own. *@
+               wrap in different places. It is also the page margin a decoration may
+               outset into: at 0 an infobox floated flush at the right margin could pad
+               its card on the left and not on the right, because the box may not be
+               drawn past the page's edge. So both surfaces spend 24 and lean it back
+               (app.css, .document-surface/.reader-doc) — the column is unmoved and the
+               card has room on both sides. *@
             @* The allow-list carries locked: through to the HTML so a link the reader
                may not follow arrives as an anchor CSS can hang a padlock on. Nothing
                navigates: no browser knows the scheme, and LinkRouter routes it Nowhere. *@
@@ -37,7 +41,7 @@
                Wikipedia's mobile skin folds one. Read-tab chrome on purpose: an
                editor cannot hide the text the caret lives in. *@
             <DocumentHtmlView Grid="doc" Theme="EditorThemes.For(AppTheme.IsDark)"
-                              ContentPadding="0" TopPadding="0"
+                              ContentPadding="@DocumentChrome.PagePaddingPx" TopPadding="0"
                               AllowedUrlSchemes="NodeLinks.ReaderUrlSchemes"
                               CollapseSectionsBelow="FoldSectionsBelowPx"
                               OnLinkActivated="FollowAsync" AriaLabel="Article" />

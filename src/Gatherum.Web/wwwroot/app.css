@@ -55,7 +55,11 @@
   /* Type */
   --font-ui: "Google Sans Text", Roboto, "Segoe UI", system-ui, -apple-system,
              "Helvetica Neue", Arial, sans-serif;
-  --font-serif: "Linux Libertine", Georgia, "Iowan Old Style", "Times New Roman", serif;
+  /* Liberation Serif ships with the app (see the @font-face block below), so the
+     serif is the same face on every machine — and the same file slopedit's canvas
+     registers, which is what keeps the two article renderers wrapping alike. */
+  --font-serif: "Liberation Serif", "Linux Libertine", Georgia, "Iowan Old Style",
+                "Times New Roman", serif;
   --font-mono: "Roboto Mono", ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
 
   /* Shape */
@@ -82,6 +86,39 @@
 
 :root[data-theme="light"] { color-scheme: light; }
 :root[data-theme="dark"] { color-scheme: dark; }
+
+/* The shipped serif: the same four Liberation Serif files DocumentFonts registers
+   for the canvas, served from the client's static assets (OFL-licensed; the license
+   sits beside them). font-display: block, because a heading that swaps faces after
+   paint would wrap differently than the canvas measured. */
+@font-face {
+  font-family: "Liberation Serif";
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url("_content/Gatherum.Client/fonts/LiberationSerif-Regular.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Liberation Serif";
+  font-style: normal;
+  font-weight: 700;
+  font-display: block;
+  src: url("_content/Gatherum.Client/fonts/LiberationSerif-Bold.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Liberation Serif";
+  font-style: italic;
+  font-weight: 400;
+  font-display: block;
+  src: url("_content/Gatherum.Client/fonts/LiberationSerif-Italic.ttf") format("truetype");
+}
+@font-face {
+  font-family: "Liberation Serif";
+  font-style: italic;
+  font-weight: 700;
+  font-display: block;
+  src: url("_content/Gatherum.Client/fonts/LiberationSerif-BoldItalic.ttf") format("truetype");
+}
 
 /* Base */
 
@@ -359,6 +396,29 @@ a.category:hover { text-decoration: none; box-shadow: var(--shadow-1); }
    nearest scroll container (.content in MainLayout). overflow: clip keeps
    the rounded clipping without creating a scroll container that would trap
    the strip — which is why this contract lives here, not in one component. */
+/* Both document surfaces — the editor's canvas and the reader's HTML — lean the same
+   distance back into the pane's padding, and both hand slopedit the same
+   ContentPadding to spend on it. That margin is a page margin in slopedit's sense:
+   the room a document has outside its text column, which two things need.
+
+   A heading's fold chevron hangs 23px left of its text, so with no page margin it
+   would be clipped off the surface's own edge. And a decoration may not outset past
+   the page edge (the box would be drawn nowhere), so an infobox floated flush at the
+   right margin could pad its card on the left and not on the right — a card whose
+   contents sit off-centre, differently in each renderer, because the two surfaces
+   had different page margins to clamp against. One number for both fixes both.
+
+   Leaning it back keeps the text column where it was: at a 24px lean the surface
+   grows by 48 and the padding gives 48 back, so both wrap at identical points. It
+   can only lean as far as the pane has padding to spend, or the surface would paint
+   out over the sheet's rounded edge — above the shell breakpoint the pane always
+   affords 24; below it the pane keeps its 16px reading margin (a phone cannot spare
+   eight more pixels of column) and both surfaces lean 16 together. */
+.document-surface,
+.reader-doc {
+  margin-inline: calc(-1 * var(--doc-lean, 24px));
+}
+
 .document-surface {
   min-height: 40vh;
   border-radius: var(--radius-s);

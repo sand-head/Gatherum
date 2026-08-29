@@ -1392,3 +1392,203 @@ the srcdoc copy, which no header can accompany, carries the pinning half as a me
 policy (meta may not carry `sandbox` — the frame's sandbox attribute supplies that)
 and the saved fraction and debug flag follow as postMessages, since a srcdoc
 document has no URL to put them on.
+
+## slopedit 2.5.11: the serif lands, captions stop pretending, sections fold under the caret
+The five features between 2.5.0 and 2.5.11 were, again, mostly built for this wiki, and
+the adoption is one bump plus the wiki's half of each.
+
+**Typefaces.** `EditorTheme` speaks font families now, resolved through a process-wide
+`FontRegistry` (fonts a host ships as bytes) before installed fonts — the only channel
+that reaches Skia in WASM, where no fonts are installed at all. Gatherum ships the four
+Liberation Serif faces (OFL, license beside them) once, in `Gatherum.Client/wwwroot/fonts`:
+embedded in the assembly for `DocumentFonts.EnsureRegistered()` — called from `Dress`, so
+no document lays out before its faces exist, on the server circuit, in WASM, and in the
+read view's static pass alike — and served as static web assets for app.css's
+`@font-face`, the same files both ways, which is upstream's parity rule for fonts. Both
+themes set `HeadingFontFamily` to that family list, and `--font-serif` now leads with the
+shipped face: the article's own section titles finally wear the serif the design
+("what if Google made Wikipedia") had so far only put on the page title, in the canvas
+and the browser from the same file. Body and code stay slopedit's embedded defaults —
+already guaranteed everywhere, so shipping replacements would buy nothing.
+
+**Small print.** `Block.FontScale` reaches layout as well as paint, so
+`AsideExtension.Style` sets every aside block at Wikipedia's 0.88 em — infobox rows,
+figure captions, the heading's own multiplier riding on top — and `DocumentChrome`
+restamps it each edit so a row typed into a card wears it too. Presentation only: no
+serializer stores a scale.
+
+**Captions are the image's own.** The serializer's dialect grew pandoc's attribute form,
+`![caption](url){width=300 align=center}` — a trailing `{…}`, even empty, makes the
+bracket text a caption: the image block's own styled runs, wrapped to the picture's
+width, one unit with it for selection and deletion, a real `<figure>`/`<figcaption>` in
+the HTML view. *Insert… → Figure* writes that form now (with `align=center` spelled out,
+because it is the file's word once the dialect has a spelling for it); the older
+paragraph-under-the-picture figure still reads as it always did, and merging it into the
+image on parse was considered and declined — the un-merge is not byte-faithful in every
+case, and the round trip outranks the upgrade. One defensive move came with this:
+`WriteImage` serializes alignment, so the centering `Style` stamps on a *bare* picture in
+an aside would have written `{align=center}` into files that never said it — caught by
+the round-trip tests on the day of the bump — and `AsideExtension.Untagged` now sheds
+exactly that stamp (bare spelling, centered) while leaving any alignment the file did
+say alone.
+
+**Tables keep their delimiter row's word.** `|:---:|` and `|---:|` parse onto every row
+(`Block.ColumnAlignments`), lay out, and write back; the context menu grew the *Align
+column* verbs on its own. Nothing was Gatherum's to build — the tests pin that an
+aligned table round-trips (explicit left normalizes to the plain dash, the delimiter
+row's one liberty) — and per-cell docx shading now survives the rich door in both
+directions for the same price. colspan upstream declined on purpose; nothing here
+mourns it.
+
+**Sections fold in the editor.** `Dress` sets `FoldableHeadings`: every heading wears a
+drawn chevron and folds its section to the next equal-or-shallower heading — the
+editor-side answer to the read view's `CollapseSectionsBelow`, and the reversal of "the
+editor never hides the text the caret lives in" *because upstream answered the
+objection*: fold state is view state (no Version, no serialization, no collab op), fold
+indices ride splices like the caret, and the caret entering a hidden region unfolds it,
+so content is never unreachable. A Contents jump calls `RevealBlock` first, the way
+upstream's own `ScrollToBlock` does. The HTML renderers ignore the flag, so read-only
+documents dress identically for free.
+
+And the fix that cost nothing to adopt: declared decorations and floats now ride every
+splice the way the caret does, so an edit above an infobox no longer slides its card
+between derivations. `DocumentChrome`'s per-keystroke pass stays — the tags are still
+the truth about what a construct *is* (membership at the seams, small print on new
+blocks, callout title ink) — but its comment now says what it is for, not what upstream
+could not do.
+
+## Folding folds back to the read view: one affordance, and it is Minerva's
+Same-day reversal, on the owner's word. Turning `FoldableHeadings` on put a second
+folding affordance next to the one the app already had, and the two disagree about
+everything a reader can see: the mobile read fold is Minerva's — a 14px chevron in a
+36px gutter that indents the heading, pointing down to say "expand" and up when open —
+while the canvas draws its own 10px chevron hanging in the heading's margin, down when
+open and *right* when folded. Both are upstream's designs; the HTML one is host-stylable
+CSS (`se-sec`/`se-shead` are API the way the padlock's anchor is), but the canvas one is
+`DrawDisclosure`, private, on `const` metrics, with no theme knob — so the styles cannot
+be reconciled from this side of the package boundary, and the preference between them is
+the mobile one.
+
+So the editor's folding is off again — `Dress` says why in place, and a test pins it so
+a future bump doesn't quietly reintroduce the second style — and the fold-gutter
+arrangement that existed only to house the canvas chevrons (ContentPadding 24 leaning
+into the pane on a −24px margin) went with it. Everything else from 2.5.11 stays. The
+way back is upstream: a canvas disclosure drawn to Minerva's glyph and direction (or a
+host-stylable one), at which point the flag is one line and the gutter is the comment
+already sitting next to it.
+
+## slopedit 2.6.0: the chevron comes back, in the read view's own hand
+Upstream took the fold affordance the reversal above asked for, and the editor's
+folding is on again. `DrawDisclosure` now draws Minerva's chevron — the same
+`M5 9l7 7 7-7` glyph in the same 14px box the HTML fold's `ChevronSvg` uses, with the
+same direction convention (down says "expand", up says "open") — and the ruled
+heading's hairline runs underneath it, spanning the fold gutter the way the mobile
+summary's `border-bottom` does. One affordance, two renderers, so `Dress` sets
+`FoldableHeadings` again and a Contents jump calls `RevealBlock` before it lands.
+
+The gutter is the host's to provide, and it is the thing that will look broken if it
+is missing: the chevron hangs `MarkerGap + DisclosureSizePx` — 23px — left of a
+heading's text origin, so a canvas at `ContentPadding=0` clips the affordance away
+entirely and the fold silently has no handle. The editor passes 24 and the surface
+leans 24px back into the pane's padding (`margin-inline`, `--fold-lean`), which buys
+the gutter without moving the text column: the canvas grows by 48, the padding gives
+48 back, and the two surfaces still wrap at identical points — measured in the
+running app at 888px canvas against the reader's 840px column.
+
+Below the shell breakpoint the lean is the pane's own 16px instead, because a phone
+cannot spare eight more pixels of column and the read view's margin is not the
+editor's to widen. The cost is that the editor's column on a phone is 16px narrower
+than the reader's, so a page wraps slightly differently between the two there. That is
+the affordable half of the trade; a clipped chevron, or a canvas painted out over the
+sheet's rounded edge, is not.
+
+Two upstream changes rode along that nobody here asked for. The canvas **paints in
+CSS's order** now — in-flow chrome, then each float entire, then the flow's content
+over the top (CSS 2.1 §E.2) — which fixes a thing this app had been looking at
+without naming: a ruled heading's hairline drew straight across a floated infobox,
+because the float's card went down before the body's chrome. The read view never had
+the bug; the canvas agrees with it now. And `BlockDecoration` grew a real box model
+(per-side padding and borders via `BoxEdges`, plus `CornerRadiusPx`), which comes with
+a half-a-border-width shift for cards positioned against the old behaviour —
+`DocumentChrome` draws at `BorderWidth: 1f`, so the shift is half a pixel and nothing
+here moved. The room is there if an aside ever wants a leading rule down one edge.
+
+## slopedit 2.6.2: an aside's heading is not a section
+The infobox wore a fold chevron, which it should not: a declared float is its own flow
+and its heading names the card — Gatherum has always said as much on its own side,
+where the outline builder skips a tagged heading because "an aside's own headings title
+the card, not the page." There was no way to say it to slopedit, so it went upstream,
+and 2.6.2 carries both halves.
+
+The second half was a bug found by chasing the first, and worth more than it. A
+heading's section ran to the next heading of equal or shallower level *including one
+inside a float* — and an encyclopedia titles its infobox at h1 inside an h2 article. So
+on a real page here, the page-title's section ended at the infobox two blocks in, and
+its chevron folded one empty paragraph. Now the scan walks past an aside's headings and
+a section closes only at a heading of the flow: folding the title folds the article.
+
+Upstream declined the `FoldFloatedHeadings` knob offered with the patch, and the reason
+is the better one: `RichHtmlWriter` never emitted a `<details>` for a section a float
+touches, so the HTML view has never folded an aside's heading, and a knob would have had
+no setting the read view could honour — the same canvas-vs-HTML disagreement the
+previous release closed. They also kept the float clamp this end had called
+belt-and-braces, having found the ordering that reaches it (`RevealBlock` walks the
+folded set without forcing a layout first), and added the worse case of the same
+ordering: a float declared over a section that was *already folded* now drops the fold
+as stale rather than leaving content hidden behind a chevron that no longer exists.
+`DocumentChrome` re-declares floats on every edit, so that ordering is reachable here;
+the direction it now fails in is the safe one.
+
+## The infobox joins the app: a tonal card, a rounded hairline, an accent title
+`BlockDecoration` grew a real box model in 2.6.0 — per-side padding and borders through
+`BoxEdges`, plus `CornerRadiusPx` — and the infobox had been the one thing on a Gatherum
+page still drawn as a hard rectangle. Everything else the app insets is a tonal fill
+behind a rounded hairline: the content sheet at `--radius-l`, a code band at
+`--radius-s`. An aside is one of those, so it is drawn like one, at `--radius` between
+them, with roomier flanks than crown (`BoxEdges.Symmetric(10, 12)`) because a 280px
+column of small print is read down its middle.
+
+The palette moved with it, in both cases toward what the tokens already said. `CardFill`
+was documented as `--surface-dim` and had drifted to a near-white that only read as a
+card because of its outline; it is `--surface-dim` now, and the outline stepped back to
+`--outline-dim`, the weight the content sheet is drawn with. A tonal card wants an edge
+you can find, not one you read.
+
+**The title band is gone, and that is the design rather than a subtraction.** The first
+attempt kept it as one of the app's chips — a rounded tint inset from the card's flanks.
+Rendered, it failed twice over: a band wants to reach the card's edges and a rounded card
+has no edges to reach, so an inset one reads as a chip that missed; and the hairline the
+h1 already rules landed *inside* it, two dividers doing one job. The heading's rule is
+level-driven in both renderers with no per-block opt-out, and the level is the file's
+word (`# Podman`) — not something to rewrite for a paint decision. So the band went and
+the rule stayed: the title takes `--on-chip`, the accent its own category chips wear, and
+the rule under it is the divider. Fewer parts, and both renderers already agreed about
+every one of them.
+
+Callouts took the same card in their own accent. Two constructs sitting in one page
+should not disagree about what a card is, and a rounded infobox beside a square callout
+would have been worse than leaving both square.
+
+Verified in the running app in all four combinations — canvas and HTML, light and dark —
+because a decoration is the one thing both renderers draw from the same numbers, and the
+point of the box model is that they land in the same place.
+
+### The card needed a page margin to pad against
+The rule under an infobox's title sat visibly off-centre, and the cause was geometry
+rather than paint. A decoration may not outset past the page's edge — slopedit clamps
+it, because a box drawn there is drawn nowhere — and a right-floated infobox's column
+*is* that edge. So the card padded 12px on the left and 0 on the right, and the rule,
+which spans the text column, sat 12px from one border and 1px from the other. Worse,
+the two surfaces disagreed about it: the editor already spent 24px of `ContentPadding`
+on the fold gutter and so had room, while the read view spent 0 and did not.
+
+`ContentPadding` is the page margin in slopedit's sense — the room a document has
+outside its text column — and it turns out two things need it: the gutter a fold
+chevron hangs in, and the room a card at the margin outsets into. Both surfaces spend
+`DocumentChrome.PagePaddingPx` now and lean it back into the pane, so the text column
+is where it always was (both measure 840 against the same pane, checked in the running
+app) and the card pads evenly. One constant, referenced by both, with the invariant it
+has to satisfy — the margin covers the card's outset — asserted beside the emitted
+padding in `An_asides_card_pads_evenly_on_both_sides`. That test was run against the
+old geometry first and fails there with a right padding of `0px`, so it pins the bug
+rather than agreeing with the fix.

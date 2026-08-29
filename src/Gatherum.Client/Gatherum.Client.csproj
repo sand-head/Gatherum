@@ -14,9 +14,16 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- The heading serif, embedded for Skia (FontRegistry reads bytes; WASM has no
+         installed fonts) and served from wwwroot for the browser's @font-face — the
+         same files both ways, which is slopedit's parity rule for typefaces. -->
+    <EmbeddedResource Include="wwwroot\fonts\*.ttf" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.11" />
-    <PackageReference Include="SlopEdit.Blazor" Version="2.5.0" />
-    <PackageReference Include="SlopEdit.Docx" Version="2.5.0" />
+    <PackageReference Include="SlopEdit.Blazor" Version="2.6.2" />
+    <PackageReference Include="SlopEdit.Docx" Version="2.6.2" />
   </ItemGroup>
 
 </Project>

@@ -80,7 +80,11 @@ public sealed class AsideExtension : MarkdownBlockExtension
     }
 
     /// <summary>A block run written through the ordinary writer: the clones shed their
-    /// tag, or the writer would offer them straight back to the extension that owns it.</summary>
+    /// tag, or the writer would offer them straight back to the extension that owns it —
+    /// and shed the centering <see cref="Style"/> stamped on a bare picture, or the
+    /// writer (whose dialect can spell an image's alignment since slopedit 2.5.11)
+    /// would write <c>{align=center}</c> into a file that never said it. An alignment
+    /// the file did say arrives with a caption or a width hint and is left alone.</summary>
     internal static string Untagged(IReadOnlyList<Block> blocks, int at, int count,
         IReadOnlyList<MarkdownExtension> siblings)
     {
@@ -89,10 +93,19 @@ public sealed class AsideExtension : MarkdownBlockExtension
         {
             var clone = b.Clone();
             clone.Tag = null;
+            if (clone is { Kind: BlockKind.Image, Alignment: BlockAlignment.Center }
+                && WasBarePicture(clone))
+                clone.Alignment = BlockAlignment.Left;
             return clone;
         }));
         return MarkdownSerializer.ToMarkdown(doc, siblings);
     }
+
+    /// <summary>Whether an image block came from the plain <c>![alt](url)</c> spelling —
+    /// no caption runs, no width hint — which is the shape whose display alignment is
+    /// the app's word rather than the file's.</summary>
+    private static bool WasBarePicture(Block image) =>
+        image.Runs.Count == 0 && image.ImageWidthPx == 0f && image.ImageWidthPercent == 0f;
 
     /// <summary><c>:::infobox</c>, <c>:::figure left 320</c> — the tag this fence's
     /// blocks will wear, or null when the line isn't one of ours. Side and width stay in
@@ -109,22 +122,34 @@ public sealed class AsideExtension : MarkdownBlockExtension
         return BlockTags.For(string.Join(' ', parts));
     }
 
-    /// <summary>What the ordinary parser produced, dressed as the construct it is: an
-    /// infobox's headings and picture center and its table sheds the grid (an infobox is
-    /// a table without one); a figure centers its picture and caption. Only styling that
-    /// Markdown cannot say goes here — alignment and the grid flag never serialize, so
-    /// reading a page and saving it leaves the file exactly as it was. Bold labels are
-    /// the source's word (<c>| **Label** | Value |</c>), not ours to add.</summary>
+    /// <summary>Wikipedia sets an infobox's rows and a figure's caption at about
+    /// 0.88em of body text — small print, sayable since slopedit 2.5.11 gave blocks a
+    /// scale. Presentation only: no serializer stores it. <see cref="DocumentChrome"/>
+    /// restamps it on every edit so blocks typed into a construct wear it too.</summary>
+    public const float SmallPrint = 0.88f;
+
+    /// <summary>What the ordinary parser produced, dressed as the construct it is: the
+    /// whole card is small print (a heading's own multiplier rides on top, so an
+    /// infobox's title still leads it); an infobox's headings and picture center and
+    /// its table sheds the grid (an infobox is a table without one); a figure centers
+    /// its picture and caption. Only styling that Markdown cannot say goes here — the
+    /// scale and the grid flag never serialize, and a picture is only centered when it
+    /// is the bare <c>![alt](url)</c> spelling, whose alignment stays the app's word:
+    /// one written with a caption or width (<c>![caption](url){width=300}</c>) says
+    /// its own alignment now, and <see cref="Untagged"/> gives the file back exactly
+    /// what it said. Bold labels are the source's word (<c>| **Label** | Value |</c>),
+    /// not ours to add.</summary>
     private static void Style(List<Block> blocks, string kind)
     {
         foreach (var block in blocks)
         {
+            block.FontScale = SmallPrint;
             switch (block.Kind)
             {
                 case BlockKind.Heading when kind == BlockTags.Infobox:
                     block.Alignment = BlockAlignment.Center;
                     break;
-                case BlockKind.Image:
+                case BlockKind.Image when WasBarePicture(block):
                     block.Alignment = BlockAlignment.Center;
                     break;
                 case BlockKind.Paragraph when kind == BlockTags.Figure:

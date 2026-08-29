@@ -22,7 +22,8 @@ is lossless on purpose: **a page opened and saved without being edited comes bac
 byte-identical.** Two exceptions, both small and both deliberate:
 
 - A pipe table written without its `| --- |` delimiter row gets one, because Markdown
-  wants one. From that point on the file is stable.
+  wants one — and a delimiter cell spelled `:---` (explicit left, which is also the
+  default) comes back as the plain `---`. From that point on the file is stable.
 - Bold *inside* a callout's title is absorbed by the title's own bold.
 
 A literal `[` in prose is written back escaped (`\[`), as any Markdown writer does.
@@ -44,12 +45,13 @@ can, including inside an aside or a callout.
 | Citation | A footnote whose note cites a bookmark's capture — see [Citations](#citations) |
 | Links | `[label](https://example.org)` |
 | Images | `![alt text](url)` on a line of its own |
+| Captioned image | `![The caption](url){}` — a trailing `{…}` makes the bracket text a caption set under the picture; `{width=300 align=center}` sizes and places it — see [Figure](#figure) |
 | Bulleted list | `- item`, nested by indentation |
 | Numbered list | `1. item` |
 | Task list | `- [ ] to do`, `- [x] done` |
 | Block quote | `> quoted` |
 | Fenced code | Three backticks, with the language after the opening ones for highlighting |
-| Table | `\| Cell \| Cell \|` with a `\| --- \| --- \|` delimiter row |
+| Table | `\| Cell \| Cell \|` with a `\| --- \| --- \|` delimiter row; `\| :---: \|` centers its column and `\| ---: \|` rights it, every row at once |
 | Horizontal rule | `---` on its own line |
 
 Raw HTML is not part of the dialect. It is not stripped from the file, but nothing
@@ -159,7 +161,28 @@ not Gatherum's: write `| **Kind** | … |` if you want them bold.
 
 ### Figure
 
-A picture with a caption. The first paragraph after the image is the caption.
+A picture with a caption.
+
+```markdown
+:::figure left 360
+![The homelab, before the rewire](/api/files/0f8f6e1a-.../content){align=center}
+:::
+```
+
+The trailing `{…}` — even empty — makes the bracket text the **caption**: styled text
+set under the picture, wrapped to its width, one unit with the image for selection and
+deletion, so it can never drift away. It takes two optional attributes, in Pandoc's
+spelling:
+
+| Attribute | Meaning |
+| --- | --- |
+| `width=300` / `width=50%` | Display width, in pixels or as a share of the column it sits in. Always clamped to that column. |
+| `align=center` / `align=right` | Where the picture sits when it is narrower than its column. |
+
+This is ordinary image syntax, not figure syntax — a captioned, sized image works
+anywhere in a page. Without the `{…}` the bracket text is plain alt text, exactly as
+it always was, and the older spelling — a paragraph after the image is the caption —
+still reads fine:
 
 ```markdown
 :::figure left 360
@@ -315,8 +338,7 @@ than by `podman run` — see [@Quadlet reference](node://8f6b1f5e-9a5a-4a2e-9d16
 ## The rack
 
 :::figure left 360
-![The rack](/api/files/0f8f6e1a-0000-0000-0000-000000000001/content)
-Before the rewire
+![Before the rewire](/api/files/0f8f6e1a-0000-0000-0000-000000000001/content){align=center}
 :::
 
 - [x] Move the switch to the top
@@ -346,9 +368,10 @@ systemctl --user start gatherum
 :::
 
 :::figure left 360                    a captioned picture, floated left, 360px
-![alt](/api/files/<node-id>/content)
-The caption
+![The caption](/api/files/<node-id>/content){align=center}
 :::
+
+![The caption](url){width=300}        the {…} makes bracket text a caption; width/align size and place it
 
 > [!NOTE] Optional title              a callout: note, tip, important, warning, caution
 > The body.
