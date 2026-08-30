@@ -112,6 +112,61 @@ pages. It gets deliberate ordering (a category has none), prose around the list,
 node to share instead of fifty. Pages for individual collectibles remain exactly what they
 should be — an upgrade for the handful you care about, filed in whatever category you like.
 
+## Variants are nested items, because the roster is ragged
+
+A sprite is not one collectible. Each carries Base, Gold and Cheat Master, so "have you got
+Sonic" has three answers, and a tick has to be able to say which.
+
+The tempting fix is to declare the variants once on the fence and apply them to every item —
+and the worked example is exactly why that fails. Sources disagree about whether Gold is in
+the game yet; Storm Scout is held back for a Sprite Day and has none of its variants
+obtainable; the five Design-a-Sprite winners arrive across the season and need not carry the
+same set. **The roster is ragged**, and a uniform declaration would be a lie about it from
+the first week.
+
+So a variant is a nested item, which the dialect already has (`markdown.md`: "Bulleted
+list — `- item`, nested by indentation"):
+
+```markdown
+:::collection Override sprites
+- Sonic
+  - Base
+  - Gold
+  - Cheat Master
+- [Klombo](node://0193…)
+  - Base
+  - Gold
+  - Cheat Master
+- Storm Scout
+  - Base
+:::
+```
+
+This keeps every property the flat design had. Variants are **optional per item**, exactly as
+pages are: an item with no children is a plain item and stays one line. Identity extends the
+rule already stated rather than replacing it — a variant is keyed by its parent plus its own
+text, or by its parent plus a node id where it has one, so renaming "Cheat Master" orphans
+only that rung and only for items that never got a page. And a ragged item is expressible
+without ceremony: Storm Scout lists the one variant it has.
+
+Two consequences worth planning for.
+
+**The denominator changes.** Eleven sprites at three variants each, plus one at one, is
+thirty-four collectibles across twelve lines. Every count in the interface has to be of
+collectibles, not lines, or the progress it reports is fiction.
+
+**A row is now a group.** The grid shows an item's row with a three-segment indicator per
+person — how much of that item each of them holds — and expands to the variant rows on
+demand. Collapsed, the list reads at twelve rows, which is what makes it scannable; expanded
+is where the ticking happens. Ticking a parent row is deliberately *not* a control: "give me
+all three" is a different statement from the three ticks it would stand in for, and the one
+place this design must not guess is what somebody has.
+
+The alternative considered and rejected was flattening — `- Sonic (Gold)` as its own line,
+thirty-four lines with the structure carried in a naming convention. It works today with no
+design at all, and it loses the only question anyone asks a variant list: how close am I to
+finishing this one.
+
 ## Where a tally lives
 
 **Ownership is the path**, so a tally lives under its owner's root:
@@ -249,62 +304,52 @@ enumeration question, so a tally cannot name an **unlisted** catalogue that way 
 
 No new relation, no new table, no new visibility rule, no new sidecar. One new construct.
 
-## The anonymous half of the ask
+## Signed out: read-only, or counted — not the thing in between
 
-The rule this meets is `AGENT.md`'s: *an API endpoint is authenticated unless it says
-`.AllowAnonymous()`, and no write ever does.* Underneath it sits a structural fact that is
-easier to miss and matters more: **ownership is the path, and a signed-out visitor has no
-root.** Their file has nowhere on disk to live without inventing an owner for it.
+An earlier draft had a third answer, and it was wrong. Signed-out visitors were to tick
+freely into their own browser's `localStorage`, seeing everyone's shared columns while
+contributing to none of them — the same mechanism that already keeps an anonymous reader's
+place in a book.
 
-So this comes in two tiers, and the first one is most of the value.
+The mechanism is fine; using it here is not. In a grid where every other column is a real
+person's real ticks, a checkbox that writes to nobody but this browser is **a control that
+misrepresents itself**. It looks exactly like the ones that count, it feels like joining in,
+it contributes nothing, and it is gone when the browser is cleared. A reading position can
+be quietly local because nobody else was ever going to see it. A column in a shared grid is
+the opposite kind of thing.
 
-### Ticking stores nothing
+So it is one or the other.
 
-A signed-out visitor to a public catalogue ticks whatever they like, their ticks live in
-their own browser, and they see their own column plus every shared column. This is exactly
-how a signed-out reader's place in a book is already kept — written as the fallback the
-server never is, read only when the server had nothing — so it needs no new concept, no
-storage, no rate limit, and no spam story.
+### Read-only (recommended for v1)
 
-For "let me check off sprites on someone's public list", this is the whole feature. It
-should ship first and by itself.
+A signed-out visitor sees the list and every shared column, and has no checkbox at all. In
+place of one, a plain invitation to sign in, and — where the owner has allowed it — to
+start a guest tally.
 
-### Publishing your column is a second, deliberate act
+Costs nothing, bends no rule, adds no abuse surface, and is honest: nothing on the screen
+claims to record something it does not. What it gives up is that a public list is a thing
+you look at rather than a thing you join.
 
-The part localStorage cannot do is show your progress to everybody else. Make that an
-explicit "share my list", which mints a guest tally under the **catalogue owner's** root:
+### Counted anonymously
 
-```
-alice/Collections/Override sprites.guests/<slug>.md
-```
+The design is the guest tally: a hashed capability token scoped to one node, its file under
+the **catalogue owner's** root (ownership is the path, and a visitor has no root of their
+own), off by default per catalogue and per instance, with caps on tallies and bytes, the
+existing anonymous rate limiter, untrusted display names, and a plain warning that losing
+the token loses the list. Never the node id as the secret: the aggregate works by
+enumerating exactly those links and would hand out every guest's write key with it.
 
-Alice owns those files because they sit in her tree — she is hosting a guestbook. They are
-in her backup, count against her storage, and are hers to delete. Ownership-is-the-path
-stays literally true and nobody had to invent a rootless user.
+This is the version where a public collectible list is genuinely communal, and it is the
+single largest piece of work in this proposal — the only piece that amends a rule that does
+not bend, from *no write is ever anonymous* to *no write is ever unauthenticated*, where a
+capability carrying no identity still counts as authentication.
 
-Because promotion is deliberate and rate-limited, a drive-by visitor creates nothing: the
-ambient spam surface for the common case is zero.
+### Why the order is read-only first
 
-**The write is authorized; it just carries no identity.** Mint a hashed capability token
-scoped to that one node — `ApiKeys` narrowed to a single node rather than a new
-authentication concept, and `ApiKeys` is already a table-only exception, so the shape is
-precedented. The rule then reads *no write is ever unauthenticated*, where a capability
-carrying no identity still counts. That is a real amendment to a rule that doesn't bend and
-belongs in `DECISIONS.md` as one.
-
-**Do not reuse the node id as the secret.** `Unlisted` makes a node's id the secret for
-*reads*, and it cannot be reused here: a guest tally links to the catalogue, and the
-aggregate column works by enumerating exactly those links — so the feature that displays
-everyone's progress would hand out every guest's write key with it. Separate token, hashed
-at rest, shown once.
-
-**Controls that ship with it, not after:** off by default per catalogue plus an instance
-switch beside `Sharing.AllowPublic`; caps on guest tallies per catalogue and bytes per
-tally; the anonymous limiter, which partitions on client address and behind a proxy means
-`X-Forwarded-For` trusted from any peer — the loopback bind is what stops spoofing, so this
-is another reason not to publish the port wider; guest display names treated as untrusted
-text from the open internet, length-capped and removable by the owner; and a plain warning
-at mint time that losing the token loses the list.
+Going from read-only to counted is purely additive: guest columns appear beside the tallies
+already there, and nothing already written changes meaning. Going the other way — shipping
+guest tallies and later regretting the moderation surface — is not. Ship the honest cheap
+one, and turn the other on deliberately.
 
 ## Sharing a catalogue with everyone who can sign in
 
@@ -378,8 +423,10 @@ docs with "two people" as their justification, and that premise has changed:
    only if a catalogue is ever linked somewhere busy.
 
 Settled since the first draft: items are text with optional node links rather than mandatory
-pages; the catalogue is a page rather than a category; a tally is recognized structurally
-rather than flagged.
+pages; variants are nested items rather than a set declared once; the catalogue is a page
+rather than a category; a tally is declared by the fence rather than inferred; and an
+"everyone who can sign in" reach exists now, so a group-shared list no longer has to choose
+between twenty grants and the open internet.
 
 ## Sources for the worked example
 
