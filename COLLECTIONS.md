@@ -296,6 +296,14 @@ than "we are on our own":
   It is still not v1: the fence renders as a titled card over the plain list and is edited
   as source, exactly as an aside is.
 
+**The one thing worth asking slopedit for** is a block *range* on the render path —
+`WriteBody(doc, options, firstBlock, blockCount)`, and `FirstBlock`/`BlockCount` on
+`DocumentHtmlView`. With it, the read view stays one document with a hole in it: one
+outline, one footnote sequence, one fold state, one chrome pass. Without it we take the
+sub-document route above and pay for it four times over, in exactly the four features
+Gatherum leans on hardest. Nothing else is wanted from upstream — and specifically not a
+canvas widget API, which the editor-side card does not need.
+
 Worth noting for the "ordinary checklists keep working" promise: `RichDocument.ToggleTask(int
 row)` is already a first-class document operation, so a task item in the editor is
 interactive today and stays that way. That is the shared-state checkbox this design is
