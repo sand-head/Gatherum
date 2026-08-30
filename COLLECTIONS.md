@@ -296,23 +296,47 @@ than "we are on our own":
   It is still not v1: the fence renders as a titled card over the plain list and is edited
   as source, exactly as an aside is.
 
-**Upstream, slopedit is getting a Blazor widget block** — its author's decision, declared
-from a Markdown extension. The shape is slopedit's to design; what Gatherum owes it is an
-honest account of the use case, and what Gatherum has to check of whatever lands:
+**Upstream landed it: slopedit 2.7.0 has widget blocks**, and Gatherum is on it. A host names
+the tags it claims and `DocumentHtmlView` renders those runs as components of its own:
 
-- **The content stays live.** Item text goes into search text and mentions inside items make
-  `NodeLink` rows, so a widget that treats its run as opaque payload would quietly cost us
-  indexing and backlinks for everything inside a collection.
-- **A tick is not an edit of the open document.** It writes to the reader's tally, a
-  different node — so if widget interaction registered as a document change, Gatherum would
-  dirty the catalogue, autosave a version nobody asked for, and report the reader as editing
-  it.
-- **The grid changes height in use**, since expanding a row reveals its variants.
+```razor
+<DocumentHtmlView Grid="doc" Theme="…" Widgets="widgets" />
 
-Read-versus-edit stays part of it, for a reason of meaning rather than capability: a live grid
-in the editor would be wrong even if free, because editing the catalogue means editing the
-shared list while the ticks live in each reader's separate file. Edit the source, read the
-widget.
+private readonly Dictionary<string, RenderFragment<DocumentWidget>> widgets = new()
+{
+    [CollectionExtension.Tag] = widget => @<CollectionWidget Widget="widget" />,
+};
+```
+
+The declaration is `Block.Tag` — the label a `MarkdownBlockExtension` already stamps so it can
+recognize its own blocks on the way back out — so nothing new was added to the document to
+say a run is a widget, and a run is consecutive blocks sharing a tag, which is the rule the
+extension's writer already used. `DocumentWidget` hands the fragment the run's blocks
+(`Document`, `Tag`, `FirstBlock`, `BlockCount`, `Blocks`), and the seam underneath is
+`RichHtmlWriter.WriteSegments` — markup, a hole, markup — with `RichHtmlOptions.WidgetTags`
+naming the claimed runs and `BodyRootAttributes` for the root the caller supplies.
+
+Everything this design needed, it has:
+
+- **The blocks stay blocks.** The fence's body was parsed by the ordinary parser, so item text
+  still reaches search and a `[[wiki link]]` inside an item is still a real link row. A widget
+  is a *rendering* of a run on one surface, not a different kind of thing standing where it
+  was.
+- **Widgets are a reading-view feature.** The canvas paints the same run as blocks wearing the
+  card its extension declared, which is what we wanted to see while rearranging a shared list.
+  It also means a tick can never register as an edit of the open document, and the canvas
+  never has to place a row whose height is the browser's business.
+- **Links inside a widget are the host's own.** `OnLinkActivated` claims only the anchors the
+  view itself emitted, so `node://` routing inside the grid is wired the way we wire
+  everything else.
+- **`WriteBody` ignores the claim** and emits the blocks, so a static export holds the
+  catalogue rather than a gap where one was.
+
+Two behaviours to design around rather than discover. A tagged run **inside a float** renders
+as blocks, not a widget — an aside is a column, and a column with a hole in it is neither — so
+a collection inside an `:::infobox` is a plain list. And a collapsible section holding a
+widget **keeps its chevron rather than folding**, so the fold interaction stays available
+without a component being folded out of the page.
 
 Worth noting for the "ordinary checklists keep working" promise: `RichDocument.ToggleTask(int
 row)` is already a first-class document operation, so a task item in the editor is
