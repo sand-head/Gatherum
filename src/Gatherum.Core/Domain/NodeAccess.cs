@@ -22,6 +22,16 @@ public enum AccessMode
     /// <summary>Anyone on the internet, unauthenticated, and listed. A publishing
     /// gesture.</summary>
     Public,
+
+    /// <summary>Everyone this instance has authenticated, listed — and nobody else. The
+    /// mode for a wiki shared by a group: one gesture instead of one grant per person,
+    /// without the internet being invited.
+    ///
+    /// Declared last rather than in its conceptual place between <see cref="Shared"/> and
+    /// <see cref="Unlisted"/> because the database stores this enum by ordinal, and
+    /// inserting a value would silently renumber every access already recorded. The
+    /// sidecar writes it by name and does not care; the rows do.</summary>
+    Authenticated,
 }
 
 /// <summary>How far a node reaches past the people explicitly given access — its owner
@@ -55,13 +65,31 @@ public static class AccessModes
 {
     /// <summary>How far a declaration reaches on its own, before inheritance.
     /// <see cref="AccessMode.Shared"/> reaches nobody: it names people, and the grant
-    /// closure is where naming people is recorded.</summary>
+    /// closure is where naming people is recorded. Neither does
+    /// <see cref="AccessMode.Authenticated"/>: this scale is what the *anonymous* internet
+    /// gets, and admitting signed-in readers is <see cref="ListsToSignedIn"/> instead.</summary>
     public static NodeReach Reach(this AccessMode mode) => mode switch
     {
         AccessMode.Public => NodeReach.Listed,
         AccessMode.Unlisted => NodeReach.WithLink,
         _ => NodeReach.None,
     };
+
+    /// <summary>Whether a declaration lets every signed-in reader enumerate the node.
+    ///
+    /// This is a second axis rather than another rung on <see cref="NodeReach"/>, because
+    /// the two are not comparable: <see cref="NodeReach.WithLink"/> admits anonymous
+    /// strangers holding an id and hides the node from every listing, while this admits
+    /// nobody anonymous and lists the node to everybody else. Forced onto one ordered
+    /// scale, inheritance — which is a maximum — would have to discard one of them, and an
+    /// unlisted page inside an authenticated directory would silently vanish from the
+    /// listings of the very people the directory was shared with.
+    ///
+    /// <see cref="AccessMode.Public"/> is deliberately not included: a public node already
+    /// reaches everyone through <see cref="NodeReach.Listed"/>, and routing it through here
+    /// as well would let it outlive <c>Sharing.AllowPublic</c>, whose documented meaning is
+    /// that a node claiming to be public is treated as private by every query.</summary>
+    public static bool ListsToSignedIn(this AccessMode mode) => mode == AccessMode.Authenticated;
 }
 
 /// <summary>One name on one node's access block — the owner's own declaration, read from

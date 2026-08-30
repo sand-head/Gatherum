@@ -46,6 +46,8 @@ claude mcp add --transport http gatherum http://localhost:5140/mcp \
 | `list_categories` | `matching?` | The category tree in path order, with member counts |
 | `browse_category` | `path`, `deep?` | The category, its ancestry, its subcategories and its nodes |
 | `get_backlinks` | `id` | Nodes linking to the given node |
+| `get_list` | `id` (catalog or tally), `name?` | A shared list's rows, how many answered each, and — a poll excepted — who |
+| `answer_list` | `id`, `key`, `answered?`, `name?` | The list again, with your own tally rewritten |
 
 ### Search
 
@@ -60,6 +62,31 @@ pass `mode=text` when the exact spelling is the point — an identifier, a filen
 phrase you are quoting. `mode=semantic` asks for meaning alone. If embeddings are turned
 off, or the owner has pointed Gatherum at an endpoint that is unreachable, every mode
 still answers from full-text search: a search never fails because a model is down.
+
+### Shared lists
+
+A `:::collection` fence on a page declares a **catalog** — the rows everyone answers.
+A
+fence naming another node *tracks* it, which makes that page a **tally**: one person's
+record of what they have. `get_list` fuses them, and answers the same grid
+whether it is asked of the catalog or of any tally that tracks it.
+
+Every row carries the `key` an answer names it by, so read the list before writing to it. A
+row with variants nested under it is a group and cannot be answered — its variants can,
+because "give me all three" is a different statement from the three answers it stands in
+for. `collected` counts variants rather than lines, which is the only number a progress
+report may be made of.
+
+A `:::poll` answers with the totals and the caller's own column only — it reports how
+many picked each option, never who. That is a courtesy rather than a guarantee: every
+answer is still a file its owner can share.
+
+`answer_list` writes the caller's own tally, creating it under `Lists/` the
+first time and never touching anybody else's — a tally is a node, and a node is written
+by its owner. Answering is joining in: whoever may read the list sees every column on it,
+including the caller's, and no separate sharing gesture is needed. What a tally's own
+access still governs is its *page* — a column in the grid is not a license to open the
+file behind it, nor to find it in a tree or a search.
 
 ### Bookmarks
 

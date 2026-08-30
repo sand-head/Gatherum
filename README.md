@@ -1,6 +1,6 @@
 # Gatherum
 
-A self-hosted, web-first knowledge base for two people, built on one idea: **pages and
+A self-hosted, web-first knowledge base for a person or a group, built on one idea: **pages and
 files are the same kind of thing.** Every item is a *node* — it has a title, a place in
 one tree, categories, links, backlinks, version history, and searchable text. A page is
 simply a node whose file is Markdown; a fic chapter, a Podman quadlet, a PDF, and a
@@ -24,6 +24,19 @@ page-turner.
   around, and `> [!NOTE]` callouts. All of it is plain Markdown in the file, round-tripped
   losslessly, and an Insert menu writes the fences for you. Links go somewhere: a mention
   or a wiki link opens the node it names, an external link leaves the app.
+- **Shared lists**: a `:::collection` fence turns a list into something a group
+  works rather than reads — the page declares what exists to collect, each participant
+  keeps their own tally as a page of their own, and the reading view draws the grid of
+  who has what. Share the list and answering it is joining in: whoever can read the list
+  sees every column on it, with no second gesture to publish your own answers — while the
+  tally itself stays its owner's file, so a column is not a license to open the page
+  behind it. A page per collectible is optional and worth it for the few worth writing
+  about, ragged rosters are expressible (variants nest, per item), and a signed-out
+  visitor to a public list reads it rather than being handed a checkbox that records
+  nothing. Ordinary `- [ ]` checklists are untouched — they still mean *it is done*. And the same
+  grid asks other questions: `:::availability` is who can make which night and `:::poll`
+  is who picked which option, because a row per thing and a column per person is one
+  shape whatever the noun.
 - **Files**: drag-drop or picker upload anywhere in the tree, content-addressed
   storage (SHA-256) on disk, inline previews (images, PDF, video, audio — and EPUBs
   open in a paginated reader, chapter by chapter, links and all), descriptions,
@@ -84,8 +97,8 @@ page-turner.
 ## Documentation
 
 Every copy of Gatherum serves its own manual at **`/docs`** — what a node is, the
-Markdown dialect pages are written in, categories, search, sharing, the REST API, the
-MCP server, and configuration. It is built from
+Markdown dialect pages are written in, categories, shared lists, search, sharing,
+the REST API, the MCP server, and configuration. It is built from
 [`src/Gatherum.Web/Docs`](src/Gatherum.Web/Docs) and embedded in the assembly, so it
 always describes the version that is running.
 
@@ -196,6 +209,9 @@ that reason. If you publish the port more widely than that, set
 | `Gatherum__Oidc__ClientSecret` | *(empty)* | OIDC client secret |
 | `Gatherum__Oidc__Scopes` | `openid profile email` | Requested scopes |
 | `Gatherum__Oidc__RequestOfflineAccess` | `false` | Additionally request `offline_access` (only if your IdP allows it) |
+| `Gatherum__Oidc__GroupsClaim` | `groups` | Claim the provider puts group names in |
+| `Gatherum__Oidc__RequiredGroup` | *(empty)* | Sign-in requires this group; empty admits every account the provider authenticates |
+| `Gatherum__Oidc__AdminGroup` | *(empty)* | Membership grants admin on every sign-in; empty leaves it with the first account seen |
 | `Gatherum__Analysis__Endpoint` | *(empty)* | Base URL of an OpenAI-compatible API (e.g. `http://localhost:8080/v1`); empty leaves multimedia analysis off |
 | `Gatherum__Analysis__Model` | *(empty)* | Model that reads images and writes summaries |
 | `Gatherum__Analysis__AudioModel` | *(falls back to `Model`)* | Model that transcribes speech, if a different one has the ears |
@@ -286,6 +302,13 @@ identity_providers:
 Then set `Gatherum__Oidc__Authority=https://auth.example.org`, the client id, and the
 **plaintext** client secret on the Gatherum container.
 
+To admit only one Authelia group, add `groups` to the client's `scopes` above **and** to
+`Gatherum__Oidc__Scopes`, then set `Gatherum__Oidc__RequiredGroup=gatherum`. The gate fails
+closed: if the claim never arrives — the usual cause being the scope missing from one of
+those two places — nobody is admitted, and the log line says so by name. Add
+`Gatherum__Oidc__AdminGroup` to have a second group decide who is an admin, checked afresh
+at every sign-in.
+
 ## Backups
 
 **One thing holds your knowledge base**: the directory behind
@@ -329,5 +352,5 @@ build plan, [DECISIONS.md](DECISIONS.md) for recorded trade-offs, and
 [STATUS.md](STATUS.md) for what ships and what's stubbed.
 
 Icons are [Lucide](https://lucide.dev), ISC — mostly inline in the markup, and as files
-under `src/Gatherum.Web/wwwroot/icons/` (with the pack's licence) where a stylesheet has
+under `src/Gatherum.Web/wwwroot/icons/` (with the pack's license) where a stylesheet has
 to draw one.

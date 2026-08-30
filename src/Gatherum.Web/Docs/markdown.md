@@ -249,6 +249,92 @@ Each renders as a tinted card in its kind's accent, with the title line inked to
 - **An unknown kind stays a plain quote.** `> [!nope] …` is a block quote that happens
   to start with a bracket, which is exactly what it looks like.
 
+## Shared lists — `:::collection`, `:::availability`
+
+A list people answer against, each keeping their own answer. Everything about it is in
+[shared lists](/docs/lists); the syntax is one fence with two spellings.
+
+A fence whose argument is a **name** declares the list — the catalog, the rows
+everyone answers:
+
+```markdown
+:::collection Override sprites
+- Sonic
+  - Base
+  - Gold
+- [Klombo](node://8f6b1f5e-9a5a-4a2e-9d16-6b8a1c2d3e4f)
+- Storm Scout
+  - Base
+:::
+```
+
+A fence whose argument **names another node** tracks that node's list, which makes this
+page a tally — one person's record of what they have:
+
+```markdown
+:::collection [[Override sprites]]
+- [x] Sonic — Gold, Sprite Day 2
+- [ ] Storm Scout
+:::
+```
+
+Inside the fence everything is vocabulary from further up this page: bulleted items,
+nested one level for variants, task marks for answers, mentions and wiki links.
+
+**The word the fence opens with says what an answer means.** `collection` asks who *has*
+each row, `availability` who *can make* it, `poll` who *picked* it. Same grid, same
+rules, different nouns:
+
+```markdown
+:::availability Game nights
+- Fri Oct 3
+- Fri Oct 10
+- Fri Oct 17
+:::
+```
+
+```markdown
+:::availability [[Game nights]]
+- [x] Fri Oct 3
+- [ ] Fri Oct 10
+- [x] Fri Oct 17
+:::
+```
+
+```markdown
+:::poll Where for dinner?
+- Thai
+- Pizza
+- Sushi
+:::
+```
+
+A **poll is one answer each**: picking a row takes back the last one. It also reports how
+many picked each option without naming anybody, where the other words name everyone — see
+[shared lists](/docs/lists) for what that does and does not promise.
+
+- **An item is a line of text, and a page for it is optional.** A plain item is matched
+  by its text; one that links a node is matched by that id, and so survives a rename.
+  Answers made against `Sonic` keep counting once Sonic becomes `[Sonic](node://…)`.
+- **Variants are nested items**, one level, and optional per item: a sprite held back
+  with only its base form lists only that.
+- **Only a variant can be answered** where an item has any. "Give me all three" is a
+  different statement from the three answers it would stand in for.
+- **A trailing `—` makes the rest a note**: `- [x] Sonic — Gold, Sprite Day 2`. `--`
+  works too, for a keyboard without an em dash.
+- **A tally naming its catalog with `[[Title]]` resolves by title when it is saved**,
+  and a title is a search — so that spelling cannot find an **unlisted** catalog. A
+  `node://` mention can, because an id is permission and a title is a search.
+- Where a page declares more than one list, a tally says which after the link:
+  `:::collection [[Season 4]] Sprites`.
+- Ordinary checklists elsewhere are untouched. `- [ ]` outside a collection still means
+  *it is done* — shared state, one answer for everybody — which is the commoner kind in
+  a wiki and the reason this construct is opt-in.
+
+Reading the page draws the fence as a grid: the catalog's rows, a column per
+participant, checkboxes in your own. Editing it shows the list itself, on a card — the
+source is what you want while rearranging a roster.
+
 ## Footnotes
 
 Pandoc's footnotes: a superscript marker in prose, and the note on a line of its own —
@@ -375,6 +461,23 @@ systemctl --user start gatherum
 
 > [!NOTE] Optional title              a callout: note, tip, important, warning, caution
 > The body.
+
+:::collection Override sprites        a shared list: the catalog everyone answers
+- Sonic
+  - Gold                              a variant, nested one level
+:::
+
+:::collection [[Override sprites]]    a tally: one person's answers against that catalog
+- [x] Sonic — a note after the dash
+:::
+
+:::availability Game nights           the same grid, asking who can make each row
+- Fri Oct 3
+:::
+
+:::poll Where for dinner?             the same grid again, one answer each
+- Thai
+:::
 
 x^2^  H~2~O                           superscript, subscript
 Prose.[^key]                          a footnote marker — readers see a derived number

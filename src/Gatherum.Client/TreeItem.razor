@@ -62,6 +62,16 @@
                     </svg>
                 </span>
             }
+            else if (Node.ListedToSignedIn)
+            {
+                <span class="node-authenticated node-badge" title="Authenticated — everyone signed in to this Gatherum can read this">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                         stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                        <circle cx="12" cy="7" r="4" />
+                    </svg>
+                </span>
+            }
             else if (Node.Access == "Shared")
             {
                 <span class="node-shared node-badge" title="Shared with someone">
@@ -103,9 +113,13 @@
             @if (Node.Owned)
             {
                 <div class="menu-group" role="group" aria-label="Who can reach this">
-                    <button class="@(Node.Reach == "None" ? "chosen" : null)"
+                    <button class="@(Node.Reach == "None" && !Node.ListedToSignedIn ? "chosen" : null)"
                             @onclick='() => Tree.SetAccessAsync(Node, "Private")'>
                         Private
+                    </button>
+                    <button class="@(Node.Access == "Authenticated" ? "chosen" : null)"
+                            @onclick='() => Tree.SetAccessAsync(Node, "Authenticated")'>
+                        Authenticated — everyone signed in here
                     </button>
                     <button class="@(Node.Reach == "WithLink" ? "chosen" : null)"
                             @onclick='() => Tree.SetAccessAsync(Node, "Unlisted")'>

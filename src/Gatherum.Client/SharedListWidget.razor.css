@@ -1,0 +1,398 @@
+/* A shared list on the reading surface.
+
+   The grid is a table because that is what it is — a row per collectible, a column per
+   person — and a table gets a screen reader, find-in-page and native selection for
+   nothing. It sits on the app's sheet (--surface inside --outline) rather than being a
+   tonal inset like an aside's card: an aside is a note beside the prose, this is a panel
+   the reader works, and the two should not be drawn as the same object.
+
+   It scrolls inside its own box rather than pushing the article sideways: a roster with
+   a dozen participants is wide, and a page that scrolls horizontally is broken. */
+
+.shared-list {
+    margin: 22px 0;
+    background: var(--surface);
+    border: 1px solid var(--outline);
+    border-radius: var(--radius);
+    overflow: hidden;
+    font-family: var(--font-ui);
+}
+
+.list-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 13px 18px;
+    border-bottom: 1px solid var(--outline-dim);
+}
+
+.list-name {
+    flex: 1;
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 500;
+    line-height: 1.2;
+}
+
+.list-count {
+    color: var(--on-surface-dim);
+    font-size: 0.78rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.grid-scroll { overflow-x: auto; }
+
+.grid {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.grid thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding: 9px 12px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--outline-dim);
+    text-align: center;
+    vertical-align: bottom;
+    font-weight: 500;
+    font-size: 0.72rem;
+    color: var(--on-surface-dim);
+}
+
+.grid thead th.item-col {
+    text-align: left;
+    padding-left: 18px;
+    min-width: 190px;
+    width: 100%;
+}
+
+/* Name over a meter over a count. The header is where "who is ahead" is asked, so it
+   answers rather than only labelling — and the meter reads at a glance in a way three
+   numbers side by side never do. */
+.person {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    min-width: 74px;
+}
+
+.person .who {
+    color: var(--on-surface);
+    font-weight: 500;
+    font-size: 0.75rem;
+    max-width: 12ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.person .have {
+    font-variant-numeric: tabular-nums;
+    font-size: 0.69rem;
+}
+
+.person .why {
+    font-size: 0.69rem;
+    max-width: 12ch;
+    line-height: 1.3;
+}
+
+.meter {
+    width: 46px;
+    height: 3px;
+    border-radius: 2px;
+    background: var(--outline-dim);
+    overflow: hidden;
+}
+
+.meter i {
+    display: block;
+    height: 100%;
+    border-radius: 2px;
+    background: var(--on-surface-dim);
+}
+
+/* The reader's own column, tinted the whole way down so a glance finds it without
+   reading a heading. */
+.col-you { background: color-mix(in srgb, var(--primary) 6%, transparent); }
+.col-you .who { color: var(--primary); }
+.col-you .meter i { background: var(--primary); }
+
+.col-invite .who { color: var(--link); text-decoration: none; }
+.col-invite .who:hover { text-decoration: underline; }
+
+.grid tbody tr { border-bottom: 1px solid var(--outline-dim); }
+.grid tbody tr:last-child { border-bottom: 0; }
+.grid tbody tr:hover { background: var(--hover); }
+
+.grid td {
+    padding: 7px 12px;
+    text-align: center;
+}
+
+.grid th.item {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 12px 8px 18px;
+    text-align: left;
+    font-weight: 400;
+    color: var(--on-surface);
+}
+
+.grid tr.group th.item { font-weight: 500; }
+
+/* A variant reads as a rung under its item: indented, dimmer, smaller, on a wash that
+   groups the run without needing a rule around it. */
+.grid tr.variant { background: color-mix(in srgb, var(--on-surface) 3%, transparent); }
+
+.grid tr.variant th.item {
+    padding-left: 47px;
+    color: var(--on-surface-dim);
+    font-size: 0.8rem;
+}
+
+td.mark.you, th.col-you { background: color-mix(in srgb, var(--primary) 6%, transparent); }
+
+/* An item that earned a page links to it, and wears the page's own glyph — the payoff
+   for the optional half of this construct. One the reader may not open is plain text. */
+.item-link { color: var(--link); text-decoration: none; }
+.item-link:hover { text-decoration: underline; }
+
+.has-page {
+    display: inline-grid;
+    place-items: center;
+    flex-shrink: 0;
+    color: var(--on-surface-dim);
+}
+
+.has-page svg { width: 12px; height: 12px; }
+
+/* Whatever the catalog said after the item's name. It qualifies the row rather than
+   continuing it, so it is set apart instead of run on. */
+.note {
+    flex-shrink: 0;
+    padding: 1px 7px;
+    border: 1px solid var(--outline);
+    border-radius: var(--radius-full);
+    color: var(--on-surface-dim);
+    font-size: 0.66rem;
+    white-space: nowrap;
+}
+
+.disclose {
+    position: relative;
+    flex-shrink: 0;
+    display: inline-grid;
+    place-items: center;
+    width: 18px;
+    height: 18px;
+    /* app.css gives every button a 44px floor on a coarse pointer, which is the right
+       rule and the wrong shape for a control this size: a 44px-tall chevron would stretch
+       every row. The floor is met by the hit area below instead of by the glyph. */
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 3px;
+    background: none;
+    color: var(--on-surface-dim);
+    cursor: pointer;
+    transition: transform 0.12s ease;
+
+    &[aria-expanded="true"] { transform: rotate(90deg); }
+    &:disabled { visibility: hidden; cursor: default; }
+    &:hover:not(:disabled) { color: var(--on-surface); }
+    &:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+}
+
+.disclose svg { width: 13px; height: 13px; }
+
+/* A group's cell reports and does not offer: one segment per variant, filled for the
+   ones that person holds. Answering a parent would stand in for statements nobody made. */
+.seg {
+    display: inline-flex;
+    gap: 2px;
+    align-items: center;
+}
+
+.seg i {
+    display: block;
+    width: 9px;
+    height: 9px;
+    border-radius: 2px;
+    background: var(--outline);
+}
+
+.seg i.on { background: var(--ok); }
+.mark.you .seg i.on { background: var(--primary); }
+
+/* Somebody else's answer: a mark, never a control — and never a disabled checkbox, which
+   would read as "you may not" instead of "this isn't yours". */
+.answer {
+    display: inline-grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+}
+
+.answer svg { width: 15px; height: 15px; }
+.answer.yes { color: var(--ok); }
+.answer.no { color: var(--outline); }
+
+/* The reader's own: a real control, drawn rather than borrowed, so it matches the marks
+   beside it at every size and in both modes. */
+.box {
+    appearance: none;
+    position: relative;
+    display: inline-grid;
+    place-items: center;
+    box-sizing: border-box;
+    width: 17px;
+    height: 17px;
+    /* Both of these are app.css's own doing — the padding every field gets, and the
+       44px floor a coarse pointer gets — and neither belongs on a 17px box. The floor
+       is met by the hit area below. */
+    padding: 0;
+    min-height: 0;
+    margin: 0;
+    vertical-align: middle;
+    border: 1.5px solid var(--on-surface-dim);
+    border-radius: 4px;
+    background: var(--surface);
+    cursor: pointer;
+    transition: background 0.12s ease, border-color 0.12s ease;
+
+    &:hover:not(:disabled) { border-color: var(--primary); }
+    &:checked { background: var(--primary); border-color: var(--primary); }
+    &:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+    &:disabled { cursor: default; opacity: 0.65; }
+}
+
+.box:checked::after {
+    content: "";
+    width: 9px;
+    height: 5px;
+    border: 2px solid var(--on-primary);
+    border-top: 0;
+    border-right: 0;
+    transform: rotate(-45deg) translate(1px, -1px);
+}
+
+/* A finger cannot reliably hit 17px, and app.css is right to say so — but the answer for
+   a control this size is a bigger target, not a bigger glyph. Transparent, so the grid
+   looks identical and only the reach changes. */
+@media (pointer: coarse) {
+    .box::before, .disclose::before {
+        content: "";
+        position: absolute;
+        inset: -13px;
+    }
+}
+
+.notice {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 11px 18px;
+    border-top: 1px solid var(--outline-dim);
+    background: color-mix(in srgb, var(--warn) 10%, transparent);
+    font-size: 0.8rem;
+    color: var(--on-surface-dim);
+
+    & svg { width: 15px; height: 15px; flex-shrink: 0; margin-top: 1px; color: var(--warn); }
+    & strong { display: block; margin-bottom: 2px; font-weight: 500; color: var(--on-surface); }
+    & .orphans { color: var(--on-surface); }
+}
+
+.list-foot {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin: 0;
+    padding: 11px 18px;
+    border-top: 1px solid var(--outline-dim);
+    color: var(--on-surface-dim);
+    font-size: 0.78rem;
+}
+
+.list-foot.error { color: var(--danger); }
+
+/* A list that reports totals without naming anybody says so, rather than looking like a
+   grid nobody joined. Sized here because an inline SVG with no width fills whatever it is
+   given, and this one is given a whole panel. */
+.list-foot.secret {
+    align-items: flex-start;
+    gap: 9px;
+    border-top: 1px solid var(--outline-dim);
+}
+
+.list-foot.secret svg {
+    flex-shrink: 0;
+    width: 14px;
+    height: 14px;
+    margin-top: 1px;
+}
+
+.list-foot.secret span { flex: 1; min-width: 0; }
+
+/* How many people answered yes to a row — the question an availability list is read for
+   and the one a poll is. A list read down its rows is a bar chart wearing a table, so the
+   bar gets the width a chart needs rather than the sliver a sparkline gets: it is the
+   thing being compared, and comparing lengths is what eyes are good at. Laid along the
+   row, the count trailing it, so the bars share a baseline and read against each other. */
+.col-tally {
+    min-width: 170px;
+    border-right: 1px solid var(--outline-dim);
+}
+
+.rows-for {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+}
+
+.rows-for .bar {
+    flex: 1;
+    min-width: 0;
+    height: 10px;
+    border-radius: 3px;
+    background: var(--outline-dim);
+    overflow: hidden;
+}
+
+.rows-for .bar i {
+    display: block;
+    height: 100%;
+    border-radius: 3px;
+    background: var(--primary);
+    transition: width 0.18s ease;
+}
+
+.rows-for .n {
+    flex-shrink: 0;
+    min-width: 2ch;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    font-size: 0.78rem;
+    color: var(--on-surface);
+}
+
+/* A one-answer list gets a radio, which is a promise that picking this un-picks the last
+   — and the write keeps it. Same box, round, with a dot instead of a check. */
+.box.round { border-radius: var(--radius-full); }
+
+.box.round:checked::after {
+    width: 7px;
+    height: 7px;
+    border: 0;
+    border-radius: var(--radius-full);
+    background: var(--on-primary);
+    transform: none;
+}

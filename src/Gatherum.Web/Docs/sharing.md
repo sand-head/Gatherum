@@ -4,6 +4,16 @@ Gatherum is private by default. A node nobody has said anything about is its own
 alone, and so is everything under it — which is also what an unprepared directory means
 when Gatherum first scans one.
 
+## Who can sign in
+
+Gatherum authenticates against your identity provider and can be told to admit only one of
+its groups — the usual arrangement for an instance shared by a team. Membership stays the
+provider's to know: it is read from the sign-in and remembered nowhere, so removing somebody
+there removes them here at their next attempt. A second group can carry admin the same way.
+
+Groups decide who gets *in*. They are not a sharing primitive: inside Gatherum, sharing
+names people.
+
 ## Ownership is the path
 
 Whoever owns the root directory a node was found under owns the node. Ownership is read
@@ -20,8 +30,19 @@ written it.
 | --- | --- | --- |
 | **Private** | The owner | — |
 | **Shared** | The owner, plus the people named in its grants | To those people |
+| **Authenticated** | Everyone signed in to this Gatherum | To them |
 | **Unlisted** | Anyone holding the link, without signing in | No |
 | **Public** | Anyone on the internet, without signing in | Yes |
+
+**Authenticated** is the mode for a Gatherum a group shares. It says "everybody with an
+account here", which is one gesture rather than one grant per person, and it never means the
+internet — a signed-out visitor gets nothing at all. Where sign-in is gated on a group at
+the identity provider, this is exactly "everyone in that group".
+
+Authenticated and Unlisted are not degrees of the same thing, which is why they can both be
+true at once: an unlisted page inside an authenticated directory is reachable by a stranger
+holding its link *and* listed to everyone signed in. Access is additive downward, and these
+are two axes rather than two rungs.
 
 **Unlisted** is the interesting one. Everywhere else, "may you reach this?" and "may you
 find this?" have the same answer. An unlisted node breaks them apart: its id is the

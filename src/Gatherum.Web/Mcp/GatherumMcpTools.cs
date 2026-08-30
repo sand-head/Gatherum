@@ -17,6 +17,7 @@ public class GatherumMcpTools(
     CategoryService categories,
     FileService files,
     BookmarkService bookmarks,
+    SharedListService lists,
     SearchService search,
     IHttpContextAccessor httpContext)
 {
@@ -190,6 +191,39 @@ public class GatherumMcpTools(
         var backlinks = await Run(() => nodes.GetBacklinksAsync(UserId, id));
         return backlinks.Select(NodeSummaryDto.From);
     }
+
+    [McpServerTool(Name = "get_list")]
+    [Description("A shared list: the rows a page declares, and how everybody answered " +
+        "them. Ask it of the page that declares the list or of any tally that tracks it — " +
+        "both answer with the same grid. Every row carries the key an answer names it by, " +
+        "and how many people said yes to it; a row with variants is a group, and only its " +
+        "variants can be answered. Columns name who answered what, except on a ':::poll', " +
+        "which reports the totals and your own answer and nobody else's.")]
+    public async Task<SharedListDto> GetList(
+        [Description("The node id of the page declaring the list, or of a tally that " +
+            "tracks it.")]
+        Guid id,
+        [Description("Which list, where the page declares more than one. Defaults to " +
+            "the first.")]
+        string? name = null) =>
+        await Run(async () => SharedListDto.From(await lists.GetAsync(UserId, id, name)));
+
+    [McpServerTool(Name = "answer_list")]
+    [Description("Record — or take back — one answer on your own tally, which is written " +
+        "as a page under your root the first time you answer anything. Never anybody " +
+        "else's: a tally is a node, and a node is written by its owner. Take the key from " +
+        "get_list; only a row with no variants of its own can be answered. On a ':::poll' " +
+        "answering a row takes back the last one, because a poll is one answer each.")]
+    public async Task<SharedListDto> AnswerList(
+        [Description("The node id of the page declaring the list, or of a tally that " +
+            "tracks it.")]
+        Guid id,
+        [Description("The row key, from get_list.")] string key,
+        [Description("True to say yes to it, false to take that back. Default true.")]
+        bool? answered = null,
+        [Description("Which list, where the page declares more than one.")] string? name = null) =>
+        await Run(async () => SharedListDto.From(
+            await lists.SetAsync(UserId, id, key, answered ?? true, name)));
 
     private static NodeKind ParseKind(string kind) =>
         Enum.TryParse<NodeKind>(kind, ignoreCase: true, out var parsed)

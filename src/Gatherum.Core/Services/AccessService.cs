@@ -102,12 +102,13 @@ public class AccessService(GatherumDbContext db, TimeProvider clock, NodeMetadat
         var children = nodes.ToLookup(n => n.ParentId);
 
         var wanted = new Dictionary<(Guid Node, Guid User), AccessRole>();
-        var pending = new Stack<(Node Node, NodeReach Inherited, Dictionary<Guid, AccessRole> Grants)>(
-            children[null].Select(n => (n, NodeReach.None, new Dictionary<Guid, AccessRole>())));
+        var pending = new Stack<(Node Node, NodeReach Inherited, bool InheritedSignedIn,
+            Dictionary<Guid, AccessRole> Grants)>(
+            children[null].Select(n => (n, NodeReach.None, false, new Dictionary<Guid, AccessRole>())));
 
         while (pending.Count > 0)
         {
-            var (node, inheritedReach, inherited) = pending.Pop();
+            var (node, inheritedReach, inheritedSignedIn, inherited) = pending.Pop();
             var carried = node.InheritAccess ? inherited : [];
 
             // Reach is additive downward like the grants are, so it is a maximum: a page
@@ -116,6 +117,13 @@ public class AccessService(GatherumDbContext db, TimeProvider clock, NodeMetadat
             node.Reach = node.InheritAccess
                 ? (NodeReach)Math.Max((int)node.Access.Reach(), (int)inheritedReach)
                 : node.Access.Reach();
+            // The same additive rule on the other axis, where a maximum is an or. Carried
+            // separately precisely because it is not comparable with reach: an unlisted
+            // page inside an authenticated directory is both link-reachable by a stranger
+            // and listed to the people the directory was shared with.
+            node.ListedToSignedIn = node.InheritAccess
+                ? node.Access.ListsToSignedIn() || inheritedSignedIn
+                : node.Access.ListsToSignedIn();
 
             var effective = new Dictionary<Guid, AccessRole>(carried);
             foreach (var grant in grants[node.Id])
@@ -132,7 +140,7 @@ public class AccessService(GatherumDbContext db, TimeProvider clock, NodeMetadat
                 wanted[(node.Id, user)] = role;
 
             foreach (var child in children[node.Id])
-                pending.Push((child, node.Reach, effective));
+                pending.Push((child, node.Reach, node.ListedToSignedIn, effective));
         }
 
         foreach (var entry in existing)

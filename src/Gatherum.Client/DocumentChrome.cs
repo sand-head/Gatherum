@@ -72,6 +72,8 @@ public static class DocumentChrome
                 Aside(blocks, i, end - i, kind, BlockTags.ArgumentsOf(tag), ink, floats, boxes);
             else if (BlockTags.IsCallout(tag))
                 Callout(blocks, i, end - i, BlockTags.ArgumentsOf(tag), ink, boxes);
+            else if (BlockTags.IsSharedList(tag))
+                SharedList(i, end - i, ink, boxes);
             i = end;
         }
 
@@ -143,6 +145,17 @@ public static class DocumentChrome
             BorderWidth: 1f, Padding: CardPad, CornerRadiusPx: CardRadiusPx));
         Recolor(blocks[first], titleInk);
     }
+
+    /// <summary>A shared list, on the surface that edits it: the app's card over the
+    /// plain list, which is the right thing to see while rearranging a shared roster —
+    /// rather than a live grid of other people's data laid over the thing being edited.
+    /// The reading view claims this run as a widget and stands the box down, so the
+    /// decoration declared here is the canvas's alone.</summary>
+    private static void SharedList(int first, int count, ChromeInk ink,
+        List<BlockDecoration> boxes) =>
+        boxes.Add(new BlockDecoration(first, count, Background: ink.CardFill,
+            Border: ink.CardBorder, BorderWidth: 1f, Padding: CardPad,
+            CornerRadiusPx: CardRadiusPx));
 
     /// <summary>Repaint a block's runs, leaving the text and its flags alone. Assigning
     /// only what differs keeps a per-keystroke pass from churning the run list.</summary>

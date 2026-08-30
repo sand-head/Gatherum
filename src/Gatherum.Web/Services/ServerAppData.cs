@@ -1,6 +1,7 @@
 using Gatherum.Client;
 using Gatherum.Core.Domain;
 using Gatherum.Core.Markdown;
+using Gatherum.Core.Services;
 using Gatherum.Infrastructure.Epub;
 using Gatherum.Web.Auth;
 using Microsoft.AspNetCore.Components.Authorization;
@@ -129,7 +130,8 @@ public sealed class ServerAppData(
         var tree = await ops.Nodes(s => s.GetTreeAsync(userId));
         return tree
             .Select(n => new TreeNodeInfo(n.Id, n.ParentId, n.Title, n.MediaType,
-                n.Kind.ToString(), n.Position, n.Access.ToString(), n.Reach.ToString(), n.Owned))
+                n.Kind.ToString(), n.Position, n.Access.ToString(), n.Reach.ToString(),
+                n.ListedToSignedIn, n.Owned))
             .ToList();
     }
 
@@ -235,6 +237,30 @@ public sealed class ServerAppData(
                 .ToList(),
             file);
     }
+
+    public async Task<SharedListInfo> GetSharedListAsync(Guid nodeId, string? name)
+    {
+        var userId = await ViewerIdAsync();
+        return SharedList(await ops.SharedLists(s => s.GetAsync(userId, nodeId, name)));
+    }
+
+    public async Task<SharedListInfo> AnswerAsync(Guid nodeId, string key, bool answered,
+        string? name)
+    {
+        var userId = await UserIdAsync();
+        return SharedList(
+            await ops.SharedLists(s => s.SetAsync(userId, nodeId, key, answered, name)));
+    }
+
+    private static SharedListInfo SharedList(SharedListView view) => new(view.CatalogId,
+        view.CatalogTitle, view.Kind, view.List, [.. view.Rows.Select(Row)],
+        [.. view.Columns.Select(c => new SharedListColumnInfo(c.TallyId, c.OwnerId, c.DisplayName,
+            c.IsViewer, [.. c.Held],
+            [.. c.Orphans.Select(o => new SharedListOrphanInfo(o.Text, o.Note))], c.Count))],
+        view.Participants, view.TallyId, view.CanAnswer, view.Answerable);
+
+    private static SharedListRowInfo Row(SharedListRow row) =>
+        new(row.Key, row.Text, row.NodeId, row.Note, [.. row.Variants.Select(Row)], row.Answers);
 
     public async Task<IReadOnlyList<RelatedInfo>> GetSimilarAsync(Guid nodeId, int limit)
     {

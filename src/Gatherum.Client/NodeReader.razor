@@ -43,6 +43,7 @@
             <DocumentHtmlView Grid="doc" Theme="EditorThemes.For(AppTheme.IsDark)"
                               ContentPadding="@DocumentChrome.PagePaddingPx" TopPadding="0"
                               AllowedUrlSchemes="NodeLinks.ReaderUrlSchemes"
+                              Widgets="widgets"
                               CollapseSectionsBelow="FoldSectionsBelowPx"
                               OnLinkActivated="FollowAsync" AriaLabel="Article" />
         </div>
@@ -84,6 +85,16 @@
     [Parameter, EditorRequired] public string MediaType { get; set; } = "";
 
     private RichDocument? doc;
+
+    /// <summary>The runs this view renders as components of its own rather than as
+    /// prose, keyed by the tag their extension stamped on them. A shared list is the
+    /// one construct in the dialect a reader is meant to <em>use</em>, and slopedit's
+    /// widget blocks are exactly the hole to put it in: the blocks stay blocks, so the
+    /// items still reach search and a link inside one is still a real link, and the
+    /// canvas keeps painting the source — an answer can never be an edit of an open
+    /// document. Built after the parse because a tag carries the fence's own argument
+    /// and an instance marker, which is what keeps two lists on one page apart.</summary>
+    private Dictionary<string, RenderFragment<DocumentWidget>> widgets = new(StringComparer.Ordinal);
     private EditorDocument? sourceDoc;
     private string? unwritten;
     private ElementReference docHost;
@@ -131,6 +142,7 @@
                     SyntaxTheme = EditorThemes.Syntax(AppTheme.IsDark),
                 };
         }
+        ClaimWidgets();
         Outline.JumpRequested += OnJumpRequestedAsync;
         PublishOutline();
         await ResolveWikiLinksAsync();
@@ -209,6 +221,18 @@
         reachable = answer;
         if (NodeLinks.Address(doc, answer, ChromeInk.For(AppTheme.IsDark)))
             StateHasChanged();
+    }
+
+    private void ClaimWidgets()
+    {
+        widgets = new Dictionary<string, RenderFragment<DocumentWidget>>(StringComparer.Ordinal);
+        if (doc is null)
+            return;
+        foreach (var tag in doc.Blocks.Select(b => b.Tag)
+            .Where(BlockTags.IsSharedList).Distinct(StringComparer.Ordinal))
+        {
+            widgets[tag!] = widget => @<SharedListWidget Widget="widget" NodeId="NodeId" />;
+        }
     }
 
     private void PublishOutline()

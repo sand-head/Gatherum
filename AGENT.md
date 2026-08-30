@@ -7,7 +7,7 @@ to drift from.
 
 ## What Gatherum is
 
-A self-hosted knowledge base for two people where **pages and files are the same kind
+A self-hosted knowledge base for a person or a group where **pages and files are the same kind
 of thing**: every item is a `Node` in one tree with categories, links, versions, and
 searchable text — and a page is simply a node whose file is Markdown. One tree, one
 search, one login, one API, plus an MCP server so agents are first-class users.
@@ -44,8 +44,11 @@ auto-login. Migrations: `dotnet ef migrations add <Name> -p src/Gatherum.Infrast
   resolution, `CategoryService` = the taxonomy and what is filed in it, with
   `CategoryIndex` the one-snapshot-per-operation view of its graph,
   `FileService` = bodies/versions/text editing, `BookmarkService` = a URL captured as
-  a file node and captured again on demand), `Markdown/MarkdownContent`
-  and `Markdown/WikiLinkSyntax` (the link conventions, read server-side), the seam
+  a file node and captured again on demand, `SharedListService` = a shared list's
+  catalog fused with every tally of it, and the one write, which is always the
+  caller's own tally), `Markdown/MarkdownContent`,
+  `Markdown/WikiLinkSyntax` and `Markdown/SharedListSyntax` (the conventions a body
+  carries, read server-side without an editor), the seam
   interfaces in `Abstractions/`, `Services/MediaAnalysisQueue` — the hand-off from
   an upload to the background analyzer — and search's two halves: `SearchService` fuses
   them, `EmbeddingService` owns the vector one (passages, reuse, staleness, nearness),
@@ -72,6 +75,7 @@ auto-login. Migrations: `dotnet ef migrations add <Name> -p src/Gatherum.Infrast
   the foot of a page (`NodeCategories`), version panel, file view, and settings keys — plus Gatherum's Markdown dialect, which lives
   here because it is the editor's word: `GatherumMarkdown` (the extension set and the
   only read/write door), `AsideExtension`/`CalloutExtension`/`BlockTags`,
+  `SharedListExtension` and the `SharedListWidget` grid it is read as,
   `DocumentChrome` (floats and decorations derived from tags), `ChromeInk`,
   `DocumentFonts` (the shipped serif, embedded for Skia and served for `@font-face`), `WikiLinks`,
   `NodeLinks` (the padlock a link the reader may not follow wears) and `NodeUrl`. `IAppData` (`AppData.cs`) is their only view of the world —
@@ -119,6 +123,25 @@ fresh DI scope via `Services/AppOperations`.
   misreport the page, and following it would only reach a 404. Locking is the read
   view's alone: it rewrites runs, and a document that can be saved has to write back the
   bytes it was read from.
+- A shared list is two documents, and one mechanism with several words for it — the
+  fence's word (`collection`, `availability`, `poll`) says what an answer *means*, the way a
+  callout's kind does. It decides the wording, whether a row's own total is worth a
+  column, whether a person has one answer or many (`SharedListSyntax.PicksOne`,
+  enforced on the write because the file is what everybody else reads), and whether the
+  grid names who answered what (`NamesAnswers` — a poll does not, withheld in the answer
+  the server builds rather than in the markup, because a name the response still carries
+  is not withheld). `SharedListSyntax.Kinds` parses them and
+  `ListVocabulary` says what each calls things; adding a question is a row in each, and
+  there is no third place. The catalog is a page with a `:::collection`
+  fence; a tally is a page per person whose fence names that catalog, under its owner's
+  root, and nobody writes anybody else's. **The catalog's audience is the grid's
+  audience**: whoever may read the list sees every column on it, so the whole
+  authorization is the one `GetWithBodyAsync` on the catalog already does — the
+  aggregate re-asks nothing and spells nothing. A tally's own `AccessMode` still governs
+  its *page* (its URL, the tree, search), which is why answering never publishes one. Answers
+  are content, so they are a file: no `NodeAnswers` table, ever. Ordinary `- [ ]` outside a
+  fence still means shared state, and reinterpreting it would break the commoner kind of
+  checklist silently. See LISTS.md.
 - One tree for placement, one graph for subject, and nothing else names a subject. A node
   has one place in the node tree. A category is a *page* — a node with `IsCategory` set —
   and `NodeCategory` is the taxonomy's only relation: an edge to a category is a
@@ -221,8 +244,13 @@ second icon set, and don't hand-draw a path when the pack has one.
 3. Colors come from `ChromeInk`, never hard-coded: a document outlives a theme switch.
 4. If the construct links nodes, teach the server to see it too — `Markdown/` in Core,
    then `FileService.RefreshLinksAsync` — or it won't backlink.
-5. Round-trip test in `GatherumMarkdownTests`: parse, write, parse, write, compare.
-6. Write it into `src/Gatherum.Web/Docs/markdown.md`. The manual ships with the app and
+5. If a reader is meant to *use* the construct rather than read it, claim its tag as a
+   slopedit widget in `NodeReader` and render a component — the reading view's business
+   alone. The canvas keeps painting the blocks, which is what stops a control from ever
+   registering as an edit of an open document; `DocumentChrome` still declares the card
+   it wears there. `SharedListWidget` is the one today.
+6. Round-trip test in `GatherumMarkdownTests`: parse, write, parse, write, compare.
+7. Write it into `src/Gatherum.Web/Docs/markdown.md`. The manual ships with the app and
    is what a model gets pointed at, so a construct it never mentions may as well not
    exist — `DocsTests` fails on a callout kind or an aside name the page has not heard
    of.
@@ -283,6 +311,10 @@ second icon set, and don't hand-draw a path when the pack has one.
 
 Deviations and judgment calls go in [DECISIONS.md](DECISIONS.md) when they happen —
 commit messages alone don't count.
+
+[LISTS.md](LISTS.md) is the design behind shared lists — why a tally is a
+file and not a table, why an item's page is optional, and why signing out means reading
+rather than answering. Read it before changing anything under `:::collection`.
 
 [FILESYSTEM.md](FILESYSTEM.md) is the architecture: the directory tree is the system of
 record and the database is a derived index. Stages 1–4 are built, rate limiting

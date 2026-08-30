@@ -71,7 +71,7 @@ public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeP
         authorizer.VisibleTo(db.Nodes, userId)
             .OrderBy(n => n.ParentId).ThenBy(n => n.Position)
             .Select(n => new TreeNode(n.Id, n.ParentId, n.Title, n.MediaType, n.Position,
-                n.Access, n.Reach, userId != null && n.OwnerId == userId))
+                n.Access, n.Reach, n.ListedToSignedIn, userId != null && n.OwnerId == userId))
             .ToListAsync(ct);
 
     /// <summary>Content writes: the owner, or somebody granted Editor. Seeing a node has
@@ -397,6 +397,32 @@ public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeP
         return subtree;
     }
 
+    /// <summary>What a node's body links, written into <c>NodeLinks</c>. The one place
+    /// that decides what a link <em>is</em>: mentions in the description, mentions and
+    /// in-app file URLs in the body, and the titles a <c>[[wiki link]]</c> names, resolved
+    /// as whoever is answering for the node — the author on a save, the owner on a
+    /// rebuild. A docx body's extracted text is its canonical Markdown rendering, so
+    /// mentions made in the document editor link and backlink the way a page's do.
+    ///
+    /// It lives here rather than on the save path because the save path is not the only
+    /// caller: <see cref="Reindexer"/> derives the same rows from the same bodies when it
+    /// rebuilds the index from cold, and two spellings of "what does this body link" would
+    /// be two answers.</summary>
+    public async Task RefreshLinksAsync(Node node, Guid userId, CancellationToken ct = default)
+    {
+        var targets = new HashSet<Guid>(
+            Markdown.MarkdownContent.MentionedNodeIds(node.File!.Description));
+        if (node.MediaType is MediaTypes.Markdown or MediaTypes.Docx)
+        {
+            var body = node.File.Current.ExtractedText;
+            targets.UnionWith(Markdown.MarkdownContent.LinkedNodeIds(body));
+            var wikiTargets = Markdown.WikiLinkSyntax.Targets(body);
+            if (wikiTargets.Count > 0)
+                targets.UnionWith((await ResolveTitlesAsync(userId, wikiTargets, ct)).Values);
+        }
+        await ReplaceLinksAsync(node, targets, ct);
+    }
+
     public async Task ReplaceLinksAsync(Node node, IReadOnlySet<Guid> targetIds, CancellationToken ct)
     {
         var existing = await db.NodeLinks.Where(l => l.SourceId == node.Id).ToListAsync(ct);
@@ -436,7 +462,7 @@ public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeP
 }
 
 public record TreeNode(Guid Id, Guid? ParentId, string Title, string MediaType, int Position,
-    AccessMode Access, NodeReach Reach, bool Owned)
+    AccessMode Access, NodeReach Reach, bool ListedToSignedIn, bool Owned)
 {
     public NodeKind Kind => MediaType == MediaTypes.Markdown ? NodeKind.Page : NodeKind.File;
 }

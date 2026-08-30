@@ -1,8 +1,11 @@
 # Status
 
-As of semantic search — search runs a full-text half and a meaning half and fuses their
-rankings, with the embedding model that powers the second half shipping in the box, and the taxonomy (which replaced tags) files a page under a subject rather than
-labelling it with one. Everything listed as working has
+As of shared lists — a `:::collection` fence makes a list something a group works rather
+than reads, with each person's answers a page of their own, and the same grid answers who
+can make which night as readily as who has which sprite. Before that:
+search runs a full-text half and a meaning half and fuses their rankings, with the
+embedding model that powers the second half shipping in the box, and the taxonomy (which
+replaced tags) files a page under a subject rather than labelling it with one. Everything listed as working has
 been exercised end-to-end (unit/integration tests, API smoke tests, or scripted
 browser sessions — including against the built container).
 
@@ -64,6 +67,26 @@ browser sessions — including against the built container).
   is plain Markdown in the file: opening a page and saving it back changes nothing but
   the edits (verified in-browser against the running app, light and dark, and by
   round-trip tests).
+- **Shared lists** — a `:::collection` fence makes a list something a group works
+  rather than reads. The page declares the catalog; each participant's answers live in a
+  page of their own under their own root, written by nobody else. The catalog's audience
+  is the grid's audience — whoever may read the list sees every column on it, so answering
+  is joining in and there is no second gesture to publish your own answers — while a
+  tally's own access still governs its *page*, so a column in the grid is not a license to
+  open the file behind it, find it in a tree, or search it up.
+  Items are lines of text; linking a page for one is optional and makes it rename-proof,
+  and promotion is lossless, so answers made before it keep counting. Variants nest one
+  level and are optional per item, because rosters are ragged — which also makes every
+  count a count of collectibles rather than of lines. A rename orphans the answers it
+  stranded: they stay in the file and the grid tells their owner so. Read view only, through slopedit
+  2.7.0's widget blocks — the canvas keeps the source, so an answer is never an edit — and
+  signed out reads rather than answering. One mechanism, several words for it: the fence's
+  word says what an answer means, so `:::availability` is who can make which night and
+  `:::poll` is who picked which option — one answer each, and totals without names, both
+  decided where the file is written and the answer is built rather than where the grid is
+  drawn — on the same grid that answers who has which sprite. Over REST and MCP
+  too (`get_list`,
+  `answer_list`). See LISTS.md.
 - **Awareness** — heartbeat presence ("Sam is editing", verified cross-user) and a
   newer-version warning in the editor (verified: fires when another user saves the
   open document). Concurrent saves are serialized per node; nobody's save is ever
@@ -157,13 +180,13 @@ browser sessions — including against the built container).
   A page may link a node its reader may not open — a public page pointing at its
   author's private file is ordinary — so the reader asks which of the ids it links are
   reachable (the direct-link question, so an unlisted node answers yes) and draws the
-  rest locked: greyed, padlocked with Lucide's lock, and with no target at all, an
+  rest locked: grayed, padlocked with Lucide's lock, and with no target at all, an
   embedded picture becoming its own caption rather than a broken image. The page still
   says what it says; the link stops pretending it goes somewhere.
 - **Auth** — OIDC-only via discovery, defensive `offline_access`, first user becomes
   admin, cookie sessions; API keys hashed at rest, revocable, shown once; dev
   auto-login only when no authority is configured.
-- **REST API** (`/api`) and **MCP** (`/mcp`, all thirteen tools) — thin adapters over the
+- **REST API** (`/api`) and **MCP** (`/mcp`, all fifteen tools) — thin adapters over the
   same services; page bodies are Markdown verbatim in both directions.
 - **Privacy** — per-subtree private flag enforced by one `INodeAuthorizer` in every
   read path, and a published page renders for whoever may reach it: signed out, the node
@@ -173,7 +196,7 @@ browser sessions — including against the built container).
   exercised against a postgres container, editor verified in-browser against the
   containerized app), compose.yaml, Podman Quadlets, `/healthz`, JSON console logs
   outside Development, migrations on startup with opt-out.
-- **Tests** — 229 passing: the Markdown dialect (infobox/figure/callout round trips,
+- **Tests** — 342 passing: the Markdown dialect (infobox/figure/callout round trips,
   wiki-link spellings, extension composition, derived chrome, red-link inking, in-app
   URL shapes) and the same dialect as read-only HTML (the aside and its card, a
   callout's tint, a wiki link's URL, a mention that keeps its look and loses its
@@ -184,12 +207,23 @@ browser sessions — including against the built container).
   markdown links, docx extraction/editing/backlinks, tree ops, privacy,
   versions (collapse, restore, re-upload, cross-author), search, title resolution, API
   keys, storage/extraction, the taxonomy (nesting, counts, privacy, rename/move/delete,
-  path spelling), and integration tests booting the app on Testcontainers Postgres
+  path spelling), shared lists (the construct alone — declaration against tracking,
+  ragged variants, notes, orphans, round trips; then the aggregate against real Postgres —
+  a tally per person, a private tally that is still a column while its page stays shut to
+  everyone else, a list nobody may read that has no grid to leak, a promotion whose answers
+  keep counting, a rename whose orphans are kept and reported only to their owner, and the
+  parent row that refuses to be answered), the widget seam the
+  read view claims a shared list through (the hole, and the whole-body writer that ignores
+  it so a static export still holds the catalog), and integration tests booting the app
+  on Testcontainers Postgres
   (create page → search → MCP `get_node`; wiki link → backlink → `resolve-titles`;
   file a page in a nested category → find it from the category above, over REST and
   MCP; create a page → find it over REST by a question that shares none of its words;
   publish a page that mentions a private one → a stranger gets the page, the mention's
-  text, and the answer that its target is not theirs to open).
+  text, and the answer that its target is not theirs to open; declare a shared list over
+  REST → answer it over MCP → the tally is a page with the mention and the answer in it, and
+  a public list's first response carries the grid itself with no checkbox for a visitor
+  who is not signed in).
   The packaged model is tested as it ships (shape, normalization, determinism,
   batch-invariance, that it tells two subjects apart, and that the shipped `MaxDistance`
   falls between kin and strangers). Everything *around* semantic search is tested against
@@ -197,10 +231,10 @@ browser sessions — including against the built container).
   thing — because a real model's answers are approximate and an assertion about ranking
   made against one is a coin toss.
 
-- **A manual in the box** — ten pages (`src/Gatherum.Web/Docs`) embedded in the assembly
-  and served at `/docs`: what a node is, the Markdown dialect in full, categories,
-  search, sharing, the REST API, the MCP server, a briefing for agents, and
-  configuration. Also served as their own source — `/docs/<page>.md`, `/docs/all.md`,
+- **A manual in the box** — eleven pages (`src/Gatherum.Web/Docs`) embedded in the
+  assembly and served at `/docs`: what a node is, the Markdown dialect in full,
+  categories, shared lists, search, sharing, the REST API, the MCP server, a
+  briefing for agents, and configuration. Also served as their own source — `/docs/<page>.md`, `/docs/all.md`,
   `/docs/llms.txt` — because the dialect is syntax no model has seen and a link is how
   you teach it one. Unauthenticated (it describes the software, not the instance) and
   under the anonymous read budget. Each page's outline goes in the sidebar rail through

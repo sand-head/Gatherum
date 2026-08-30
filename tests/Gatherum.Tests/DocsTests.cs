@@ -70,6 +70,11 @@ public class DocsTests
 
         Assert.Contains($":::{BlockTags.Infobox}", dialect, StringComparison.Ordinal);
         Assert.Contains($":::{BlockTags.Figure}", dialect, StringComparison.Ordinal);
+        // Every word a shared list can open with, for the reason the callout kinds are
+        // here: a question the dialect can ask and the manual never mentions may as well
+        // not exist.
+        Assert.All(ListVocabulary.All.Keys, word =>
+            Assert.Contains($":::{word}", dialect, StringComparison.Ordinal));
         Assert.Contains("[[Title]]", dialect, StringComparison.Ordinal);
         Assert.Contains("node://", dialect, StringComparison.Ordinal);
         Assert.Contains("/api/files/", dialect, StringComparison.Ordinal);

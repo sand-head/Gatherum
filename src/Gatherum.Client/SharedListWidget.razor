@@ -1,0 +1,460 @@
+@inject IAppData Data
+@inject NavigationManager Navigation
+@using SlopEdit.Blazor
+
+@* A :::collection run, rendered as the thing it is for rather than the prose it is made
+   of — slopedit 2.7.0's widget blocks are exactly this hole in the reading view, and the
+   canvas keeps the source, so an answer can never register as an edit of an open document.
+
+   Everything on screen is decided by the server: the rows are the catalog's, in its
+   author's order, and the columns are everyone's. This component contains no rule about
+   who may see what — asking twice is how two surfaces come to disagree. *@
+<div class="shared-list">
+    @if (view is null)
+    {
+        <p class="list-foot">@(error ?? "Loading the list…")</p>
+    }
+    else
+    {
+        <div class="list-head">
+            <p class="list-name">@(view.List.Length > 0 ? view.List : view.CatalogTitle)</p>
+            <span class="list-count">
+                @(view.Participants switch
+                {
+                    0 => Total,
+                    1 => $"1 person · {Total}",
+                    var n => $"{n} people · {Total}",
+                })
+            </span>
+        </div>
+
+        <div class="grid-scroll">
+            <table class="grid">
+                <thead>
+                    <tr>
+                        <th scope="col" class="item-col">@Words.Rows</th>
+                        @if (Words.Tallies)
+                        {
+                            @* A row's own total, where that is the question the list is read
+                               for: "how many can make Friday" and "how many picked Thai" are
+                               what those grids are about. Beside the rows rather than after
+                               the people, because it is the headline on those lists — and
+                               because a dozen participants is exactly when a column at the
+                               far end scrolls out of sight. *@
+                            <th scope="col" class="col-tally">Total</th>
+                        }
+                        @foreach (var column in Columns)
+                        {
+                            @* Name over a meter over a count: the header is where "who is
+                               ahead" gets asked, so it carries the answer rather than only
+                               a label. *@
+                            <th scope="col" class="@(column.IsViewer ? "col-you" : null)">
+                                <span class="person">
+                                    <span class="who">@(column.IsViewer ? "You" : column.DisplayName)</span>
+                                    @if (!Words.PicksOne)
+                                    {
+                                        @* How much of the list this person holds — a
+                                           question only a list you work through has. On a
+                                           poll everybody is 1 of 4 and the answer is
+                                           down the rows, not across them. *@
+                                        <span class="meter"><i style="width:@Percent(column.Count)%"></i></span>
+                                        <span class="have">@column.Count/@view.Answerable</span>
+                                    }
+                                </span>
+                            </th>
+                        }
+                        @if (!view.CanAnswer)
+                        {
+                            @* No checkbox at all rather than one that writes to this browser
+                               and nobody else: in a grid where every other column is a real
+                               person's real answers, a control that records nothing
+                               misrepresents itself. The column the reader would have had is
+                               an invitation instead. *@
+                            <th scope="col" class="col-invite">
+                                <span class="person">
+                                    <a class="who" href="@LoginHref">Sign in</a>
+                                    <span class="why">to answer</span>
+                                </span>
+                            </th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in view.Rows)
+                    {
+                        <tr class="group">
+                            <th scope="row" class="item">
+                                <button class="disclose" type="button" aria-expanded="@(IsOpen(row) ? "true" : "false")"
+                                        disabled="@(row.Variants.Count == 0)"
+                                        aria-label="@(IsOpen(row) ? "Collapse" : "Expand") @row.Text"
+                                        @onclick="() => Toggle(row)">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                         stroke-width="2.5" stroke-linecap="round"
+                                         stroke-linejoin="round" aria-hidden="true">
+                                        <path d="m9 18 6-6-6-6" />
+                                    </svg>
+                                </button>
+                                @Named(row)
+                            </th>
+                            @if (Words.Tallies)
+                            {
+                                <td class="col-tally">@RowTally(row)</td>
+                            }
+                            @foreach (var column in Columns)
+                            {
+                                <td class="@CellClass(column)">
+                                    @if (row.Variants.Count > 0)
+                                    {
+                                        @* A row with variants is a group, so its cell reports
+                                           rather than offers: answering a parent would stand in
+                                           for three statements nobody made. *@
+                                        <span class="seg" role="img"
+                                              aria-label="@Progress(row, column) of @row.Variants.Count">
+                                            @foreach (var variant in row.Variants)
+                                            {
+                                                <i class="@(column.Held.Contains(variant.Key) ? "on" : null)"></i>
+                                            }
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        @Mark(row, column)
+                                    }
+                                </td>
+                            }
+                            @if (!view.CanAnswer)
+                            {
+                                <td class="col-invite"></td>
+                            }
+                        </tr>
+                        @if (IsOpen(row))
+                        {
+                            @foreach (var variant in row.Variants)
+                            {
+                                <tr class="variant">
+                                    <th scope="row" class="item">@Named(variant)</th>
+                                    @if (Words.Tallies)
+                                    {
+                                        <td class="col-tally">@RowTally(variant)</td>
+                                    }
+                                    @foreach (var column in Columns)
+                                    {
+                                        <td class="@CellClass(column)">@Mark(variant, column)</td>
+                                    }
+                                    @if (!view.CanAnswer)
+                                    {
+                                        <td class="col-invite"></td>
+                                    }
+                                </tr>
+                            }
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        @if (!NamesAnswers)
+        {
+            <p class="list-foot secret">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect width="18" height="11" x="3" y="11" rx="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+                <span>
+                    This one reports how many, not who. Nobody sees which option you picked
+                    — and your own answer is still a page of your own.
+                </span>
+            </p>
+        }
+
+        @if (Mine is { Orphans.Count: > 0 } orphaned)
+        {
+            @* Alice cannot rewrite Bob's tally to follow her rename — it is his file — so
+               the answers simply stop matching. Saying so is the requirement; silence is
+               what would be unacceptable. *@
+            <div class="notice">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                    <path d="M12 9v4" />
+                    <path d="M12 17h.01" />
+                </svg>
+                <span>
+                    <strong>
+                        @orphaned.Orphans.Count answer@(orphaned.Orphans.Count == 1 ? "" : "s")
+                        no longer match a row
+                    </strong>
+                    <span class="orphans">@string.Join(", ", orphaned.Orphans.Select(o => o.Text))</span>
+                    — still in <a href="/nodes/@orphaned.TallyId">your list</a>, and counting
+                    again if the wording comes back.
+                </span>
+            </div>
+        }
+
+        <div class="list-foot">
+            @if (!view.CanAnswer)
+            {
+                <span>
+                    <a href="@LoginHref">Sign in</a> to keep your own answers to this one.
+                </span>
+            }
+            else
+            {
+                <span>@Footer</span>
+            }
+        </div>
+
+        @if (error is not null)
+        {
+            <p class="list-foot error">@error</p>
+        }
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public DocumentWidget Widget { get; set; } = null!;
+
+    /// <summary>The page the fence is on, which is what the aggregate is asked of: a
+    /// catalog answers for itself, a tally for the catalog it tracks.</summary>
+    [Parameter, EditorRequired] public Guid NodeId { get; set; }
+
+    private SharedListInfo? view;
+    private string? error;
+
+    /// <summary>What this list's own word calls things. One grid, several questions —
+    /// what everyone has, when everyone can — and the fence says which, so the chrome
+    /// says "still to find" or "can make" without the component knowing either.</summary>
+    private ListVocabulary Words => ListVocabulary.For(view?.Kind);
+
+    /// <summary>Whether this list says who answered what. A poll does not, and the server
+    /// enforces that by never sending anybody else's column — this only decides whether to
+    /// say so, and whether to promise a reader something the grid is not doing.</summary>
+    private bool NamesAnswers => Words.NamesAnswers;
+
+    private string Total =>
+        string.Format(Words.Total, view?.Answerable ?? 0);
+
+    private string Score(int held) => view is null ? ""
+        : string.Format(Words.Score, held, view.Answerable, view.Answerable - held);
+
+    /// <summary>Where the reader stands, and — where the list names people — the reminder
+    /// that answering is a public act on it. For a reader who can answer at all; the one
+    /// who cannot is offered a way in instead. Joined here rather than in the markup
+    /// because two adjacent expressions lose the space between them.</summary>
+    private string Footer
+    {
+        get
+        {
+            if (view is null)
+                return "";
+            var said = Mine is { } mine ? Score(mine.Count) : Words.Invite;
+            if (!NamesAnswers)
+                return said;
+            return $"{said} Your answers show to everyone who can read this list.".TrimStart();
+        }
+    }
+    private readonly HashSet<string> open = new(StringComparer.Ordinal);
+
+    /// <summary>Which of the pages this list's items link the reader may actually open.
+    /// Empty until the server has said, which draws every item as its own plain text —
+    /// inert is the only safe answer to an unanswered question.</summary>
+    private IReadOnlySet<Guid> reachable = new HashSet<Guid>();
+
+    private bool busy;
+
+    /// <summary>The fence's own argument, which is how two lists on one page stay two
+    /// lists — the name it declares, or the node it tracks, spelled as the source
+    /// spelled it.</summary>
+    private string List => BlockTags.ArgumentOf(Widget.Tag);
+
+    /// <summary>The reader's own tally, once they have one.</summary>
+    private SharedListColumnInfo? Mine => view?.Columns.FirstOrDefault(c => c.IsViewer);
+
+    /// <summary>The columns the grid draws. A reader who may answer but has never answered
+    /// owns no tally yet and so appears in nobody's aggregate — but the way to get one is
+    /// to answer, so the column they are <em>about</em> to have is drawn empty rather than
+    /// left out. Without it the first answer has nowhere to happen, which is the whole of
+    /// how somebody joins a list.</summary>
+    private IReadOnlyList<SharedListColumnInfo> Columns =>
+        view is null ? []
+        : !view.CanAnswer || Mine is not null ? view.Columns
+        : [new SharedListColumnInfo(Guid.Empty, Guid.Empty, "You", true, [], [], 0),
+           .. view.Columns];
+
+    /// <summary>Where signing in should land: this page, said the way the login endpoint
+    /// will accept — it refuses anything that is not a path of its own.</summary>
+    private string LoginHref =>
+        $"/auth/login?returnUrl={Uri.EscapeDataString($"/{Navigation.ToBaseRelativePath(Navigation.Uri)}")}";
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            view = await Data.GetSharedListAsync(NodeId, List);
+            error = null;
+            await AddressItemsAsync();
+        }
+        catch (Exception)
+        {
+            // The list is the page's content, and the page is already on screen: say the
+            // grid is unavailable rather than taking the article down with it.
+            error = "This list could not be read.";
+        }
+    }
+
+    private async Task AddressItemsAsync()
+    {
+        var linked = Flatten(view!.Rows).Select(r => r.NodeId).OfType<Guid>().Distinct().ToList();
+        if (linked.Count == 0)
+            return;
+        try
+        {
+            reachable = await Data.ReachableNodesAsync(linked);
+        }
+        catch (Exception)
+        {
+            // Unanswered is not forbidden and is not allowed either: the names stay names.
+        }
+    }
+
+    private static IEnumerable<SharedListRowInfo> Flatten(IEnumerable<SharedListRowInfo> rows) =>
+        rows.SelectMany(r => Flatten(r.Variants).Prepend(r));
+
+    private bool IsOpen(SharedListRowInfo row) => open.Contains(row.Key);
+
+    private void Toggle(SharedListRowInfo row)
+    {
+        if (row.Variants.Count == 0)
+            return;
+        if (!open.Add(row.Key))
+            open.Remove(row.Key);
+    }
+
+    /// <summary>How full a column's meter runs. Of collectibles, like every other number
+    /// here — a bar measured in lines would be a different claim.</summary>
+    private int Percent(int held) =>
+        view is { Answerable: > 0 } ? held * 100 / view.Answerable : 0;
+
+    private static int Progress(SharedListRowInfo row, SharedListColumnInfo column) =>
+        row.Variants.Count(v => column.Held.Contains(v.Key));
+
+    /// <summary>How many people answered yes to one row, as a bar with the count beside
+    /// it. The number is the server's, of everybody who answered — on a list that reports
+    /// totals without naming anybody there are no columns to count instead.</summary>
+    private RenderFragment RowTally(SharedListRowInfo row) =>
+        @<text>
+            @if (row.Variants.Count == 0)
+            {
+                <span class="rows-for" title="@row.Answers of @view!.Participants">
+                    <span class="bar"><i style="width:@Share(row)%"></i></span>
+                    <span class="n">@row.Answers</span>
+                </span>
+            }
+        </text>;
+
+    private int Share(SharedListRowInfo row) =>
+        view is { Participants: > 0 } ? row.Answers * 100 / view.Participants : 0;
+
+    private static string CellClass(SharedListColumnInfo column) =>
+        column.IsViewer ? "mark you" : "mark";
+
+    /// <summary>An item's name, linked where it has a page the reader may open — with the
+    /// page's own glyph beside it, because "this one is worth reading about" is the whole
+    /// reason to spend a node on an item. A link the reader may <em>not</em> follow is
+    /// drawn as the plain text it says rather than as an offer into a 404: the same rule
+    /// the prose around it obeys, said with the vocabulary a grid has. A note the
+    /// catalog put after an item rides along as a pill — it qualifies the row rather
+    /// than continuing its name.</summary>
+    private RenderFragment Named(SharedListRowInfo row) =>
+        @<text>
+            @if (row.NodeId is { } id && reachable.Contains(id))
+            {
+                <a class="item-link" href="@($"/nodes/{id}")">@row.Text</a>
+                <span class="has-page" title="This item has a page">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <path d="M14 2v6h6" />
+                    </svg>
+                </span>
+            }
+            else
+            {
+                @row.Text
+            }
+            @if (row.Note.Length > 0)
+            {
+                <span class="note">@row.Note</span>
+            }
+        </text>;
+
+    /// <summary>One cell: a checkbox where the column is the reader's own, and a mark
+    /// where it is somebody else's. Nobody edits anybody else's tally, so the difference
+    /// is not a permission this checks — it is the only control it offers. A mark rather
+    /// than a disabled checkbox, because a grayed-out box reads as "you may not" instead
+    /// of "this isn't yours".</summary>
+    private RenderFragment Mark(SharedListRowInfo row, SharedListColumnInfo column) =>
+        @<text>
+            @if (column.IsViewer && Words.PicksOne)
+            {
+                @* One answer each, so the control says so: a radio is a promise that
+                   picking this un-picks the last, which is exactly what the write does. *@
+                <input class="box round" type="radio" aria-label="@row.Text"
+                       name="@($"pick-{view!.CatalogId:N}")"
+                       checked="@column.Held.Contains(row.Key)"
+                       disabled="@(busy || !RendererInfo.IsInteractive)"
+                       @onchange="() => AnswerAsync(row.Key, true)" />
+            }
+            else if (column.IsViewer)
+            {
+                <input class="box" type="checkbox" aria-label="@row.Text"
+                       checked="@column.Held.Contains(row.Key)"
+                       disabled="@(busy || !RendererInfo.IsInteractive)"
+                       @onchange="() => AnswerAsync(row.Key, !column.Held.Contains(row.Key))" />
+            }
+            else if (column.Held.Contains(row.Key))
+            {
+                <span class="answer yes" role="img" aria-label="@column.DisplayName @Words.Yes">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M20 6 9 17l-5-5" />
+                    </svg>
+                </span>
+            }
+            else
+            {
+                <span class="answer no" role="img"
+                      aria-label="@column.DisplayName @Words.No">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                         aria-hidden="true">
+                        <circle cx="12" cy="12" r="7" />
+                    </svg>
+                </span>
+            }
+        </text>;
+
+    private async Task AnswerAsync(string key, bool collected)
+    {
+        if (busy)
+            return;
+        busy = true;
+        try
+        {
+            view = await Data.AnswerAsync(NodeId, key, collected, List);
+            error = null;
+        }
+        catch (Exception)
+        {
+            error = "That answer could not be saved.";
+            await LoadAsync();
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+}

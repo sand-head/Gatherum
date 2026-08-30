@@ -29,6 +29,7 @@ public sealed class ServiceHarness : IAsyncDisposable
     public CategoryService Categories { get; }
     public FileService Files { get; }
     public BookmarkService Bookmarks { get; }
+    public SharedListService SharedLists { get; }
     public SearchService Search { get; }
     public ManualClock Clock { get; } = new();
     public MediaAnalysisQueue AnalysisQueue { get; } = new();
@@ -109,6 +110,7 @@ public sealed class ServiceHarness : IAsyncDisposable
             [Analyzer], AnalysisQueue, Clock, NullLogger<FileService>.Instance);
         Categories = new CategoryService(Db, Nodes, Files, authorizer, Sidecar, Clock);
         Bookmarks = new BookmarkService(Db, Nodes, Files, Archiver, Sidecar);
+        SharedLists = new SharedListService(Db, Nodes, Files);
         Search = new SearchService(Db, authorizer, Embeddings);
     }
 

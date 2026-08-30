@@ -51,6 +51,13 @@ public class Node
     /// single-column filters. Written only by <see cref="Services.AccessService"/>.</summary>
     public NodeReach Reach { get; set; }
 
+    /// <summary>Whether every signed-in reader may enumerate this node, derived from
+    /// <see cref="Access"/> up the ancestry exactly as <see cref="Reach"/> is. The second
+    /// axis of visibility rather than a rung of the first — see
+    /// <see cref="AccessModes.ListsToSignedIn"/> for why it cannot be one. Written only by
+    /// <see cref="Services.AccessService"/>.</summary>
+    public bool ListedToSignedIn { get; set; }
+
     /// <summary>Ownership is the path: whoever owns the root directory this node was
     /// found under owns the node, and nothing recorded anywhere may disagree. That is
     /// what lets ownership survive the database — it is read off the layout, never

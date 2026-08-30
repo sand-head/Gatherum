@@ -108,11 +108,11 @@ public record SimilarDto(Guid Id, string Kind, string Title)
 }
 
 public record TreeNodeDto(Guid Id, Guid? ParentId, string Title, string MediaType, string Kind,
-    int Position, string Access, string Reach, bool Owned)
+    int Position, string Access, string Reach, bool ListedToSignedIn, bool Owned)
 {
     public static TreeNodeDto From(TreeNode node) => new(node.Id, node.ParentId, node.Title,
         node.MediaType, node.Kind.ToString(), node.Position, node.Access.ToString(),
-        node.Reach.ToString(), node.Owned);
+        node.Reach.ToString(), node.ListedToSignedIn, node.Owned);
 }
 
 public record VersionDto(int Number, string FileName, string MediaType, long SizeBytes,
@@ -192,3 +192,55 @@ public record EpubPositionRequest(int Chapter, double Progress);
 public record DescriptionRequest(string Description);
 public record BookmarkRequest(string Url, Guid? ParentId);
 public record PresenceDto(IReadOnlyList<string> Editors, int HeadVersion);
+
+/// <summary>A shared list as everyone's answers make it: the catalog's rows in the
+/// author's order, one column per participant, and which of them — if any — is the
+/// caller's own. <c>Kind</c> is the word the catalog's fence opened with, which says
+/// what an answer on this list means. <c>Answerable</c> counts variants rather than lines,
+/// which is the only number a progress report may be made of.</summary>
+public record SharedListDto(
+    Guid CatalogId,
+    string CatalogTitle,
+    string Kind,
+    string List,
+    IReadOnlyList<SharedListRowDto> Rows,
+    IReadOnlyList<SharedListColumnDto> Columns,
+    int Participants,
+    Guid? TallyId,
+    bool CanAnswer,
+    int Answerable)
+{
+    public static SharedListDto From(SharedListView view) => new(
+        view.CatalogId, view.CatalogTitle, view.Kind, view.List,
+        [.. view.Rows.Select(SharedListRowDto.From)],
+        [.. view.Columns.Select(SharedListColumnDto.From)],
+        view.Participants, view.TallyId, view.CanAnswer, view.Answerable);
+}
+
+/// <summary>One line of the catalog. <c>Key</c> is what an answer names — an id where the
+/// item links a page, its text where it does not — and a variant's carries its parent's,
+/// so "Gold" is nameable without every item's Gold colliding.</summary>
+public record SharedListRowDto(string Key, string Text, Guid? NodeId, string Note,
+    IReadOnlyList<SharedListRowDto> Variants, int Answers)
+{
+    public static SharedListRowDto From(SharedListRow row) => new(row.Key, row.Text, row.NodeId,
+        row.Note, [.. row.Variants.Select(From)], row.Answers);
+}
+
+/// <summary>One participant's column: their tally node, and the row keys it holds.
+/// Whoever may read the list sees every column on it — except on a list that reports
+/// totals without naming anybody, where the only column is the caller's own. <c>Orphans</c> — answers the
+/// catalog no longer has an item for — comes back for the caller's own column and
+/// empty for everybody else's.</summary>
+public record SharedListColumnDto(Guid TallyId, Guid OwnerId, string DisplayName, bool IsViewer,
+    IReadOnlyList<string> Held, IReadOnlyList<SharedListOrphanDto> Orphans, int Count)
+{
+    public static SharedListColumnDto From(SharedListColumn column) => new(column.TallyId,
+        column.OwnerId, column.DisplayName, column.IsViewer,
+        [.. column.Held], [.. column.Orphans.Select(o => new SharedListOrphanDto(o.Text, o.Note))],
+        column.Count);
+}
+
+public record SharedListOrphanDto(string Text, string Note);
+
+public record AnswerRequest(string Key, bool Answered, string? Name);

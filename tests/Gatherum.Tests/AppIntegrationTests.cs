@@ -264,7 +264,7 @@ public class AppIntegrationTests(PostgresFixture postgres) : IAsyncLifetime
         Assert.Contains($"node://{secret.Id}", page);
 
         // And this is what the reader dresses that mention with: the link's own node,
-        // unanswered for.
+        // unticked for.
         var reachable = await anonymous.PostAsJsonAsync("/api/nodes/reachable",
             new { ids = new[] { secret.Id, published.Id } });
         Assert.Equal([published.Id],
@@ -553,7 +553,7 @@ public class AppIntegrationTests(PostgresFixture postgres) : IAsyncLifetime
         // reverse proxy that is the proxy for everybody — one bucket for the whole
         // internet — unless X-Forwarded-For is honoured. The container turns that on with
         // ASPNETCORE_FORWARDEDHEADERS_ENABLED, which is a setting in the Dockerfile rather
-        // than a line of code here, so this pins the behaviour the limiter depends on.
+        // than a line of code here, so this pins the behavior the limiter depends on.
         var before = Environment.GetEnvironmentVariable("ASPNETCORE_FORWARDEDHEADERS_ENABLED");
         Environment.SetEnvironmentVariable("ASPNETCORE_FORWARDEDHEADERS_ENABLED", "true");
         try
@@ -630,6 +630,87 @@ public class AppIntegrationTests(PostgresFixture postgres) : IAsyncLifetime
         // A reader from the internet is still only a reader.
         Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.PostAsJsonAsync(
             $"/api/nodes/{page.Id}/rename", new { title = "defaced" })).StatusCode);
+    }
+
+    /// <summary>A shared list end to end: a catalog over REST, an answer over MCP, and
+    /// the tally that answer wrote showing up as a page like any other.</summary>
+    [Fact]
+    public async Task A_shared_list_is_answered_over_mcp_and_the_tally_is_a_page()
+    {
+        var create = await client.PostAsJsonAsync("/api/pages", new
+        {
+            title = "Override sprites",
+            markdown = """
+                :::collection Override sprites
+                - Sonic
+                  - Base
+                  - Gold
+                - Storm Scout
+                :::
+                """,
+        });
+        var catalogId = (await create.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("id").GetGuid();
+
+        var before = await client.GetFromJsonAsync<JsonElement>(
+            $"/api/nodes/{catalogId}/list");
+        Assert.Equal(3, before.GetProperty("answerable").GetInt32());
+        Assert.Empty(before.GetProperty("columns").EnumerateArray());
+        var gold = before.GetProperty("rows")[0].GetProperty("variants")[1]
+            .GetProperty("key").GetString()!;
+
+        var answered = await CallMcpToolAsync("answer_list",
+            new { id = catalogId, key = gold });
+        var column = Assert.Single(answered.GetProperty("columns").EnumerateArray().ToList());
+        Assert.True(column.GetProperty("isViewer").GetBoolean());
+        Assert.Equal(1, column.GetProperty("count").GetInt32());
+
+        var tallyId = answered.GetProperty("tallyId").GetGuid();
+        var tally = await CallMcpToolAsync("get_node", new { id = tallyId });
+        Assert.Contains($"](node://{catalogId})", tally.GetProperty("markdown").GetString()!,
+            StringComparison.Ordinal);
+        Assert.Contains("- [x] Gold", tally.GetProperty("markdown").GetString()!,
+            StringComparison.Ordinal);
+
+        var status = await CallMcpToolAsync("get_list", new { id = tallyId });
+        Assert.Equal(catalogId, status.GetProperty("catalogId").GetGuid());
+    }
+
+    /// <summary>The read view's half: a page's first response carries the grid itself,
+    /// rendered on the server, rather than the list the fence is made of. Everything the
+    /// widget draws was decided by the same service the API answers with — this is the
+    /// only test that the two are wired to each other at all.</summary>
+    [Fact]
+    public async Task A_published_list_renders_as_a_grid_in_the_first_response()
+    {
+        var create = await client.PostAsJsonAsync("/api/pages", new
+        {
+            title = "Published sprites",
+            markdown = """
+                Sprites arrive on Thursdays.
+
+                :::collection Published sprites
+                - Sonic
+                - Storm Scout
+                :::
+                """,
+        });
+        var id = (await create.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("id").GetGuid();
+        (await client.PostAsJsonAsync($"/api/nodes/{id}/access", new { access = "Public" }))
+            .EnsureSuccessStatusCode();
+
+        using var visitor = factory.CreateClient();
+        var html = await visitor.GetStringAsync($"/nodes/{id}");
+
+        Assert.Contains("list-head", html, StringComparison.Ordinal);
+        Assert.Contains("Storm Scout", html, StringComparison.Ordinal);
+        Assert.Contains("2 to collect", html, StringComparison.Ordinal);
+        // Signed out is read-only: the column a reader would have had is an invitation,
+        // and there is no control anywhere that would record nothing.
+        Assert.Contains("col-invite", html, StringComparison.Ordinal);
+        Assert.Contains("/auth/login", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("type=\"checkbox\"", html, StringComparison.Ordinal);
     }
 
     private async Task<JsonElement> CallMcpToolAsync(string tool, object arguments)

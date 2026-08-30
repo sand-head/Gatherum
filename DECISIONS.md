@@ -263,7 +263,7 @@ writes the page back out around the snippet and reads it again through
 `GatherumMarkdown.Reload` — into the same `RichDocument` instance, because the view, the
 caret and the event subscriptions are bound to it. The cost is the undo stack, which is
 why these are menu items rather than keystrokes, and why the caret is put back at the
-construct afterwards. The Source toggle has always paid the same price.
+construct afterward. The Source toggle has always paid the same price.
 
 ## Callouts are GitHub's five, not the five the docs invented
 MCP.md had been promising `> [!info]`-style callouts (info, note, tip, warning, danger)
@@ -378,7 +378,7 @@ Consequences worth stating:
   class part of the surface (`CategoryTools` on every category page, plus REST and MCP)
   rather than something only a DBA can do.
 - **The migration carries every tag over** as a root category of the same name, so
-  nothing that was filed becomes unfiled; nesting them afterwards is an ordinary move.
+  nothing that was filed becomes unfiled; nesting them afterward is an ordinary move.
 
 ## Semantic search is a second half, not a replacement
 The obvious reading of "I want semantic search" is that vectors replace the tsvector
@@ -579,7 +579,7 @@ the drawer closes on navigation through the same delegated click listener in
 
 **Below 700px the page scrolls, above it the pane does.** An inner scroll container
 means the mobile URL bar can never collapse and the reader pays for it on every screen;
-page scrolling also hands slopedit's page-mode sticky strip the document as its scroll
+page scrolling also hands slopedit's page-mode sanswery strip the document as its scroll
 container, which is the ancestor it wants. Two scroll models, one breakpoint, and the
 header comment in `MainLayout.razor.css` says which is which — the file's original claim
 that `.content` is always the scroller is now only true above the line.
@@ -704,7 +704,7 @@ upstream. 2.2.2 collapses a floated run back into the flow at the page's full me
 when the page cannot spare `MinBodyWidthPx` (280 by default) beside it and its gutter,
 so the infobox that crushed "Hardware" to "Hard / ware" at 390px now stacks above the
 prose and both surfaces show the same thing. Nothing in Gatherum configures it; the
-default is the behaviour we wanted, and the version bump is the whole change.
+default is the behavior we wanted, and the version bump is the whole change.
 
 The way it is implemented is the reason the CSS override had to come out rather than
 merely be tidied. The decision lives in the layout — `IsFloatCollapsed(i)`, a function
@@ -745,7 +745,7 @@ Two things this repo does not do, deliberately. It passes no padding: `EditorVie
 no `ContentPadding` parameter at all, so `CodeHtmlView` takes its default and the pair
 agrees the way it was built to. And it adds no reset for the code view, because
 `CodeHtmlWriter` already emits `code { background: none; padding: 0 }` and owns the
-`<pre>`'s `overflow-x`, `white-space` and the sticky `.se-ln` gutter — the horizontal
+`<pre>`'s `overflow-x`, `white-space` and the sanswery `.se-ln` gutter — the horizontal
 scroll of a long line is slopedit's, not app.css's. The document view is the one that
 still needs the reset in app.css, because `RichHtmlWriter`'s `code` rule sets only the
 face and leaves background and padding to whatever the host has lying around. That
@@ -1144,7 +1144,7 @@ Things worth stating because they are not free:
   wiki for two people. It is a snapshot: load one per operation and let it go.
 - **The reindex needs two passes.** A page filed under "Podman" cannot be joined up until
   whichever root holds Podman's page has been walked, so filings are collected during the
-  walk and wired afterwards, in one pass, against one snapshot. A name nothing answers to —
+  walk and wired afterward, in one pass, against one snapshot. A name nothing answers to —
   somebody typed it into a `meta.json` by hand — gets its page written. That is the one
   place the scan creates a file outside `.gatherum`, and it is deliberate: a taxonomy half
   of which exists only in the database would not survive the next cold start, which is the
@@ -1509,7 +1509,7 @@ without naming: a ruled heading's hairline drew straight across a floated infobo
 because the float's card went down before the body's chrome. The read view never had
 the bug; the canvas agrees with it now. And `BlockDecoration` grew a real box model
 (per-side padding and borders via `BoxEdges`, plus `CornerRadiusPx`), which comes with
-a half-a-border-width shift for cards positioned against the old behaviour —
+a half-a-border-width shift for cards positioned against the old behavior —
 `DocumentChrome` draws at `BorderWidth: 1f`, so the shift is half a pixel and nothing
 here moved. The room is there if an aside ever wants a leading rule down one edge.
 
@@ -1592,3 +1592,230 @@ has to satisfy — the margin covers the card's outset — asserted beside the e
 padding in `An_asides_card_pads_evenly_on_both_sides`. That test was run against the
 old geometry first and fails there with a right padding of `0px`, so it pins the bug
 rather than agreeing with the fix.
+
+## An OIDC group gates sign-in; Gatherum still has no groups
+Sharing with a group is the obvious next thought once an instance holds more than a
+couple of people, and it was designed once — a grant naming a principal rather than a
+user, group ids derived from names, the closure keyed on both — before the owner's
+correction: what is wanted is the normal thing, which is the identity provider deciding
+who may sign in at all. So there is no group in the domain. `Gatherum__Oidc__RequiredGroup`
+is read from the token as each person arrives and remembered nowhere, which is what makes
+removal take effect at the provider rather than needing to be mirrored here, and sharing
+still names people one at a time.
+
+Two calls inside that. The gate **fails closed**: a required group with no claim to answer
+it turns everybody away, because the alternative is an instance that silently admits every
+account the provider has the day a scope stops being sent — and the warning it logs names
+the claim and the scope, since "I configured the group and nobody can log in" has exactly
+one cause worth printing. And the refusal happens **before** `GetOrCreateAsync`, so
+somebody the provider authenticated but this instance does not admit leaves behind no user
+row and no root directory.
+
+`Gatherum__Oidc__AdminGroup` works the same way and is authoritative when set: it grants
+admin and takes it away on every sign-in, because a claim read per request is only
+meaningful if the answer is allowed to change. Left empty, admin stays where it was — with
+the first account ever seen.
+
+What this deliberately leaves undone: the access modes still go from `Shared`, which names
+people, straight to `Unlisted` and `Public`, which mean the open internet. There is no mode
+for "anyone who got past the front door", and once the front door is a group that is the
+gap that will be felt first — see LISTS.md, which ran into it.
+
+## Authenticated is a second axis, not a fourth rung
+"Everyone who can sign in" is the mode a Gatherum shared by a group actually wants, and
+until now the scale went from `Shared`, which names people one at a time, straight to
+`Unlisted` and `Public`, which mean the open internet.
+
+The obvious implementation is a new value on `NodeReach`, and it is wrong. That enum is
+ordered so that inheritance can be a maximum and the two visibility questions can be
+comparisons — but "everyone signed in" and "anyone holding the link" are not comparable:
+the second admits anonymous strangers and hides the node from every listing, the first
+admits nobody anonymous and lists it to everybody else. Forced onto one scale, the maximum
+has to discard one of them, and an unlisted page inside an authenticated directory would
+silently vanish from the listings of the very people the directory was shared with —
+a narrowing, in the direction nobody would think to check.
+
+So `NodeReach` keeps its meaning, which was always *what the anonymous internet gets*, and
+`Node.ListedToSignedIn` carries the other axis. Both are derived by `AccessService` from
+the same pre-order walk and both are additive downward, one as a maximum and one as an or.
+`VisibleTo` gains a term rather than a join, so visibility stays the indexed predicate it
+has to be. `AuthenticatedAccessTests` pins the case that forced this.
+
+Two smaller calls inside it. `AccessMode.Authenticated` is declared **last** rather than in
+its conceptual place between `Shared` and `Unlisted`, because the database stores that enum
+by ordinal and inserting a value would silently renumber every access already recorded —
+the sidecar writes it by name and does not care, but the rows do. And `Public` does not set
+`ListedToSignedIn`: a public node already reaches everyone through `NodeReach.Listed`, and
+routing it through the new axis as well would let it outlive `Sharing.AllowPublic`, whose
+documented meaning is that a node claiming to be public is treated as private by every
+query. Keeping it out means this change moves nothing for an instance that has the internet
+switched off.
+
+## A shared list is one construct, and both halves of it are files
+`LISTS.md` is the design; this is what got built and what it cost.
+
+A collaborative collectible list conflates two documents with different tempos: what
+exists to collect, written once by one author, and what *I* have, written constantly by
+each participant. One set of checkboxes cannot answer both — if you answer Sonic, has anyone
+else got it, and where would the checkbox put the answer? So the catalog is a page and a
+tally is a page per person. No new relation, no new table, no new visibility rule.
+
+**The catalog's audience is the grid's audience**, and this is the correction that
+mattered most. The first cut made each tally's own `AccessMode` decide whether its column
+appeared, which is locally impeccable — only an owner sets access — and globally absurd:
+it made joining a shared list a two-gesture act, answer and then publish a second page, or
+your column counts for nobody. Nobody who shares a roster with their group means "and each
+of you must separately publish your answers first". So authorization happens once, at the
+door the service already knocks on — `NodeService.GetWithBodyAsync` on the catalog,
+which is `INodeAuthorizer`'s answer — and a reader who got past it gets the whole grid.
+The aggregate then asks no visibility question of its own, which is not a second door left
+unlocked but the same door knocked on once; `INodeAuthorizer` stays the only one, and the
+rule survives because nothing here re-spells it.
+
+What that deliberately does *not* do is publish the tally page. Its `AccessMode` is
+untouched and still governs the node — its own URL, the tree, search — so a tally stays
+private as a file while the answers on it count in the list they were made against. The
+disclosure is exactly the rows somebody answered and the name they answer under; notes and
+orphans stay their owner's, and orphans are reported only to the person who can act on
+one. Two consequences worth saying out loud: a public catalog's grid is public, display
+names included, so publishing one is a decision about other people as well as about the
+page; and there is no half-in — the way out of a grid is not to answer, or to delete the
+tally, because a mode meaning "counted but hidden" would be a checkbox lying in the other
+direction.
+
+It also moved the wiki-link caveat somewhere better. A tally naming its catalog
+`[[by title]]` is matched by comparing that title against the catalog's own rather than
+by resolving it, so whether the match happens no longer depends on who is *reading*: an
+unlisted catalog still cannot be named by title, but that is now a fact about the author
+writing the link, which is where it belongs.
+
+**A tally is content, not ephemera.** `NodeAnswers` would have been an afternoon's work and
+wrong: `ReadingPositions` earns its database-only exception because losing one costs a page
+number, and a season of collecting is not that. A tally is a file under its owner's root —
+rebuildable by `Reindexer`, carried by the backup, readable when Gatherum is not running.
+
+**One construct, declared by a fence.** Making every Markdown checklist per-person was
+considered and rejected: `- [ ]` already means *it is done* — shared state, one answer for
+everybody, and the commoner kind in a knowledge base — so reinterpreting it would break the
+first kind silently. A per-page setting is the wrong unit (two lists on one page cannot
+both be it) and has nowhere to live. So the list declares itself, and the same fence does
+both jobs: an argument that is a name declares a catalog, an argument that names another
+node tracks it. Recognition is exact rather than inferred — an earlier draft recognized a
+tally structurally, by it linking a catalog and carrying matching task items, which would
+have counted any page discussing the list with example checkboxes as somebody's column.
+
+**Item identity is the interesting problem, and the answer is that pages are optional.**
+Keying by line number fails on the commonest edit there is; by text, on a rename; by node
+id, never. The first draft therefore made a page per collectible mandatory, which is the
+expensive option made compulsory — wanting to answer off forty sprites is not wanting to write
+forty pages. So an item is a line of text that *may* link a node, and matching is: two
+linked items are their ids, anything else is its text. That asymmetry is what makes
+promotion lossless, so answers made against `Sonic` keep counting once Sonic becomes a page.
+A rename orphans the plain answers it stranded — Alice cannot rewrite Bob's file to follow
+her wording — so the orphans are kept in his file and reported in the grid. Silence is the
+one unacceptable answer.
+
+**Variants are nested items because rosters are ragged.** Declaring the variant set once on
+the fence would be a lie from the first week: things are held back, arrive late, and do not
+all carry the same forms. Nesting also forces the counting rule — every number is of
+collectibles, never of lines — and makes a parent row a group rather than a control:
+"give me all three" is a different statement from the three answers it would stand in for,
+and the one thing this must not do is guess what somebody has.
+
+**Signed out is read-only.** A third answer was on the table — answer freely into this
+browser's `localStorage`, the mechanism that already keeps an anonymous reader's place in a
+book — and it is wrong here. A reading position can be quietly local because nobody else was
+ever going to see it; in a grid where every other column is a real person's real answers, a
+checkbox that writes to nobody looks exactly like the ones that count. So there is no
+checkbox at all, and an invitation to sign in instead. Guest tallies (a hashed capability
+token, its file under the catalog owner's root, off by default) remain designed and
+unbuilt: going from read-only to counted is purely additive, and the other direction is not.
+
+What this cost outside Core: one Markdown extension, one component, two endpoints and two
+MCP tools. The construct is the dialect's first *interactive* one, and it needed a hole in
+the reading view to put a component in — which slopedit 2.7.0 shipped as widget blocks,
+keyed by the `Block.Tag` an extension already stamps. The blocks stay blocks, so items
+reach search and a `[[wiki link]]` in one is still a real link; the canvas keeps painting
+the source, so an answer can never register as an edit of an open document; and `WriteBody`
+ignores the claim, so a static export holds the catalog rather than a gap. Two behaviors
+to design around rather than discover: a tagged run inside a float renders as blocks, so a
+collection inside an `:::infobox` is a plain list, and a collapsible section holding a
+widget keeps its chevron rather than folding a component out of the page.
+
+## One grid, several questions
+The collectible list shipped narrow: `:::collection`, a "catalog" of "collectibles",
+copy about what you still have to find. Then the obvious question — what if a group wants
+to see which nights everyone can play D&D — and the answer turned out to be that the
+feature was already general and only the words were not.
+
+Nothing under the fence ever knew what a row meant. The mechanism is: a row per thing, a
+column per person, a mark where that person says yes, each column a page its owner writes.
+"Who has which sprite" and "who can make which night" are the same question asked of
+different nouns.
+
+Three ways to say so were on the table. Rename the construct to something neutral and let
+every list read blandly — which throws away the specificity that makes a collection page
+read well. Let each list configure its own labels, which is a settings-in-syntax smell and
+a schema nobody asked for. Or make the fence's *word* the vocabulary: one implementation,
+a small named set, each word buying a handful of phrases. The third is what callouts
+already do here — five spellings, one extension, a dictionary of kinds — so it is a shape
+this codebase has already agreed to, and a new question costs a row rather than a
+component.
+
+The word rides in `Block.Tag` where the construct's argument already rode, survives the
+round trip because the writer gives back what the source said, and reaches the reading
+view through `SharedListView.Kind` — the *catalog's* word, not the tally's, so a grid
+read from either page says the same thing. What it decides is: what the first column is
+called, how the total and the score are phrased, what to say to somebody who has not
+answered, and what a screen reader hears at a mark. What it decides beyond that is
+nothing, which is the property that makes adding one safe.
+
+The set lives in two places by necessity — `SharedListSyntax.Kinds` parses without an
+editor, `ListVocabulary` says what each word calls things and cannot be in Core because it
+is chrome — and a test pins them equal, the way the manual is pinned to the constructs it
+documents. An unknown word still renders a grid in the commonest vocabulary rather than
+failing, because a file written by a newer build should degrade to a readable list rather
+than to nothing.
+
+A poll came next and tested the shape, which is what it was for. Two of the three things
+it needed were vocabulary — "Option" for the first column, "picked this" at a mark — and
+the third was not: a poll is **one answer each**, which is a rule about what a file may
+say rather than about how a grid looks. So it went beside the parser
+(`SharedListSyntax.PicksOne`) and is enforced on the write path, where the tally is
+actually produced; the reading view only reads it to draw a radio instead of a box, which
+is a promise the write then keeps. Withdrawing is still allowed — one answer *at most*,
+not one compulsorily.
+
+A poll also does not name who answered what, which is the third thing its word decides
+and the one worth being careful about. A roster and a schedule are asked *of* people —
+"who can make Friday" has no useful answer without the who — while a poll is asked of a
+group and answered by individuals, and being seen to change your mind in front of
+everybody is a different act from voting. So the columns are withheld, the totals are
+not, and the reader keeps their own column because they have to see their answer to
+change it.
+
+Withheld **in the answer the service builds**, not in the markup. Hiding a column in the
+component while the response still carried the names would be the same lie as a checkbox
+that records nothing — anybody could read the JSON. That also forced a row's total onto
+the server, where it belongs anyway: it is the one number a reader cannot derive from
+what they were sent, because on a poll there are no columns to derive it from.
+
+What this is not is a secret ballot, and the manual says so. Every answer is still a file
+its owner may share, an admin reads the disk, and editing the fence's word to
+`:::collection` shows the columns that were there all along. Making it stronger would mean
+answers that are not files, which is the one thing this design will not do. It hides who
+from the people reading the list — the ordinary courtesy a poll wants — and claims nothing
+more.
+
+It also earned the vocabulary its first genuinely visual flag. A poll is read down its
+rows ("how many picked Thai"), and so is an availability list ("how many can make
+Friday"), while a collection is read across them ("how many do I still need"). So a row's
+own total is a column the vocabulary asks for, rather than one every grid carries and two
+thirds of them waste width on. The total is counted before any column is
+withheld, so a poll reports honestly rather than reporting whatever this reader was
+allowed to see.
+
+The type names did not follow. `SharedListService`, `SharedListSyntax`, `SharedListWidget`
+still say collection, which is now the name of the flagship question rather than of the
+mechanism. Renaming them across Core, Web and Client is churn against no behavior, and
+"a collection of everyone's answers" is a fair reading of what the service returns.

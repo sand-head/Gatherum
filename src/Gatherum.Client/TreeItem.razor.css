@@ -70,10 +70,11 @@
     white-space: nowrap;
 }
 
-/* Private wears no badge — it is the default. These three are the exceptions:
-   shared with somebody, reachable by link, or out on the internet. */
+/* Private wears no badge — it is the default. These are the exceptions: shared with
+   somebody, open to everyone signed in, reachable by link, or out on the internet. */
 .node-public,
 .node-unlisted,
+.node-authenticated,
 .node-shared,
 .node-foreign {
     display: grid;
@@ -89,7 +90,7 @@
     line-height: 1;
 }
 
-/* The three reach states, named rather than cycled, with the current one marked. */
+/* The four reach states, named rather than cycled, with the current one marked. */
 .menu-group {
     display: flex;
     flex-direction: column;
