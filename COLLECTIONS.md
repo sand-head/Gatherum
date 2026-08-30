@@ -133,23 +133,14 @@ exception because losing one costs exactly a page number, and a season of collec
 that. A tally must be a file under the storage root — rebuildable by `Reindexer`, carried
 by the backup people are told to take, readable when Gatherum isn't running.
 
-### The format: no new format
+### The format: one construct, then no new format
 
-The tally's body is a task list, mirroring the catalogue's lines:
+The tally's body is a `:::collection` fence naming the catalogue, wrapping a task list that
+mirrors its lines — the exact spelling is in *What makes a page a tally* below.
 
-```markdown
-Tracking [[Override sprites]].
-
-- [x] Sonic — Gold, Sprite Day 2
-- [ ] Tails
-- [x] [Klombo](node://0193…)
-```
-
-Every word of that is vocabulary the dialect already has — task lists, wiki links and
-`node://` mentions are all documented in `markdown.md` — which buys the feature its
-properties for free, exactly the way citations turned out to need no new construct at all
-(DECISIONS.md, "A citation is a convention, not a construct"). The tally opens in the
-ordinary editor. Its first line makes the `NodeLink` row that the aggregate finds it by. A
+Inside the fence every word is vocabulary the dialect already has: task lists, wiki links and
+`node://` mentions are all documented in `markdown.md`. The tally opens in the ordinary
+editor. The fence's argument makes the `NodeLink` row that the aggregate finds it by. A
 trailing note after an item is prose, so "Gold, Sprite Day 2" costs nothing to support. And
 a tally read by a human with no Gatherum running is still obviously a checklist.
 
@@ -179,55 +170,84 @@ enumeration question, so a tally cannot name an unlisted catalogue that way. Nam
 a `node://` mention instead works, because an id is permission. Unlisted catalogues are
 therefore fine; they just want the other spelling.
 
-### Nothing opts a page in
+### A fence declares the list
 
-The obvious next thought is a per-page setting — a flag saying "this list is trackable" —
-and the obvious next thought after that is that all Markdown checklists should simply work
-this way. Both are wrong, for different reasons.
+Two wrong answers before the right one, because both are tempting.
 
-**All checklists cannot work this way**, because a checklist already means two things and
-the syntax does not distinguish them. A release checklist, a packing list, a runbook step:
-ticking those means *it is done*, shared state, and in a knowledge base that is the more
-common kind. A collection list means *I have this one*. Making every checklist per-person
-would quietly break the first kind.
+**All Markdown checklists cannot work this way.** A checklist already means two things and
+the syntax does not distinguish them: a release checklist, a packing list or a runbook step
+means *it is done* — shared state, and in a knowledge base the commoner kind — while a
+collection list means *I have this one*. Make every checklist per-person and the first kind
+breaks silently.
 
-**A per-page flag has nowhere to live.** Frontmatter is designed in `FILESYSTEM.md` and not
-built; `.gatherum/meta.json` is the carrier for what a path cannot say, while that same
-document argues a page should be self-describing when it can be; and a `:::collection` fence
-is a whole construct — both directions of the extension, `DocumentChrome`, a round-trip
-test, and a manual entry `DocsTests` enforces. Real machinery for a mode bit.
+**A per-page setting is the wrong shape**, quite apart from having nowhere to live
+(frontmatter is designed and unbuilt; `.gatherum/meta.json` is the carrier for what a path
+cannot say, against a rule that a page should be self-describing when it can be). A page is
+not the right unit: write two lists on one page and a page-level flag cannot say which is
+which.
 
-**So there is no setting, because being a catalogue is not a property of a page.** It is a
-relationship, and the tally end already declares it. A reader clicks *track this list* and
-gets a tally; the page grows "3 people tracking this" and otherwise says nothing. Opt-in per
-reader, as an act rather than a configuration: two people can track a list whose author
-enabled nothing, an author cannot switch off everyone's tracking by editing a flag, and
-there is no per-page state to migrate, reindex, or disagree with the disk about.
+So the list declares itself, in the dialect, as a fence:
 
-Ordinary checklists keep their meaning exactly. Ticking in the **editor** edits the page —
-shared state, as today. Ticking in the **read view** records the reader in their own tally,
-which claims no existing behaviour because read-view checkboxes are inert today. It lands on
-a division the app already draws: the editor is where a document changes, the reader is
-where a person is recorded.
+```markdown
+:::collection Override sprites
+- Sonic
+- Tails
+- [Klombo](node://0193…)
+- Storm Scout
+:::
+```
 
-The consequence to accept knowingly: every list on every visible page becomes trackable, not
-only deliberate collectible ones. That is mostly a gift — reading lists, restaurants,
-achievements, all with no further concept — but the affordance has to stay quiet, and a page
-nobody tracks must look precisely as it does now.
+This is the shape `AsideExtension` already established. The argument line becomes each
+block's `Tag`, which is how the writer finds the run again and how the renderer knows what
+it is looking at, and `BlockTags`' `#n` instance marker keeps two collections on one page
+from reading as one. A reader with no Gatherum sees two `:::` lines and a list.
+
+Three things fall out of choosing a region rather than a page:
+
+- **Several lists per page**, each named and separately trackable.
+- **A key that outlives the page title.** The fence's name identifies the list, so renaming
+  the page it lives on orphans nothing.
+- **Ordinary checkboxes stay ordinary, everywhere.** `- [ ]` outside a collection is what it
+  has always been. The alternative on the table was to make ticking mean one thing in the
+  editor and another in the read view, which is clever and would have confused everybody.
+
+And the affordance appears only where an author asked for it, instead of on every list in
+the wiki.
+
+**The cost that is not on the checklist.** `AGENT.md`'s "add a Markdown construct" steps
+assume decoration: a block extension tags its blocks and `DocumentChrome.Apply` derives
+floats and boxes and paints them. A collection is the dialect's first *interactive*
+construct. Its grid cannot be chrome on the editor canvas and cannot be static HTML in the
+read view, so `NodeReader` has to render the document in segments around collection blocks
+and host an island for each one, rather than handing the whole document to
+`DocumentHtmlView`. In the editor the fence renders as a titled card over the plain list and
+is edited as source, exactly as an aside is. That segmentation is the part of this feature
+to estimate carefully; everything else is a well-trodden path.
 
 ### What makes a page a tally
 
-Nothing marks one. A tally is recognized *structurally*: a page that links the catalogue and
-carries task items matching its rows. The alternative was a flag on `Node` beside
-`IsCategory`, and a new domain concept is too much to pay to prevent the only failure this
-has — a page that discusses the list using example checkboxes gets counted as somebody's
-column.
+The same fence, with the catalogue named instead of a new list:
 
-Two things make that acceptable. A column appears only because its owner deliberately made
-that page visible, which is never accidental. And the catalogue owner can see exactly whose
-columns show.
+```markdown
+:::collection [[Override sprites]]
+- [x] Sonic — Gold, Sprite Day 2
+- [ ] Tails
+- [x] [Klombo](node://0193…)
+:::
+```
 
-No new relation, no new table, no new visibility rule, no new sidecar.
+A fence whose argument resolves to another node's collection *tracks* it; one that names
+nothing but itself *declares* one. That is the single piece of cleverness in the construct,
+and it earns its place by making recognition exact rather than inferred — an earlier draft
+recognized a tally structurally, by it linking the catalogue and carrying matching task
+items, which would have counted any page that discussed the list with example checkboxes as
+somebody's column. With the fence there is no heuristic and no false positive.
+
+It also keeps the wiki-link caveat visible: `[[Wiki link]]` resolves by *title*, which is the
+enumeration question, so a tally cannot name an **unlisted** catalogue that way — a
+`node://` mention works there, because an id is permission and a title is a search.
+
+No new relation, no new table, no new visibility rule, no new sidecar. One new construct.
 
 ## The anonymous half of the ask
 
