@@ -12,8 +12,8 @@ namespace Gatherum.Client;
 /// that parses — <c>CollectionSyntaxTests</c> keeps the two honest.
 /// </summary>
 /// <param name="Rows">What the first column is called: the noun a row is.</param>
-/// <param name="Total">The whole list, said in the header — <c>{0}</c> is how many
-/// things there are to answer for.</param>
+/// <param name="Total">How big the list is, said in the header — <c>{0}</c> is the
+/// count, and the rest is whatever this question calls its rows.</param>
 /// <param name="Score">Where the reader stands, said in the footer: <c>{0}</c> theirs,
 /// <c>{1}</c> the total, <c>{2}</c> the difference.</param>
 /// <param name="Invite">What to say to somebody who could answer and has not.</param>
@@ -46,14 +46,14 @@ public sealed record ListVocabulary(
                 Rows: "Item",
                 Total: "{0} to collect",
                 Score: "You have {0} of {1} — {2} still to find.",
-                Invite: "Tick anything to start your own list.",
+                Invite: "Check anything to start your own list.",
                 Yes: "has this",
                 No: "does not have this"),
             ["availability"] = new(
                 Rows: "When",
-                Total: "{0} to answer for",
+                Total: "{0} slots",
                 Score: "You can make {0} of {1}.",
-                Invite: "Tick the ones you can make.",
+                Invite: "Check the ones you can make.",
                 Yes: "can make it",
                 No: "cannot make it",
                 Tallies: true),

@@ -33,6 +33,16 @@
                 <thead>
                     <tr>
                         <th scope="col" class="item-col">@Words.Rows</th>
+                        @if (Words.Tallies)
+                        {
+                            @* A row's own total, where that is the question the list is read
+                               for: "how many can make Friday" and "how many picked Thai" are
+                               what those grids are about. Beside the rows rather than after
+                               the people, because it is the headline on those lists — and
+                               because a dozen participants is exactly when a column at the
+                               far end scrolls out of sight. *@
+                            <th scope="col" class="col-tally">Total</th>
+                        }
                         @foreach (var column in Columns)
                         {
                             @* Name over a meter over a count: the header is where "who is
@@ -52,14 +62,6 @@
                                     }
                                 </span>
                             </th>
-                        }
-                        @if (Words.Tallies)
-                        {
-                            @* A row's own total, where that is the question the list is read
-                               for: "how many can make Friday" and "how many picked Thai" are
-                               what those grids are about, and counting the row by eye across a
-                               dozen columns is what a reader should never have to do. *@
-                            <th scope="col" class="col-tally">Total</th>
                         }
                         @if (!view.CanTick)
                         {
@@ -94,6 +96,10 @@
                                 </button>
                                 @Named(row)
                             </th>
+                            @if (Words.Tallies)
+                            {
+                                <td class="col-tally">@RowTally(row)</td>
+                            }
                             @foreach (var column in Columns)
                             {
                                 <td class="@CellClass(column)">
@@ -116,10 +122,6 @@
                                     }
                                 </td>
                             }
-                            @if (Words.Tallies)
-                            {
-                                <td class="col-tally">@RowTally(row)</td>
-                            }
                             @if (!view.CanTick)
                             {
                                 <td class="col-invite"></td>
@@ -131,13 +133,13 @@
                             {
                                 <tr class="variant">
                                     <th scope="row" class="item">@Named(variant)</th>
-                                    @foreach (var column in Columns)
-                                    {
-                                        <td class="@CellClass(column)">@Mark(variant, column)</td>
-                                    }
                                     @if (Words.Tallies)
                                     {
                                         <td class="col-tally">@RowTally(variant)</td>
+                                    }
+                                    @foreach (var column in Columns)
+                                    {
+                                        <td class="@CellClass(column)">@Mark(variant, column)</td>
                                     }
                                     @if (!view.CanTick)
                                     {
@@ -165,8 +167,8 @@
                 </svg>
                 <span>
                     <strong>
-                        @orphaned.Orphans.Count tick@(orphaned.Orphans.Count == 1 ? "" : "s")
-                        no longer match an item
+                        @orphaned.Orphans.Count answer@(orphaned.Orphans.Count == 1 ? "" : "s")
+                        no longer match a row
                     </strong>
                     <span class="orphans">@string.Join(", ", orphaned.Orphans.Select(o => o.Text))</span>
                     — still in <a href="/nodes/@orphaned.TallyId">your list</a>, and counting
@@ -185,11 +187,11 @@
                 }
                 else if (Mine is { } mine)
                 {
-                    <text>@Score(mine.Count) Your ticks show to everyone who can read this list.</text>
+                    <text>@Score(mine.Count) Your answers show to everyone who can read this list.</text>
                 }
                 else
                 {
-                    <text>@Words.Invite Your ticks show to everyone who can read this list.</text>
+                    <text>@Words.Invite Your answers show to everyone who can read this list.</text>
                 }
             </span>
         </div>
@@ -316,8 +318,8 @@
             @if (row.Variants.Count == 0)
             {
                 <span class="rows-for" title="@Answered(row) of @view!.Columns.Count">
-                    <span class="n">@Answered(row)</span>
                     <span class="bar"><i style="width:@Share(row)%"></i></span>
+                    <span class="n">@Answered(row)</span>
                 </span>
             }
         </text>;
@@ -418,7 +420,7 @@
         }
         catch (Exception)
         {
-            error = "That tick could not be saved.";
+            error = "That answer could not be saved.";
             await LoadAsync();
         }
         finally

@@ -324,26 +324,27 @@ td.mark.you, th.col-you { background: color-mix(in srgb, var(--primary) 6%, tran
 .collection-foot.error { color: var(--danger); }
 
 /* How many people answered yes to a row — the question an availability list is read for
-   and the one a poll is. Number over bar, so the shape reads before the digits do. */
-.col-tally { min-width: 56px; }
-
-.rows-for {
-    display: inline-flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 4px;
+   and the one a poll is. A list read down its rows is a bar chart wearing a table, so the
+   bar gets the width a chart needs rather than the sliver a sparkline gets: it is the
+   thing being compared, and comparing lengths is what eyes are good at. Laid along the
+   row, the count trailing it, so the bars share a baseline and read against each other. */
+.col-tally {
+    min-width: 170px;
+    border-right: 1px solid var(--outline-dim);
 }
 
-.rows-for .n {
-    font-variant-numeric: tabular-nums;
-    font-size: 0.75rem;
-    color: var(--on-surface);
+.rows-for {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
 }
 
 .rows-for .bar {
-    width: 38px;
-    height: 3px;
-    border-radius: 2px;
+    flex: 1;
+    min-width: 0;
+    height: 10px;
+    border-radius: 3px;
     background: var(--outline-dim);
     overflow: hidden;
 }
@@ -351,8 +352,18 @@ td.mark.you, th.col-you { background: color-mix(in srgb, var(--primary) 6%, tran
 .rows-for .bar i {
     display: block;
     height: 100%;
-    border-radius: 2px;
-    background: var(--on-surface-dim);
+    border-radius: 3px;
+    background: var(--primary);
+    transition: width 0.18s ease;
+}
+
+.rows-for .n {
+    flex-shrink: 0;
+    min-width: 2ch;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    font-size: 0.78rem;
+    color: var(--on-surface);
 }
 
 /* A one-answer list gets a radio, which is a promise that picking this un-picks the last
