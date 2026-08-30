@@ -272,12 +272,34 @@ the wiki.
 **The cost that is not on the checklist.** `AGENT.md`'s "add a Markdown construct" steps
 assume decoration: a block extension tags its blocks and `DocumentChrome.Apply` derives
 floats and boxes and paints them. A collection is the dialect's first *interactive*
-construct. Its grid cannot be chrome on the editor canvas and cannot be static HTML in the
-read view, so `NodeReader` has to render the document in segments around collection blocks
-and host an island for each one, rather than handing the whole document to
-`DocumentHtmlView`. In the editor the fence renders as a titled card over the plain list and
-is edited as source, exactly as an aside is. That segmentation is the part of this feature
-to estimate carefully; everything else is a well-trodden path.
+construct, and slopedit 2.6.2 has no widget concept to lean on — its document model is
+`Block`, `StyledRun`, `BlockDecoration`, `FloatedRun` and `ExclusionZone`, all geometry and
+paint, and `RichHtmlWriter.WriteBody(doc, options)` renders a whole document to a string
+with no per-block hook to inject markup into. The interaction it does expose is
+`OnLinkActivated`, the context menu, and section folding.
+
+Checked against the package rather than assumed, though, two things make this much cheaper
+than "we are on our own":
+
+- **`RichDocument.Load(IEnumerable<Block>)` takes an arbitrary block sequence.** So
+  segmenting the read view is supported API, not a hack: split the block list at the
+  collection fences, load each range as its own document, render each through its own
+  `DocumentHtmlView`, and put the island between them. `RichHtmlOptions.Scope` exists
+  precisely so several rendered documents can share a page without their styles colliding.
+  The real cost is not the rendering — it is that anything spanning a boundary
+  (footnote numbering, a folded section, the outline `NodeReader` builds) now spans
+  documents, and has to be composed rather than inherited.
+- **The canvas is not closed to this either.** `RichDocument.TryGetBlockRunBox(firstBlock,
+  blockCount, out x, top, width, height)` with `SetExclusions(ExclusionZone[])` is exactly
+  "reserve a rectangle, then tell me where it landed", and `DocumentView` already positions
+  HTML over the canvas for its own menu layer. An in-editor grid is therefore *possible*.
+  It is still not v1: the fence renders as a titled card over the plain list and is edited
+  as source, exactly as an aside is.
+
+Worth noting for the "ordinary checklists keep working" promise: `RichDocument.ToggleTask(int
+row)` is already a first-class document operation, so a task item in the editor is
+interactive today and stays that way. That is the shared-state checkbox this design is
+careful not to take away.
 
 ### What makes a page a tally
 
