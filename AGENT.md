@@ -72,7 +72,10 @@ auto-login. Migrations: `dotnet ef migrations add <Name> -p src/Gatherum.Infrast
   `EditorView` for code/source; a document that is read rather than edited goes to
   `DocumentHtmlView` instead — the version panel's preview is the one today), tree,
   sidebar panels (contents/similar/recent), search box, node header, the category bar at
-  the foot of a page (`NodeCategories`), version panel, file view, and settings keys — plus Gatherum's Markdown dialect, which lives
+  the foot of a page (`NodeCategories`), version panel, file view, settings keys, and
+  the ROM player (`RomPlayer` over `Emulation/` — `IEmulatorCore` with a NES and a Game
+  Boy behind it, here because a console only ever runs in the reader's own browser) —
+  plus Gatherum's Markdown dialect, which lives
   here because it is the editor's word: `GatherumMarkdown` (the extension set and the
   only read/write door), `AsideExtension`/`CalloutExtension`/`BlockTags`,
   `SharedListExtension` and the `SharedListWidget` grid it is read as,
@@ -156,6 +159,12 @@ fresh DI scope via `Services/AppOperations`.
   (`IPageArchiver` — `BrowserPageArchiver` renders in headless Chromium where one is
   found, `HttpPageArchiver` is the plain fetch it degrades to) are the only abstraction
   seams. Don't add interfaces without a stated second implementation.
+- A console runs in the reader's browser or not at all. `RomPlayer` is guarded on
+  `OperatingSystem.IsBrowser()`: an Interactive Auto island renders on a circuit until
+  the WebAssembly runtime lands, and sixty frames a second over a websocket is not a
+  game. The cores tick the machine from inside every memory access rather than executing
+  an instruction and catching up, because a mid-screen scroll write is what a status bar
+  is made of — don't "optimize" that into an instruction-at-a-time loop.
 - Extraction is exact, cheap, and runs inside the upload request; analysis asks a model,
   takes minutes, and runs on a background worker. Never put one on the other's path —
   an upload must return before any model is consulted. Embedding is a third tempo again:
@@ -254,6 +263,17 @@ second icon set, and don't hand-draw a path when the pack has one.
    is what a model gets pointed at, so a construct it never mentions may as well not
    exist — `DocsTests` fails on a callout kind or an aside name the page has not heard
    of.
+
+**Add a console** (a machine whose cartridges should play):
+1. Implement `IEmulatorCore` under `src/Gatherum.Client/Emulation/` (cf. `Nes/NesConsole.cs`).
+   One frame per `RunFrame`, an ARGB `Frame` the player pins once, and audio drained
+   through `ReadAudio`; the player owns the clock.
+2. Teach `Emulation/Emulator.Load` to recognise it — by the bytes first, the extension
+   second — and `MediaTypes` its extension.
+3. Teach `Core/Roms/RomHeader` to read its header, so a cartridge is findable by what it
+   says it is, and add the row to the extraction table in `Docs/pages-and-files.md`.
+4. Add tests beside `Nes6502Tests`/`GameBoyTests`: hand-assembled programs in
+   `RomFixtures`, never a real game — a checked-in ROM is somebody's copyrighted work.
 
 **Add a text extractor**:
 1. Implement `ITextExtractor` in `src/Gatherum.Infrastructure/Extraction/` (cf.

@@ -92,11 +92,46 @@ Pages, uploaded `.docx` documents, and any text file open in the editor.
   place: reopen the book on any device you're signed in on and it opens where you left
   off, and each reader keeps their own place. A visitor on a public book is never
   remembered by the server — their place is kept by their own browser instead, and
-  goes no further. Anything else offers a download.
+  goes no further. A **game cartridge** — a `.nes`, `.gb` or `.gbc` file — plays: see
+  [Playing a cartridge](#playing-a-cartridge) below. Anything else offers a download.
 
 Editing autosaves. Presence shows who else has the document open, and if someone saved
 while you were typing the editor says so — your next save makes a new version and theirs
 stays in history either way.
+
+## Playing a cartridge
+
+Upload a `.nes`, `.gb` or `.gbc` file and its page has a console on it. Press **Play**
+and the game runs.
+
+The console is not a plug-in and not a download: the processor, the picture chip and the
+sound chip are all part of Gatherum, and they run in your browser. The cartridge is
+fetched once and nothing about the game leaves your machine afterwards.
+
+- **The controls** are the arrow keys, <kbd>Z</kbd> and <kbd>X</kbd> for the two face
+  buttons, <kbd>Enter</kbd> for Start and <kbd>Shift</kbd> for Select. On a touchscreen
+  a pad appears under the screen instead. Click the picture to give it the keyboard
+  again after clicking anything else.
+- **Sound** starts with the game — a browser will not make noise until someone has asked
+  it to — and there is a button to turn it off.
+- **Saving.** A cartridge with a battery in it saves the way it always did, and the save
+  is kept by your own browser rather than by Gatherum: the ROM is a file everyone who can
+  see the page shares, and a save is one person's afternoon. **Download save** takes it
+  out as a `.sav` file, and **Load save** puts one back — that is how a save moves
+  between browsers, or in from somewhere else.
+- **The first visit** to any page after signing in renders on the server while the
+  in-browser runtime downloads, and the player says so rather than pretending: reload
+  once and it plays.
+
+Gatherum knows the Nintendo Entertainment System's common cartridge boards (NROM, MMC1,
+UxROM, CNROM, MMC3, AxROM and a few others) and the Game Boy's (none, MBC1, MBC2, MBC3
+with its clock, and MBC5). A cartridge on a board it has not met says so by name instead
+of failing quietly.
+
+> [!NOTE]
+> Gatherum plays cartridges; it does not supply them. What you upload is your business,
+> and the same rules apply to a ROM as to anything else in the tree — private by default,
+> and yours to share or not.
 
 ## Reading
 
@@ -135,6 +170,7 @@ Two different tempos, and they never share a path.
 | `.docx` | Its Markdown rendering — the same text the editor shows |
 | `.epub` | Its chapters in reading order, each as its Markdown rendering |
 | Images | Embedded metadata |
+| `.nes`, `.gb`, `.gbc` | What the cartridge header says: the console, the title printed in it, the board, and whether it saves |
 
 **Analysis** asks a model, takes minutes, and runs on a background worker after the
 upload has already returned. It is off unless the instance's owner has configured

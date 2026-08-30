@@ -1,6 +1,8 @@
 # Status
 
-As of shared lists — a `:::collection` fence makes a list something a group works rather
+As of the ROM player — a `.nes`, `.gb` or `.gbc` upload has a console on its page, written
+in C# and running in the reader's own browser rather than borrowed from anybody's
+JavaScript. Before that: a `:::collection` fence makes a list something a group works rather
 than reads, with each person's answers a page of their own, and the same grid answers who
 can make which night as readily as who has which sprite. Before that:
 search runs a full-text half and a meaning half and fuses their rankings, with the
@@ -131,6 +133,21 @@ browser sessions — including against the built container).
   description, categories, referenced-by, per-version download; extraction: text verbatim,
   PDF (PdfPig), image metadata (MetadataExtractor); media types resolved sensibly
   when browsers upload code as octet-stream.
+- **Cartridges play** — upload a `.nes`, `.gb` or `.gbc` and its page has a console on
+  it. `RomPlayer` is an Interactive Auto island over `Emulation/`: a Nintendo
+  Entertainment System (6502 with a dot-accurate picture chip, five sound channels,
+  and the NROM/MMC1/UxROM/CNROM/MMC3/AxROM/GxROM boards) and a Game Boy that becomes a
+  Game Boy Color when the cartridge asks (SM83, the picture chip's mode timing and
+  colour palettes, four sound channels, MBC1 through MBC5), both behind one
+  `IEmulatorCore`. Keyboard or an on-screen pad, sound through Web Audio, and
+  battery saves kept by the reader's own browser with a `.sav` download and upload
+  beside them. It runs only in WebAssembly and says so on the first visit while the
+  runtime lands — sixty frames a second over a circuit is not a game. Verified in a
+  scripted browser session against the running app: both consoles boot and paint, a
+  keypress reaches the game and changes what is on screen, sound buffers are scheduled,
+  and a cartridge's battery memory round-trips through storage and out as a file.
+  A cartridge's header is extraction text, so a ROM is findable by console, title
+  and board.
 - **Bookmarks** — a URL captured as a file node, on request and never on a schedule.
   `BrowserPageArchiver` (Playwright over the container's Chromium, honoring
   `HTTPS_PROXY`, `Gatherum__Bookmarks__BrowserPath` to point elsewhere) loads the page,
@@ -196,7 +213,7 @@ browser sessions — including against the built container).
   exercised against a postgres container, editor verified in-browser against the
   containerized app), compose.yaml, Podman Quadlets, `/healthz`, JSON console logs
   outside Development, migrations on startup with opt-out.
-- **Tests** — 342 passing: the Markdown dialect (infobox/figure/callout round trips,
+- **Tests** — 413 passing: the Markdown dialect (infobox/figure/callout round trips,
   wiki-link spellings, extension composition, derived chrome, red-link inking, in-app
   URL shapes) and the same dialect as read-only HTML (the aside and its card, a
   callout's tint, a wiki link's URL, a mention that keeps its look and loses its
@@ -204,6 +221,12 @@ browser sessions — including against the built container).
   about, which are locked, the picture that becomes its caption, re-inking across a mode
   change, the allow-list the read view asks slopedit for, and an emitted anchor for the
   stylesheet to padlock with no target left in it),
+  the two emulator cores (each processor against hand-assembled programs — flags,
+  addressing, the indirect-jump defect, the undocumented opcodes, and what every
+  instruction charged in cycles — then whole consoles drawing a tile where the
+  nametable put it, scrolling by a pixel, resolving a sprite over the background,
+  and handing back the pad one bit at a time; the banking boards, their scanline
+  counter, and a battery save out and back),
   markdown links, docx extraction/editing/backlinks, tree ops, privacy,
   versions (collapse, restore, re-upload, cross-author), search, title resolution, API
   keys, storage/extraction, the taxonomy (nesting, counts, privacy, rename/move/delete,

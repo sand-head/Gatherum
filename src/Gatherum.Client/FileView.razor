@@ -76,6 +76,10 @@
             {
                 <EpubView NodeId="@NodeId" />
             }
+            else if (IsRom(file))
+            {
+                <RomPlayer NodeId="@NodeId" FileName="@file.FileName" />
+            }
             else if (file.MediaType.StartsWith("video/"))
             {
                 <video src="@contentUrl" controls></video>
@@ -254,6 +258,16 @@
             // The reader navigated away mid-transcript; nothing to report.
         }
     }
+
+    /// <summary>A cartridge image, by what the upload said or — when a browser called
+    /// it a generic pile of bytes, which most do — by what it is named. The same
+    /// benefit of the doubt the reader endpoints give a book.</summary>
+    private static bool IsRom(FileFacts file) =>
+        file.MediaType is "application/x-nes-rom" or "application/x-gameboy-rom"
+            or "application/x-gameboy-color-rom"
+        || file.FileName.EndsWith(".nes", StringComparison.OrdinalIgnoreCase)
+        || file.FileName.EndsWith(".gb", StringComparison.OrdinalIgnoreCase)
+        || file.FileName.EndsWith(".gbc", StringComparison.OrdinalIgnoreCase);
 
     private static string TranscriptLabel(string mediaType) =>
         mediaType.StartsWith("image/") ? "Text in the image" : "Transcript";

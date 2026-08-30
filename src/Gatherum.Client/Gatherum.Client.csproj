@@ -22,6 +22,9 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.11" />
+    <!-- Already in the graph under SlopEdit.Blazor, which paints the editor to a
+         canvas; named here because the ROM player paints to one directly. -->
+    <PackageReference Include="SkiaSharp.Views.Blazor" Version="4.148.0" />
     <PackageReference Include="SlopEdit.Blazor" Version="2.7.0" />
     <PackageReference Include="SlopEdit.Docx" Version="2.7.0" />
   </ItemGroup>

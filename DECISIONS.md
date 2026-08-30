@@ -1819,3 +1819,65 @@ The type names did not follow. `SharedListService`, `SharedListSyntax`, `SharedL
 still say collection, which is now the name of the flagship question rather than of the
 mechanism. Renaming them across Core, Web and Client is churn against no behavior, and
 "a collection of everyone's answers" is a fair reading of what the service returns.
+
+## The console is C#, and it plays in the reader's own browser
+
+Playing an uploaded ROM meant a choice: wrap an existing emulator, or write one. Every
+in-browser emulator worth having is JavaScript or WebAssembly compiled from C, and both
+answers are the same answer — a vendored library, which is the one thing the standing
+brief says the app does not do. Not out of purity: the whole point of `gatherum.js` being
+a hundred and fifty lines is that a person can read all the JavaScript in the app in one
+sitting, and half a megabyte of somebody's minified emulator ends that permanently.
+
+So the consoles are C#, in `Gatherum.Client/Emulation`, and they run in WebAssembly — the
+same home the editor already runs in. `IEmulatorCore` is the seam and it has two
+implementations, which is why it is allowed to exist at all: a Nintendo Entertainment
+System (`Nes/`, a 6502 with the dot-accurate picture chip games actually depend on, the
+sound chip's five channels, and the eight cartridge boards most of the library shipped
+on) and a Game Boy that is a Game Boy Color when the cartridge asks to be one
+(`GameBoy/`, an SM83, the picture chip's mode timing, four sound channels, MBC1 through
+MBC5). Both consoles have the same eight buttons, which is why `GamepadButtons` is one
+enum and not two.
+
+Both cores tick the rest of the machine from inside every memory access rather than
+running an instruction and catching up afterwards. That is more code in the addressing
+modes and it is the difference between a status bar that stays still and one that
+shimmers: a game splits the screen by writing a scroll register partway down it, and an
+instruction executed atomically puts the seam wherever the instruction happened to end.
+The cycle counts then fall out of the accesses instead of being looked up, which is also
+how the timing tests are written — they assert what the console charged, not what a table
+claims.
+
+**Where a save lives** was the one design question that is really about Gatherum rather
+than about hardware. A battery-backed save is content, and content in Gatherum is a file
+— which argues for writing it into the tree as a node, the way a shared list writes each
+person's tally. But a ROM is a file *everybody who can see the page shares*, and a save is
+one person's afternoon: filing it in the tree would either publish it or need a
+per-reader mechanism the filesystem-is-the-record rule has no room for. It cannot go in a
+table either — nothing outside `Users`, `ApiKeys` and `ReadingPositions` may live only in
+the database. So it lives in the reader's own browser, exactly like an anonymous reader's
+place in a book, with a download and an upload beside it so the choice is never a trap:
+the save leaves as a `.sav` file, which is the format everything else in the world reads.
+
+**The player refuses to run on the server circuit.** An Interactive Auto island renders on
+a circuit until the WebAssembly runtime has downloaded, and sixty frames a second over a
+websocket is not a game — it is a denial of service with a sprite on it. So the component
+checks `OperatingSystem.IsBrowser()` and says what is happening instead of trying.
+
+The picture reaches the screen through `SKCanvasView`, which was already in the graph
+under the editor. The frame buffer is pinned once with a `GCHandle` and the bitmap is
+installed over it, so a frame costs no copy at all — the core writes where Skia reads.
+The browser's animation callback asks for frames and the wall clock decides how many are
+due, because the console's frame rate (60.0988 and 59.7275) is not the display's on any
+hardware anybody owns.
+
+Sound is the one thing that needed JavaScript, and it got about forty lines: Web Audio has
+no .NET binding, a page may not make noise before it is asked to, and each frame's samples
+become a short buffer scheduled at the end of the last one. A worklet would be a second
+script file, and there is only one.
+
+**What is not here.** There are no save states — a save state is a snapshot of every
+field in the emulator, which is a serialization format to keep compatible forever, and
+the cartridges that save already save. There is no gamepad support: the Gamepad API is
+poll-only and would be more JavaScript than the sound is. Neither is a decision against;
+both are simply not in this change.

@@ -37,6 +37,7 @@ public static class GatherumServiceCollectionExtensions
         services.AddSingleton<ITextExtractor, PdfTextExtractor>();
         services.AddSingleton<ITextExtractor, DocxTextExtractor>();
         services.AddSingleton<ITextExtractor, EpubTextExtractor>();
+        services.AddSingleton<ITextExtractor, RomTextExtractor>();
         services.AddSingleton<ITextExtractor, ImageMetadataExtractor>();
 
         AddAnalysis(services, configuration);

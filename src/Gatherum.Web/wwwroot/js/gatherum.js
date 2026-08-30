@@ -238,3 +238,73 @@ export function initChrome() {
       document.getElementById('nav-drawer')?.hidePopover();
   });
 }
+
+// The ROM player's sound. Everything else about the player is C# — the processor, the
+// picture chip, the sound chip that produces these samples — but there is no way to
+// hand a waveform to a speaker from .NET: Web Audio has no binding, and a page cannot
+// play something it has not been asked to play, so the context is created on the click
+// that starts the game and nowhere else.
+//
+// Each frame's samples become one short buffer scheduled at the end of the last, which
+// keeps the sound continuous without a worklet (a worklet is a second script file, and
+// there is only one script here).
+let emulatorAudio;
+
+export function startEmulatorAudio(sampleRate) {
+  stopEmulatorAudio();
+  const Context = window.AudioContext ?? window.webkitAudioContext;
+  if (!Context) return false;
+  const context = new Context();
+  context.resume();
+  emulatorAudio = { context, rate: sampleRate, cursor: 0 };
+  return true;
+}
+
+export function stopEmulatorAudio() {
+  if (!emulatorAudio) return;
+  emulatorAudio.context.close();
+  emulatorAudio = undefined;
+}
+
+export function queueEmulatorAudio(bytes, sampleCount) {
+  if (!emulatorAudio || sampleCount <= 0) return;
+  const { context, rate } = emulatorAudio;
+  const buffer = context.createBuffer(1, sampleCount, rate);
+  const channel = buffer.getChannelData(0);
+  // Signed sixteen-bit, little-endian, read a byte at a time: a typed-array view would
+  // need the interop buffer to be two-byte aligned, which is not promised.
+  for (let i = 0; i < sampleCount; i++) {
+    const raw = bytes[i * 2] | (bytes[i * 2 + 1] << 8);
+    channel[i] = (raw >= 32768 ? raw - 65536 : raw) / 32768;
+  }
+  const source = context.createBufferSource();
+  source.buffer = buffer;
+  source.connect(context.destination);
+  // Stay a breath ahead of the clock. Falling behind means the cursor is in the past,
+  // which would play everything at once; catching up by skipping is the only cure.
+  const now = context.currentTime;
+  if (emulatorAudio.cursor < now + 0.02) emulatorAudio.cursor = now + 0.08;
+  source.start(emulatorAudio.cursor);
+  emulatorAudio.cursor += sampleCount / rate;
+}
+
+// A cartridge's battery-backed memory. It is the player's own, not the wiki's: the ROM
+// is a file every reader shares and a save is one person's afternoon, so it lives in
+// the browser that made it — the same place an anonymous reader's place in a book does.
+// The player offers it as a file to download, which is the way it leaves this browser.
+export function readEmulatorSave(nodeId) {
+  try {
+    return localStorage.getItem('gatherum-save-' + nodeId);
+  } catch {
+    return null;
+  }
+}
+
+export function writeEmulatorSave(nodeId, base64) {
+  try {
+    localStorage.setItem('gatherum-save-' + nodeId, base64);
+  } catch {
+    // Storage refused or is full. The game keeps its save in memory for this sitting;
+    // the download button is what gets it out.
+  }
+}

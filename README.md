@@ -42,8 +42,13 @@ page-turner.
   open in a paginated reader, chapter by chapter, links and all), descriptions,
   categories, and re-upload as a new version with old bytes retrievable. Text extraction
   (plain text/markdown/code verbatim, PDF via PdfPig, docx as its Markdown rendering,
-  EPUB chapters in reading order, image metadata) feeds search — and see **Multimedia** below for what a model adds to
+  EPUB chapters in reading order, cartridge headers, image metadata) feeds search — and see **Multimedia** below for what a model adds to
   that on top.
+- **Cartridges play**: upload a `.nes`, `.gb` or `.gbc` and its page has a console on
+  it — keyboard or on-screen pad, sound, and battery saves kept by your own browser with
+  a `.sav` download to take them anywhere. The emulators are C# in the app, running in
+  WebAssembly in your browser; no library is vendored and nothing about the game leaves
+  your machine.
 - **Bookmarks**: paste a URL and Gatherum keeps the page the way an archive would —
   fetched once, on request, never on a schedule. A headless Chromium (in the container
   image) loads the page, its scripts run and settle, lazy-loaded images are scrolled

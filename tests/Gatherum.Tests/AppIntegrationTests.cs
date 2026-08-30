@@ -759,6 +759,42 @@ public class AppIntegrationTests(PostgresFixture postgres) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_cartridge_upload_is_typed_by_its_extension_and_findable_by_its_header()
+    {
+        // A browser has no media type for a ROM and sends a generic one; the extension
+        // is what says which console it is for, and the header is all search can know.
+        using var upload = new MultipartFormDataContent();
+        var image = RomFixtures.Nes([0xEA]);
+        image[6] = 0x43;    // MMC3, battery-backed
+        var part = new ByteArrayContent(image);
+        part.Headers.ContentType =
+            new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+        upload.Add(part, "file", "cavern.nes");
+        var created = await client.PostAsync("/api/files", upload);
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var id = (await created.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("id").GetGuid();
+
+        var node = await client.GetFromJsonAsync<JsonElement>($"/api/nodes/{id}");
+        Assert.Equal("application/x-nes-rom",
+            node.GetProperty("file").GetProperty("mediaType").GetString());
+
+        var text = node.GetProperty("file").GetProperty("extractedText").GetString();
+        Assert.Contains("Nintendo Entertainment System", text);
+        Assert.Contains("MMC3", text);
+        Assert.Contains("battery-backed", text);
+
+        // And the header is real search text, not just a field on the node.
+        var hits = await client.GetFromJsonAsync<JsonElement>("/api/search?query=MMC3");
+        Assert.Contains(hits.EnumerateArray(), hit => hit.GetProperty("id").GetGuid() == id);
+
+        // The bytes come back exactly as uploaded — a cartridge that lost a byte would
+        // not boot, and content addressing is what promises it did not.
+        var content = await client.GetByteArrayAsync($"/api/files/{id}/content");
+        Assert.Equal(image, content);
+    }
+
+    [Fact]
     public async Task An_epub_upload_reads_back_as_a_manifest_and_paginated_chapters()
     {
         using var upload = new MultipartFormDataContent();

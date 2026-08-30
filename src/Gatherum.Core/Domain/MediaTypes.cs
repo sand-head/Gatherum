@@ -9,6 +9,13 @@ public static class MediaTypes
     public const string Html = "text/html";
     public const string Epub = "application/epub+zip";
 
+    /// <summary>Cartridge images, one media type per console, because what a ROM is
+    /// for is which machine runs it — the player picks its core by this and nothing
+    /// else.</summary>
+    public const string NesRom = "application/x-nes-rom";
+    public const string GameBoyRom = "application/x-gameboy-rom";
+    public const string GameBoyColorRom = "application/x-gameboy-color-rom";
+
     /// <summary>What a directory is, when it is only a place to keep things. A folder
     /// somebody made in their file manager is a node too.</summary>
     public const string Directory = "inode/directory";
@@ -30,6 +37,9 @@ public static class MediaTypes
         [".pdf"] = "application/pdf",
         [".docx"] = Docx,
         [".epub"] = Epub,
+        [".nes"] = NesRom,
+        [".gb"] = GameBoyRom,
+        [".gbc"] = GameBoyColorRom,
     };
 
     /// <summary>Extensions whose content is text even when the upload says otherwise —
@@ -70,6 +80,14 @@ public static class MediaTypes
             return known;
         return TextExtensions.Contains(extension) ? PlainText : Binary;
     }
+
+    /// <summary>Whether this is a cartridge image the player can run.</summary>
+    public static bool IsRom(string mediaType, string fileName) =>
+        mediaType is NesRom or GameBoyRom or GameBoyColorRom ||
+        RomExtensions.Contains(Path.GetExtension(fileName));
+
+    private static readonly HashSet<string> RomExtensions =
+        new(StringComparer.OrdinalIgnoreCase) { ".nes", ".gb", ".gbc" };
 
     public static bool IsText(string mediaType, string fileName) =>
         mediaType.StartsWith("text/", StringComparison.OrdinalIgnoreCase) ||
