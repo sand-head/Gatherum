@@ -129,7 +129,8 @@ public sealed class ServerAppData(
         var tree = await ops.Nodes(s => s.GetTreeAsync(userId));
         return tree
             .Select(n => new TreeNodeInfo(n.Id, n.ParentId, n.Title, n.MediaType,
-                n.Kind.ToString(), n.Position, n.Access.ToString(), n.Reach.ToString(), n.Owned))
+                n.Kind.ToString(), n.Position, n.Access.ToString(), n.Reach.ToString(),
+                n.ListedToSignedIn, n.Owned))
             .ToList();
     }
 

@@ -107,7 +107,7 @@ public record PresenceInfo(IReadOnlyList<string> Editors, int HeadVersion);
 public record SearchHit(Guid Id, string Kind, string Title, string Snippet);
 public record TitleMatch(string Title, Guid Id);
 public record TreeNodeInfo(Guid Id, Guid? ParentId, string Title, string MediaType,
-    string Kind, int Position, string Access, string Reach, bool Owned);
+    string Kind, int Position, string Access, string Reach, bool ListedToSignedIn, bool Owned);
 /// <summary>Somebody this node is shared with, and what they may do.</summary>
 public record GrantInfo(Guid UserId, string DisplayName, string Username, string Role);
 

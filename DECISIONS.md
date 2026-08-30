@@ -1620,3 +1620,33 @@ What this deliberately leaves undone: the access modes still go from `Shared`, w
 people, straight to `Unlisted` and `Public`, which mean the open internet. There is no mode
 for "anyone who got past the front door", and once the front door is a group that is the
 gap that will be felt first — see COLLECTIONS.md, which ran into it.
+
+## Authenticated is a second axis, not a fourth rung
+"Everyone who can sign in" is the mode a Gatherum shared by a group actually wants, and
+until now the scale went from `Shared`, which names people one at a time, straight to
+`Unlisted` and `Public`, which mean the open internet.
+
+The obvious implementation is a new value on `NodeReach`, and it is wrong. That enum is
+ordered so that inheritance can be a maximum and the two visibility questions can be
+comparisons — but "everyone signed in" and "anyone holding the link" are not comparable:
+the second admits anonymous strangers and hides the node from every listing, the first
+admits nobody anonymous and lists it to everybody else. Forced onto one scale, the maximum
+has to discard one of them, and an unlisted page inside an authenticated directory would
+silently vanish from the listings of the very people the directory was shared with —
+a narrowing, in the direction nobody would think to check.
+
+So `NodeReach` keeps its meaning, which was always *what the anonymous internet gets*, and
+`Node.ListedToSignedIn` carries the other axis. Both are derived by `AccessService` from
+the same pre-order walk and both are additive downward, one as a maximum and one as an or.
+`VisibleTo` gains a term rather than a join, so visibility stays the indexed predicate it
+has to be. `AuthenticatedAccessTests` pins the case that forced this.
+
+Two smaller calls inside it. `AccessMode.Authenticated` is declared **last** rather than in
+its conceptual place between `Shared` and `Unlisted`, because the database stores that enum
+by ordinal and inserting a value would silently renumber every access already recorded —
+the sidecar writes it by name and does not care, but the rows do. And `Public` does not set
+`ListedToSignedIn`: a public node already reaches everyone through `NodeReach.Listed`, and
+routing it through the new axis as well would let it outlive `Sharing.AllowPublic`, whose
+documented meaning is that a node claiming to be public is treated as private by every
+query. Keeping it out means this change moves nothing for an instance that has the internet
+switched off.

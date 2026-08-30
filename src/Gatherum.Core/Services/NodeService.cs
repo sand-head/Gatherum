@@ -71,7 +71,7 @@ public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeP
         authorizer.VisibleTo(db.Nodes, userId)
             .OrderBy(n => n.ParentId).ThenBy(n => n.Position)
             .Select(n => new TreeNode(n.Id, n.ParentId, n.Title, n.MediaType, n.Position,
-                n.Access, n.Reach, userId != null && n.OwnerId == userId))
+                n.Access, n.Reach, n.ListedToSignedIn, userId != null && n.OwnerId == userId))
             .ToListAsync(ct);
 
     /// <summary>Content writes: the owner, or somebody granted Editor. Seeing a node has
@@ -436,7 +436,7 @@ public class NodeService(GatherumDbContext db, INodeAuthorizer authorizer, TimeP
 }
 
 public record TreeNode(Guid Id, Guid? ParentId, string Title, string MediaType, int Position,
-    AccessMode Access, NodeReach Reach, bool Owned)
+    AccessMode Access, NodeReach Reach, bool ListedToSignedIn, bool Owned)
 {
     public NodeKind Kind => MediaType == MediaTypes.Markdown ? NodeKind.Page : NodeKind.File;
 }

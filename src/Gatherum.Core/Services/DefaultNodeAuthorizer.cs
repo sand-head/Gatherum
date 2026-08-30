@@ -22,15 +22,20 @@ public class DefaultNodeAuthorizer(IOptions<GatherumOptions> options) : INodeAut
     public IQueryable<Node> VisibleTo(IQueryable<Node> nodes, Guid? userId)
     {
         var ceiling = Ceiling;
+        // Signing in is itself a permission here: ListedToSignedIn is the whole of what
+        // AccessMode.Authenticated grants, and it is not ceilinged by AllowPublic because
+        // that switch is about facing the internet, which this mode declines to do.
         return userId is { } id
             ? nodes.Where(n => (n.Reach == NodeReach.Listed && ceiling >= NodeReach.Listed)
+                || n.ListedToSignedIn
                 || n.OwnerId == id || n.AccessEntries.Any(e => e.UserId == id))
             : nodes.Where(n => n.Reach == NodeReach.Listed && ceiling >= NodeReach.Listed);
     }
 
     public bool CanSee(Node node, Guid? userId) =>
         (node.Reach >= NodeReach.WithLink && Ceiling >= node.Reach)
-        || (userId is { } id && (node.OwnerId == id || node.AccessEntries.Any(e => e.UserId == id)));
+        || (userId is { } id && (node.ListedToSignedIn || node.OwnerId == id
+            || node.AccessEntries.Any(e => e.UserId == id)));
 
     public bool CanEdit(Node node, Guid? userId) =>
         userId is { } id

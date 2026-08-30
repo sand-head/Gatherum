@@ -30,8 +30,19 @@ written it.
 | --- | --- | --- |
 | **Private** | The owner | — |
 | **Shared** | The owner, plus the people named in its grants | To those people |
+| **Authenticated** | Everyone signed in to this Gatherum | To them |
 | **Unlisted** | Anyone holding the link, without signing in | No |
 | **Public** | Anyone on the internet, without signing in | Yes |
+
+**Authenticated** is the mode for a Gatherum a group shares. It says "everybody with an
+account here", which is one gesture rather than one grant per person, and it never means the
+internet — a signed-out visitor gets nothing at all. Where sign-in is gated on a group at
+the identity provider, this is exactly "everyone in that group".
+
+Authenticated and Unlisted are not degrees of the same thing, which is why they can both be
+true at once: an unlisted page inside an authenticated directory is reachable by a stranger
+holding its link *and* listed to everyone signed in. Access is additive downward, and these
+are two axes rather than two rungs.
 
 **Unlisted** is the interesting one. Everywhere else, "may you reach this?" and "may you
 find this?" have the same answer. An unlisted node breaks them apart: its id is the
