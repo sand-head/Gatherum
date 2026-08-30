@@ -579,7 +579,7 @@ the drawer closes on navigation through the same delegated click listener in
 
 **Below 700px the page scrolls, above it the pane does.** An inner scroll container
 means the mobile URL bar can never collapse and the reader pays for it on every screen;
-page scrolling also hands slopedit's page-mode sticky strip the document as its scroll
+page scrolling also hands slopedit's page-mode sanswery strip the document as its scroll
 container, which is the ancestor it wants. Two scroll models, one breakpoint, and the
 header comment in `MainLayout.razor.css` says which is which — the file's original claim
 that `.content` is always the scroller is now only true above the line.
@@ -745,7 +745,7 @@ Two things this repo does not do, deliberately. It passes no padding: `EditorVie
 no `ContentPadding` parameter at all, so `CodeHtmlView` takes its default and the pair
 agrees the way it was built to. And it adds no reset for the code view, because
 `CodeHtmlWriter` already emits `code { background: none; padding: 0 }` and owns the
-`<pre>`'s `overflow-x`, `white-space` and the sticky `.se-ln` gutter — the horizontal
+`<pre>`'s `overflow-x`, `white-space` and the sanswery `.se-ln` gutter — the horizontal
 scroll of a long line is slopedit's, not app.css's. The document view is the one that
 still needs the reset in app.css, because `RichHtmlWriter`'s `code` rule sets only the
 face and leaves background and padding to whatever the host has lying around. That
@@ -1656,14 +1656,14 @@ switched off.
 
 A collaborative collectible list conflates two documents with different tempos: what
 exists to collect, written once by one author, and what *I* have, written constantly by
-each participant. One set of checkboxes cannot answer both — if you tick Sonic, has anyone
+each participant. One set of checkboxes cannot answer both — if you answer Sonic, has anyone
 else got it, and where would the checkbox put the answer? So the catalog is a page and a
 tally is a page per person. No new relation, no new table, no new visibility rule.
 
 **The catalog's audience is the grid's audience**, and this is the correction that
 mattered most. The first cut made each tally's own `AccessMode` decide whether its column
 appeared, which is locally impeccable — only an owner sets access — and globally absurd:
-it made joining a shared list a two-gesture act, tick and then publish a second page, or
+it made joining a shared list a two-gesture act, answer and then publish a second page, or
 your column counts for nobody. Nobody who shares a roster with their group means "and each
 of you must separately publish your answers first". So authorization happens once, at the
 door the service already knocks on — `NodeService.GetWithBodyAsync` on the catalog,
@@ -1674,12 +1674,12 @@ rule survives because nothing here re-spells it.
 
 What that deliberately does *not* do is publish the tally page. Its `AccessMode` is
 untouched and still governs the node — its own URL, the tree, search — so a tally stays
-private as a file while the ticks on it count in the list they were made against. The
-disclosure is exactly the rows somebody ticked and the name they tick under; notes and
+private as a file while the answers on it count in the list they were made against. The
+disclosure is exactly the rows somebody answered and the name they answer under; notes and
 orphans stay their owner's, and orphans are reported only to the person who can act on
 one. Two consequences worth saying out loud: a public catalog's grid is public, display
 names included, so publishing one is a decision about other people as well as about the
-page; and there is no half-in — the way out of a grid is not to tick, or to delete the
+page; and there is no half-in — the way out of a grid is not to answer, or to delete the
 tally, because a mode meaning "counted but hidden" would be a checkbox lying in the other
 direction.
 
@@ -1689,7 +1689,7 @@ by resolving it, so whether the match happens no longer depends on who is *readi
 unlisted catalog still cannot be named by title, but that is now a fact about the author
 writing the link, which is where it belongs.
 
-**A tally is content, not ephemera.** `NodeTicks` would have been an afternoon's work and
+**A tally is content, not ephemera.** `NodeAnswers` would have been an afternoon's work and
 wrong: `ReadingPositions` earns its database-only exception because losing one costs a page
 number, and a season of collecting is not that. A tally is a file under its owner's root —
 rebuildable by `Reindexer`, carried by the backup, readable when Gatherum is not running.
@@ -1707,11 +1707,11 @@ have counted any page discussing the list with example checkboxes as somebody's 
 **Item identity is the interesting problem, and the answer is that pages are optional.**
 Keying by line number fails on the commonest edit there is; by text, on a rename; by node
 id, never. The first draft therefore made a page per collectible mandatory, which is the
-expensive option made compulsory — wanting to tick off forty sprites is not wanting to write
+expensive option made compulsory — wanting to answer off forty sprites is not wanting to write
 forty pages. So an item is a line of text that *may* link a node, and matching is: two
 linked items are their ids, anything else is its text. That asymmetry is what makes
-promotion lossless, so ticks made against `Sonic` keep counting once Sonic becomes a page.
-A rename orphans the plain ticks it stranded — Alice cannot rewrite Bob's file to follow
+promotion lossless, so answers made against `Sonic` keep counting once Sonic becomes a page.
+A rename orphans the plain answers it stranded — Alice cannot rewrite Bob's file to follow
 her wording — so the orphans are kept in his file and reported in the grid. Silence is the
 one unacceptable answer.
 
@@ -1719,13 +1719,13 @@ one unacceptable answer.
 the fence would be a lie from the first week: things are held back, arrive late, and do not
 all carry the same forms. Nesting also forces the counting rule — every number is of
 collectibles, never of lines — and makes a parent row a group rather than a control:
-"give me all three" is a different statement from the three ticks it would stand in for,
+"give me all three" is a different statement from the three answers it would stand in for,
 and the one thing this must not do is guess what somebody has.
 
-**Signed out is read-only.** A third answer was on the table — tick freely into this
+**Signed out is read-only.** A third answer was on the table — answer freely into this
 browser's `localStorage`, the mechanism that already keeps an anonymous reader's place in a
 book — and it is wrong here. A reading position can be quietly local because nobody else was
-ever going to see it; in a grid where every other column is a real person's real ticks, a
+ever going to see it; in a grid where every other column is a real person's real answers, a
 checkbox that writes to nobody looks exactly like the ones that count. So there is no
 checkbox at all, and an invitation to sign in instead. Guest tallies (a hashed capability
 token, its file under the catalog owner's root, off by default) remain designed and
@@ -1736,7 +1736,7 @@ MCP tools. The construct is the dialect's first *interactive* one, and it needed
 the reading view to put a component in — which slopedit 2.7.0 shipped as widget blocks,
 keyed by the `Block.Tag` an extension already stamps. The blocks stay blocks, so items
 reach search and a `[[wiki link]]` in one is still a real link; the canvas keeps painting
-the source, so a tick can never register as an edit of an open document; and `WriteBody`
+the source, so an answer can never register as an edit of an open document; and `WriteBody`
 ignores the claim, so a static export holds the catalog rather than a gap. Two behaviors
 to design around rather than discover: a tagged run inside a float renders as blocks, so a
 collection inside an `:::infobox` is a plain list, and a collapsible section holding a
@@ -1786,12 +1786,34 @@ actually produced; the reading view only reads it to draw a radio instead of a b
 is a promise the write then keeps. Withdrawing is still allowed — one answer *at most*,
 not one compulsorily.
 
+A poll also does not name who answered what, which is the third thing its word decides
+and the one worth being careful about. A roster and a schedule are asked *of* people —
+"who can make Friday" has no useful answer without the who — while a poll is asked of a
+group and answered by individuals, and being seen to change your mind in front of
+everybody is a different act from voting. So the columns are withheld, the totals are
+not, and the reader keeps their own column because they have to see their answer to
+change it.
+
+Withheld **in the answer the service builds**, not in the markup. Hiding a column in the
+component while the response still carried the names would be the same lie as a checkbox
+that records nothing — anybody could read the JSON. That also forced a row's total onto
+the server, where it belongs anyway: it is the one number a reader cannot derive from
+what they were sent, because on a poll there are no columns to derive it from.
+
+What this is not is a secret ballot, and the manual says so. Every answer is still a file
+its owner may share, an admin reads the disk, and editing the fence's word to
+`:::collection` shows the columns that were there all along. Making it stronger would mean
+answers that are not files, which is the one thing this design will not do. It hides who
+from the people reading the list — the ordinary courtesy a poll wants — and claims nothing
+more.
+
 It also earned the vocabulary its first genuinely visual flag. A poll is read down its
 rows ("how many picked Thai"), and so is an availability list ("how many can make
 Friday"), while a collection is read across them ("how many do I still need"). So a row's
 own total is a column the vocabulary asks for, rather than one every grid carries and two
-thirds of them waste width on. The total counts the columns actually on the grid, which
-is the only denominator a reader can check.
+thirds of them waste width on. The total is counted before any column is
+withheld, so a poll reports honestly rather than reporting whatever this reader was
+allowed to see.
 
 The type names did not follow. `CollectionService`, `CollectionSyntax`, `CollectionWidget`
 still say collection, which is now the name of the flagship question rather than of the

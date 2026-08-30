@@ -213,7 +213,7 @@ td.mark.you, th.col-you { background: color-mix(in srgb, var(--primary) 6%, tran
 .disclose svg { width: 13px; height: 13px; }
 
 /* A group's cell reports and does not offer: one segment per variant, filled for the
-   ones that person holds. Ticking a parent would stand in for statements nobody made. */
+   ones that person holds. Answering a parent would stand in for statements nobody made. */
 .seg {
     display: inline-flex;
     gap: 2px;
@@ -231,18 +231,18 @@ td.mark.you, th.col-you { background: color-mix(in srgb, var(--primary) 6%, tran
 .seg i.on { background: var(--ok); }
 .mark.you .seg i.on { background: var(--primary); }
 
-/* Somebody else's tick: a mark, never a control — and never a disabled checkbox, which
+/* Somebody else's answer: a mark, never a control — and never a disabled checkbox, which
    would read as "you may not" instead of "this isn't yours". */
-.tick {
+.answer {
     display: inline-grid;
     place-items: center;
     width: 20px;
     height: 20px;
 }
 
-.tick svg { width: 15px; height: 15px; }
-.tick.on { color: var(--ok); }
-.tick.off { color: var(--outline); }
+.answer svg { width: 15px; height: 15px; }
+.answer.yes { color: var(--ok); }
+.answer.no { color: var(--outline); }
 
 /* The reader's own: a real control, drawn rather than borrowed, so it matches the marks
    beside it at every size and in both modes. */
@@ -322,6 +322,24 @@ td.mark.you, th.col-you { background: color-mix(in srgb, var(--primary) 6%, tran
 }
 
 .collection-foot.error { color: var(--danger); }
+
+/* A list that reports totals without naming anybody says so, rather than looking like a
+   grid nobody joined. Sized here because an inline SVG with no width fills whatever it is
+   given, and this one is given a whole panel. */
+.collection-foot.secret {
+    align-items: flex-start;
+    gap: 9px;
+    border-top: 1px solid var(--outline-dim);
+}
+
+.collection-foot.secret svg {
+    flex-shrink: 0;
+    width: 14px;
+    height: 14px;
+    margin-top: 1px;
+}
+
+.collection-foot.secret span { flex: 1; min-width: 0; }
 
 /* How many people answered yes to a row — the question an availability list is read for
    and the one a poll is. A list read down its rows is a bar chart wearing a table, so the

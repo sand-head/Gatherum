@@ -15,7 +15,7 @@ namespace Gatherum.Core.Services;
 /// under its owner's root, written by nobody else.
 ///
 /// <b>The catalog's audience is the grid's audience.</b> Whoever may read the list may
-/// see everyone's ticks against it — ticking is joining in, and a shared list whose
+/// see everyone's answers against it — answering is joining in, and a shared list whose
 /// participants each had to publish a second page before their column counted would be
 /// asking for a permission nobody meant to withhold. So authorization happens once, at
 /// the door this service already knocks on: <see cref="ResolveAsync"/> reads the
@@ -26,8 +26,8 @@ namespace Gatherum.Core.Services;
 /// What that does <em>not</em> do is publish the tally page. Its own
 /// <see cref="AccessMode"/> is untouched and still governs the node — whether it opens
 /// at its own URL, whether it is in anybody's tree, whether search finds it — so a tally
-/// stays private as a page while the ticks on it count in the list they were made
-/// against. The exposure is exactly the row keys somebody ticked and the name they tick
+/// stays private as a page while the answers on it count in the list they were made
+/// against. The exposure is exactly the row keys somebody answered and the name they answer
 /// under; the notes and orphans in their file are their own.
 /// </summary>
 public class CollectionService(
@@ -35,11 +35,11 @@ public class CollectionService(
     NodeService nodes,
     FileService files)
 {
-    /// <summary>Where a tally lands when somebody ticks their first item. A page, like
+    /// <summary>Where a tally lands when somebody answers their first item. A page, like
     /// everything else — the tree has one kind of thing in it.</summary>
     public const string TallyFolder = "Collections";
 
-    /// <summary>A catalog's rows with every visible tally's ticks against them.
+    /// <summary>A catalog's rows with every visible tally's answers against them.
     /// <paramref name="nodeId"/> is whichever page the reader is looking at: a catalog
     /// aggregates itself, a tally aggregates the catalog it tracks, and both answer
     /// with the same grid.</summary>
@@ -51,16 +51,35 @@ public class CollectionService(
         var leaves = rows.SelectMany(Leaves).Select(r => r.Key).ToHashSet(StringComparer.Ordinal);
 
         var columns = new List<CollectionColumn>();
+        var answers = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var tally in await TalliesAsync(catalog, declared, ct))
         {
             var read = Reconcile(declared.Items, tally.Tracking.Items, parent: null);
             var isViewer = userId is { } viewer && tally.OwnerId == viewer;
+            foreach (var key in read.Held)
+                answers[key] = answers.GetValueOrDefault(key) + 1;
             // Orphans are their owner's business — only they can act on one, and the
-            // catalog's readers were shown ticks, not the state of somebody's file.
+            // catalog's readers were shown answers, not the state of somebody's file.
             columns.Add(new CollectionColumn(tally.Id, tally.OwnerId, tally.DisplayName,
                 isViewer, read.Held, isViewer ? Orphans(read.Orphans, "") : [],
                 read.Held.Count(leaves.Contains)));
         }
+        var participants = columns.Count;
+
+        // Every row's total is counted before anybody's column is withheld, so a secret
+        // ballot still reports honestly: the tally is of everyone who answered, not of
+        // whoever this reader is allowed to see.
+        rows = WithAnswers(rows, answers);
+
+        if (!CollectionSyntax.NamesAnswers(declared.Word))
+        {
+            // A poll reports how many, never who — and it withholds them here rather than
+            // in the markup, because a name the response still carries is a name anybody
+            // can read. The reader keeps their own column: they have to see their answer
+            // to change it, and it was never a secret from them.
+            columns.RemoveAll(c => !c.IsViewer);
+        }
+
         // The reader's own column first, then the fullest, then by name: a grid is read
         // to find out how you are doing, and then how everybody else is.
         columns.Sort((a, b) => a.IsViewer != b.IsViewer
@@ -70,13 +89,13 @@ public class CollectionService(
                 : string.Compare(a.DisplayName, b.DisplayName, StringComparison.OrdinalIgnoreCase));
 
         return new CollectionView(catalog.Id, catalog.Title, declared.Word,
-            declared.Argument, rows, columns,
+            declared.Argument, rows, columns, participants,
             columns.FirstOrDefault(c => c.IsViewer)?.TallyId, userId is not null,
             leaves.Count);
     }
 
     /// <summary>Records one collectible against the caller's own tally, writing their
-    /// file into being the first time they tick anything. Never anybody else's: a tally
+    /// file into being the first time they answer anything. Never anybody else's: a tally
     /// is a node, and a node is written by its owner.</summary>
     public async Task<CollectionView> SetAsync(Guid userId, Guid nodeId, string rowKey,
         bool collected, string? list = null, CancellationToken ct = default)
@@ -122,7 +141,7 @@ public class CollectionService(
         // nights on both pages rather than as a collection of them.
         var fence = CollectionSyntax.Write(mine?.Tracking.Word ?? declared.Word, argument,
             [.. Mirror(declared.Items, parent: null, read.Held, read.Notes), .. read.Orphans],
-            ticked: true);
+            answered: true);
 
         if (mine is null)
         {
@@ -174,7 +193,7 @@ public class CollectionService(
     private async Task<List<Tally>> TalliesAsync(Node catalog, CollectionBlock declared,
         CancellationToken ct)
     {
-        // The head version's text and nothing else: a tally is rewritten on every tick, so
+        // The head version's text and nothing else: a tally is rewritten on every answer, so
         // materializing its whole history to read one body would make the commonest page
         // view in this feature the most expensive one.
         var candidates = await db.Nodes
@@ -248,22 +267,33 @@ public class CollectionService(
                 Rows(item.Variants, key));
         })];
 
+    /// <summary>The rows again, each carrying how many people answered yes to it. Counted
+    /// on the server because it is the one number a reader cannot check by looking at the
+    /// columns — on a poll there are no columns to check it against.</summary>
+    private static List<CollectionRow> WithAnswers(IReadOnlyList<CollectionRow> rows,
+        IReadOnlyDictionary<string, int> answers) =>
+        [.. rows.Select(row => row with
+        {
+            Answers = answers.GetValueOrDefault(row.Key),
+            Variants = WithAnswers(row.Variants, answers),
+        })];
+
     private static string KeyOf(CollectionEntry item, string? parent)
     {
         var own = item.NodeId is { } id ? $"node:{id:N}" : $"text:{CollectionSyntax.Normalize(item.Label)}";
         return parent is null ? own : $"{parent}/{own}";
     }
 
-    /// <summary>The rows a tick can actually be made against: an item with variants is
-    /// a group, and "give me all three" is a different statement from the three ticks it
+    /// <summary>The rows an answer can actually be made against: an item with variants is
+    /// a group, and "give me all three" is a different statement from the three answers it
     /// would stand in for.</summary>
     private static IEnumerable<CollectionRow> Leaves(CollectionRow row) =>
         row.Variants.Count == 0 ? [row] : row.Variants.SelectMany(Leaves);
 
     /// <summary>Reads one tally against the catalog: which rows it holds, what it
-    /// noted about each, and the ticks that no longer match anything. An orphan is kept
+    /// noted about each, and the answers that no longer match anything. An orphan is kept
     /// whole rather than dropped — Alice cannot rewrite Bob's file to follow her rename,
-    /// so the ticks simply stop matching, and silence is the one unacceptable answer.</summary>
+    /// so the answers simply stop matching, and silence is the one unacceptable answer.</summary>
     private static TallyReading Reconcile(IReadOnlyList<CollectionEntry> catalog,
         IReadOnlyList<CollectionEntry> tally, string? parent)
     {
@@ -292,14 +322,14 @@ public class CollectionService(
             foreach (var (noted, note) in nested.Notes)
                 reading.Notes.TryAdd(noted, note);
             // A variant nobody recognizes is kept under the item it was written under, so
-            // appending it back preserves which sprite the tick was about.
+            // appending it back preserves which sprite the answer was about.
             if (nested.Orphans.Count > 0)
                 reading.Orphans.Add(mine with { Checked = false, Variants = nested.Orphans });
         }
         return reading;
     }
 
-    /// <summary>Orphaned ticks flattened for reporting, each said the way its file says
+    /// <summary>Orphaned answers flattened for reporting, each said the way its file says
     /// it — a variant under the item it hangs from.</summary>
     private static List<CollectionOrphan> Orphans(IReadOnlyList<CollectionEntry> entries,
         string parent)
@@ -318,7 +348,7 @@ public class CollectionService(
     }
 
     /// <summary>The tally's fence rebuilt from the catalog it tracks: the catalog's
-    /// current wording and links, this person's ticks and notes. Adopting the catalog's
+    /// current wording and links, this person's answers and notes. Adopting the catalog's
     /// labels is what carries a promotion — an item that gained a page — into a tally
     /// without anybody having to edit it.</summary>
     private static List<CollectionEntry> Mirror(IReadOnlyList<CollectionEntry> catalog,
@@ -356,7 +386,7 @@ public class CollectionService(
     }
 }
 
-/// <summary>A catalog and everybody's ticks against it — the whole of what a grid
+/// <summary>A catalog and everybody's answers against it — the whole of what a grid
 /// draws, decided on the server so no two surfaces can disagree about who has what.</summary>
 public sealed record CollectionView(
     Guid CatalogId,
@@ -368,16 +398,21 @@ public sealed record CollectionView(
     string List,
     IReadOnlyList<CollectionRow> Rows,
     IReadOnlyList<CollectionColumn> Columns,
+    /// <summary>How many people have answered this list at all — which is not
+    /// <c>Columns.Count</c> on a list that reports totals without naming anybody.</summary>
+    int Participants,
     Guid? TallyId,
-    bool CanTick,
+    bool CanAnswer,
     int Collectibles);
 
-/// <summary>One line of the catalog, with the variants nested under it.</summary>
+/// <summary>One line of the catalog, with the variants nested under it, and how many
+/// people said yes to it. <c>Answers</c> counts everybody who did, whether or not this
+/// reader is shown which of them.</summary>
 public sealed record CollectionRow(string Key, string Text, Guid? NodeId, string Note,
-    IReadOnlyList<CollectionRow> Variants);
+    IReadOnlyList<CollectionRow> Variants, int Answers = 0);
 
 /// <summary>One participant's column: their tally, and what it holds. <c>Orphans</c> —
-/// ticks the catalog no longer has an item for — is filled in for the reader's own
+/// answers the catalog no longer has an item for — is filled in for the reader's own
 /// column and empty for everybody else's, because only its owner can do anything about
 /// one.</summary>
 public sealed record CollectionColumn(
@@ -389,6 +424,6 @@ public sealed record CollectionColumn(
     IReadOnlyList<CollectionOrphan> Orphans,
     int Count);
 
-/// <summary>A tick that no longer matches an item — kept in the file, shown in the
+/// <summary>An answer that no longer matches an item — kept in the file, shown in the
 /// grid, and never quietly dropped.</summary>
 public sealed record CollectionOrphan(string Text, string Note);

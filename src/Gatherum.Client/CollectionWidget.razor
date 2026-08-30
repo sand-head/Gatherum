@@ -4,7 +4,7 @@
 
 @* A :::collection run, rendered as the thing it is for rather than the prose it is made
    of — slopedit 2.7.0's widget blocks are exactly this hole in the reading view, and the
-   canvas keeps the source, so a tick can never register as an edit of an open document.
+   canvas keeps the source, so an answer can never register as an edit of an open document.
 
    Everything on screen is decided by the server: the rows are the catalog's, in its
    author's order, and the columns are everyone's. This component contains no rule about
@@ -19,7 +19,7 @@
         <div class="collection-head">
             <p class="collection-name">@(view.List.Length > 0 ? view.List : view.CatalogTitle)</p>
             <span class="collection-count">
-                @(view.Columns.Count switch
+                @(view.Participants switch
                 {
                     0 => Total,
                     1 => $"1 person · {Total}",
@@ -63,11 +63,11 @@
                                 </span>
                             </th>
                         }
-                        @if (!view.CanTick)
+                        @if (!view.CanAnswer)
                         {
                             @* No checkbox at all rather than one that writes to this browser
                                and nobody else: in a grid where every other column is a real
-                               person's real ticks, a control that records nothing
+                               person's real answers, a control that records nothing
                                misrepresents itself. The column the reader would have had is
                                an invitation instead. *@
                             <th scope="col" class="col-invite">
@@ -106,7 +106,7 @@
                                     @if (row.Variants.Count > 0)
                                     {
                                         @* A row with variants is a group, so its cell reports
-                                           rather than offers: ticking a parent would stand in
+                                           rather than offers: answering a parent would stand in
                                            for three statements nobody made. *@
                                         <span class="seg" role="img"
                                               aria-label="@Progress(row, column) of @row.Variants.Count">
@@ -122,7 +122,7 @@
                                     }
                                 </td>
                             }
-                            @if (!view.CanTick)
+                            @if (!view.CanAnswer)
                             {
                                 <td class="col-invite"></td>
                             }
@@ -141,7 +141,7 @@
                                     {
                                         <td class="@CellClass(column)">@Mark(variant, column)</td>
                                     }
-                                    @if (!view.CanTick)
+                                    @if (!view.CanAnswer)
                                     {
                                         <td class="col-invite"></td>
                                     }
@@ -153,10 +153,25 @@
             </table>
         </div>
 
+        @if (!NamesAnswers)
+        {
+            <p class="collection-foot secret">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect width="18" height="11" x="3" y="11" rx="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+                <span>
+                    This one reports how many, not who. Nobody sees which option you picked
+                    — and your own answer is still a page of your own.
+                </span>
+            </p>
+        }
+
         @if (Mine is { Orphans.Count: > 0 } orphaned)
         {
             @* Alice cannot rewrite Bob's tally to follow her rename — it is his file — so
-               the ticks simply stop matching. Saying so is the requirement; silence is
+               the answers simply stop matching. Saying so is the requirement; silence is
                what would be unacceptable. *@
             <div class="notice">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -179,7 +194,7 @@
 
         <div class="collection-foot">
             <span>
-                @if (!view.CanTick)
+                @if (!view.CanAnswer)
                 {
                     <text>
                         <a href="@LoginHref">Sign in</a> to keep your own list of this one.
@@ -187,11 +202,23 @@
                 }
                 else if (Mine is { } mine)
                 {
-                    <text>@Score(mine.Count) Your answers show to everyone who can read this list.</text>
+                    <text>
+                        @Score(mine.Count)
+                        @if (NamesAnswers)
+                        {
+                            <text>Your answers show to everyone who can read this list.</text>
+                        }
+                    </text>
                 }
                 else
                 {
-                    <text>@Words.Invite Your answers show to everyone who can read this list.</text>
+                    <text>
+                        @Words.Invite
+                        @if (NamesAnswers)
+                        {
+                            <text>Your answers show to everyone who can read this list.</text>
+                        }
+                    </text>
                 }
             </span>
         </div>
@@ -218,6 +245,11 @@
     /// says "still to find" or "can make" without the component knowing either.</summary>
     private ListVocabulary Words => ListVocabulary.For(view?.Kind);
 
+    /// <summary>Whether this list says who answered what. A poll does not, and the server
+    /// enforces that by never sending anybody else's column — this only decides whether to
+    /// say so, and whether to promise a reader something the grid is not doing.</summary>
+    private bool NamesAnswers => Words.NamesAnswers;
+
     private string Total =>
         string.Format(Words.Total, view?.Collectibles ?? 0);
 
@@ -240,14 +272,14 @@
     /// <summary>The reader's own tally, once they have one.</summary>
     private CollectionColumnInfo? Mine => view?.Columns.FirstOrDefault(c => c.IsViewer);
 
-    /// <summary>The columns the grid draws. A reader who may tick but has never ticked
+    /// <summary>The columns the grid draws. A reader who may answer but has never answered
     /// owns no tally yet and so appears in nobody's aggregate — but the way to get one is
-    /// to tick, so the column they are <em>about</em> to have is drawn empty rather than
-    /// left out. Without it the first tick has nowhere to happen, which is the whole of
+    /// to answer, so the column they are <em>about</em> to have is drawn empty rather than
+    /// left out. Without it the first answer has nowhere to happen, which is the whole of
     /// how somebody joins a list.</summary>
     private IReadOnlyList<CollectionColumnInfo> Columns =>
         view is null ? []
-        : !view.CanTick || Mine is not null ? view.Columns
+        : !view.CanAnswer || Mine is not null ? view.Columns
         : [new CollectionColumnInfo(Guid.Empty, Guid.Empty, "You", true, [], [], 0),
            .. view.Columns];
 
@@ -310,25 +342,22 @@
     private static int Progress(CollectionRowInfo row, CollectionColumnInfo column) =>
         row.Variants.Count(v => column.Held.Contains(v.Key));
 
-    /// <summary>How many people answered yes to one row, as a number over a bar. Of the
-    /// columns actually on the grid, which is the honest denominator: it counts the people
-    /// this reader can see, and says so by being the same number they can count.</summary>
+    /// <summary>How many people answered yes to one row, as a bar with the count beside
+    /// it. The number is the server's, of everybody who answered — on a list that reports
+    /// totals without naming anybody there are no columns to count instead.</summary>
     private RenderFragment RowTally(CollectionRowInfo row) =>
         @<text>
             @if (row.Variants.Count == 0)
             {
-                <span class="rows-for" title="@Answered(row) of @view!.Columns.Count">
+                <span class="rows-for" title="@row.Answers of @view!.Participants">
                     <span class="bar"><i style="width:@Share(row)%"></i></span>
-                    <span class="n">@Answered(row)</span>
+                    <span class="n">@row.Answers</span>
                 </span>
             }
         </text>;
 
-    private int Answered(CollectionRowInfo row) =>
-        view?.Columns.Count(c => c.Held.Contains(row.Key)) ?? 0;
-
     private int Share(CollectionRowInfo row) =>
-        view is { Columns.Count: > 0 } ? Answered(row) * 100 / view.Columns.Count : 0;
+        view is { Participants: > 0 } ? row.Answers * 100 / view.Participants : 0;
 
     private static string CellClass(CollectionColumnInfo column) =>
         column.IsViewer ? "mark you" : "mark";
@@ -378,18 +407,18 @@
                        name="@($"pick-{view!.CatalogId:N}")"
                        checked="@column.Held.Contains(row.Key)"
                        disabled="@(busy || !RendererInfo.IsInteractive)"
-                       @onchange="() => TickAsync(row.Key, true)" />
+                       @onchange="() => AnswerAsync(row.Key, true)" />
             }
             else if (column.IsViewer)
             {
                 <input class="box" type="checkbox" aria-label="@row.Text"
                        checked="@column.Held.Contains(row.Key)"
                        disabled="@(busy || !RendererInfo.IsInteractive)"
-                       @onchange="() => TickAsync(row.Key, !column.Held.Contains(row.Key))" />
+                       @onchange="() => AnswerAsync(row.Key, !column.Held.Contains(row.Key))" />
             }
             else if (column.Held.Contains(row.Key))
             {
-                <span class="tick on" role="img" aria-label="@column.DisplayName @Words.Yes">
+                <span class="answer yes" role="img" aria-label="@column.DisplayName @Words.Yes">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
                          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <path d="M20 6 9 17l-5-5" />
@@ -398,7 +427,7 @@
             }
             else
             {
-                <span class="tick off" role="img"
+                <span class="answer no" role="img"
                       aria-label="@column.DisplayName @Words.No">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                          aria-hidden="true">
@@ -408,7 +437,7 @@
             }
         </text>;
 
-    private async Task TickAsync(string key, bool collected)
+    private async Task AnswerAsync(string key, bool collected)
     {
         if (busy)
             return;

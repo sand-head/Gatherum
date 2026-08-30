@@ -251,7 +251,7 @@ Each renders as a tinted card in its kind's accent, with the title line inked to
 
 ## Shared lists — `:::collection`, `:::availability`
 
-A list people tick against, each keeping their own answer. Everything about it is in
+A list people answer against, each keeping their own answer. Everything about it is in
 [shared lists](/docs/collections); the syntax is one fence with two spellings.
 
 A fence whose argument is a **name** declares the list — the catalog, the rows
@@ -279,9 +279,9 @@ page a tally — one person's record of what they have:
 ```
 
 Inside the fence everything is vocabulary from further up this page: bulleted items,
-nested one level for variants, task marks for ticks, mentions and wiki links.
+nested one level for variants, task marks for answers, mentions and wiki links.
 
-**The word the fence opens with says what a tick means.** `collection` asks who *has*
+**The word the fence opens with says what an answer means.** `collection` asks who *has*
 each row, `availability` who *can make* it, `poll` who *picked* it. Same grid, same
 rules, different nouns:
 
@@ -309,16 +309,17 @@ rules, different nouns:
 :::
 ```
 
-A **poll is one answer each**: picking a row takes back the last one. Every other word
-keeps every answer.
+A **poll is one answer each**: picking a row takes back the last one. It also reports how
+many picked each option without naming anybody, where the other words name everyone — see
+[shared lists](/docs/collections) for what that does and does not promise.
 
 - **An item is a line of text, and a page for it is optional.** A plain item is matched
   by its text; one that links a node is matched by that id, and so survives a rename.
-  Ticks made against `Sonic` keep counting once Sonic becomes `[Sonic](node://…)`.
+  Answers made against `Sonic` keep counting once Sonic becomes `[Sonic](node://…)`.
 - **Variants are nested items**, one level, and optional per item: a sprite held back
   with only its base form lists only that.
-- **Only a variant can be ticked** where an item has any. "Give me all three" is a
-  different statement from the three ticks it would stand in for.
+- **Only a variant can be answered** where an item has any. "Give me all three" is a
+  different statement from the three answers it would stand in for.
 - **A trailing `—` makes the rest a note**: `- [x] Sonic — Gold, Sprite Day 2`. `--`
   works too, for a keyboard without an em dash.
 - **A tally naming its catalog with `[[Title]]` resolves by title when it is saved**,
@@ -466,7 +467,7 @@ systemctl --user start gatherum
   - Gold                              a variant, nested one level
 :::
 
-:::collection [[Override sprites]]    a tally: one person's ticks against that catalog
+:::collection [[Override sprites]]    a tally: one person's answers against that catalog
 - [x] Sonic — a note after the dash
 :::
 

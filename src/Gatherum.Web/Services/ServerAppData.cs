@@ -257,10 +257,10 @@ public sealed class ServerAppData(
         [.. view.Columns.Select(c => new CollectionColumnInfo(c.TallyId, c.OwnerId, c.DisplayName,
             c.IsViewer, [.. c.Held],
             [.. c.Orphans.Select(o => new CollectionOrphanInfo(o.Text, o.Note))], c.Count))],
-        view.TallyId, view.CanTick, view.Collectibles);
+        view.Participants, view.TallyId, view.CanAnswer, view.Collectibles);
 
     private static CollectionRowInfo Row(CollectionRow row) =>
-        new(row.Key, row.Text, row.NodeId, row.Note, [.. row.Variants.Select(Row)]);
+        new(row.Key, row.Text, row.NodeId, row.Note, [.. row.Variants.Select(Row)], row.Answers);
 
     public async Task<IReadOnlyList<RelatedInfo>> GetSimilarAsync(Guid nodeId, int limit)
     {

@@ -124,10 +124,13 @@ fresh DI scope via `Services/AppOperations`.
   view's alone: it rewrites runs, and a document that can be saved has to write back the
   bytes it was read from.
 - A shared list is two documents, and one mechanism with several words for it — the
-  fence's word (`collection`, `availability`, `poll`) says what a tick *means*, the way a
+  fence's word (`collection`, `availability`, `poll`) says what an answer *means*, the way a
   callout's kind does. It decides the wording, whether a row's own total is worth a
-  column, and whether a person has one answer or many (`CollectionSyntax.PicksOne`,
-  enforced on the write because the file is what everybody else reads). `CollectionSyntax.Kinds` parses them and
+  column, whether a person has one answer or many (`CollectionSyntax.PicksOne`,
+  enforced on the write because the file is what everybody else reads), and whether the
+  grid names who answered what (`NamesAnswers` — a poll does not, withheld in the answer
+  the server builds rather than in the markup, because a name the response still carries
+  is not withheld). `CollectionSyntax.Kinds` parses them and
   `ListVocabulary` says what each calls things; adding a question is a row in each, and
   there is no third place. The catalog is a page with a `:::collection`
   fence; a tally is a page per person whose fence names that catalog, under its owner's
@@ -135,8 +138,8 @@ fresh DI scope via `Services/AppOperations`.
   audience**: whoever may read the list sees every column on it, so the whole
   authorization is the one `GetWithBodyAsync` on the catalog already does — the
   aggregate re-asks nothing and spells nothing. A tally's own `AccessMode` still governs
-  its *page* (its URL, the tree, search), which is why ticking never publishes one. Ticks
-  are content, so they are a file: no `NodeTicks` table, ever. Ordinary `- [ ]` outside a
+  its *page* (its URL, the tree, search), which is why answering never publishes one. Answers
+  are content, so they are a file: no `NodeAnswers` table, ever. Ordinary `- [ ]` outside a
   fence still means shared state, and reinterpreting it would break the commoner kind of
   checklist silently. See COLLECTIONS.md.
 - One tree for placement, one graph for subject, and nothing else names a subject. A node
@@ -311,7 +314,7 @@ commit messages alone don't count.
 
 [COLLECTIONS.md](COLLECTIONS.md) is the design behind shared lists — why a tally is a
 file and not a table, why an item's page is optional, and why signing out means reading
-rather than ticking. Read it before changing anything under `:::collection`.
+rather than answering. Read it before changing anything under `:::collection`.
 
 [FILESYSTEM.md](FILESYSTEM.md) is the architecture: the directory tree is the system of
 record and the database is a derived index. Stages 1–4 are built, rate limiting

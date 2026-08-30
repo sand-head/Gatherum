@@ -264,7 +264,7 @@ public class AppIntegrationTests(PostgresFixture postgres) : IAsyncLifetime
         Assert.Contains($"node://{secret.Id}", page);
 
         // And this is what the reader dresses that mention with: the link's own node,
-        // unanswered for.
+        // unticked for.
         var reachable = await anonymous.PostAsJsonAsync("/api/nodes/reachable",
             new { ids = new[] { secret.Id, published.Id } });
         Assert.Equal([published.Id],
@@ -632,10 +632,10 @@ public class AppIntegrationTests(PostgresFixture postgres) : IAsyncLifetime
             $"/api/nodes/{page.Id}/rename", new { title = "defaced" })).StatusCode);
     }
 
-    /// <summary>The collectible list end to end: a catalog over REST, a tick over MCP,
-    /// and the tally that tick wrote showing up as a page like any other.</summary>
+    /// <summary>The collectible list end to end: a catalog over REST, an answer over MCP,
+    /// and the tally that answer wrote showing up as a page like any other.</summary>
     [Fact]
-    public async Task A_collection_is_ticked_over_mcp_and_the_tally_is_a_page()
+    public async Task A_collection_is_answered_over_mcp_and_the_tally_is_a_page()
     {
         var create = await client.PostAsJsonAsync("/api/pages", new
         {
@@ -659,13 +659,13 @@ public class AppIntegrationTests(PostgresFixture postgres) : IAsyncLifetime
         var gold = before.GetProperty("rows")[0].GetProperty("variants")[1]
             .GetProperty("key").GetString()!;
 
-        var ticked = await CallMcpToolAsync("mark_collected",
+        var answered = await CallMcpToolAsync("mark_collected",
             new { id = catalogId, key = gold });
-        var column = Assert.Single(ticked.GetProperty("columns").EnumerateArray().ToList());
+        var column = Assert.Single(answered.GetProperty("columns").EnumerateArray().ToList());
         Assert.True(column.GetProperty("isViewer").GetBoolean());
         Assert.Equal(1, column.GetProperty("count").GetInt32());
 
-        var tallyId = ticked.GetProperty("tallyId").GetGuid();
+        var tallyId = answered.GetProperty("tallyId").GetGuid();
         var tally = await CallMcpToolAsync("get_node", new { id = tallyId });
         Assert.Contains($"](node://{catalogId})", tally.GetProperty("markdown").GetString()!,
             StringComparison.Ordinal);

@@ -55,7 +55,7 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_catalog_reads_as_its_rows_before_anybody_has_ticked_anything()
+    public async Task A_catalog_reads_as_its_rows_before_anybody_has_answered_anything()
     {
         var page = await CatalogAsync();
 
@@ -71,7 +71,7 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_first_tick_writes_the_tally_that_records_it()
+    public async Task A_first_answer_writes_the_tally_that_records_it()
     {
         var page = await CatalogAsync();
 
@@ -130,7 +130,7 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Unticking_takes_it_back_off()
+    public async Task Taking_an_answer_back_removes_it()
     {
         var page = await CatalogAsync();
         var key = KeyOf(await Empty(page), "Tails");
@@ -141,11 +141,11 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
         Assert.Equal(0, Assert.Single(view.Columns).Count);
     }
 
-    /// <summary>Ticking a parent row is deliberately not a control: "give me all three"
-    /// is a different statement from the three ticks it would stand in for, and the one
+    /// <summary>Answering a parent row is deliberately not a control: "give me all three"
+    /// is a different statement from the three answers it would stand in for, and the one
     /// thing this must not do is guess what somebody has.</summary>
     [Fact]
-    public async Task Only_a_leaf_can_be_ticked()
+    public async Task Only_a_leaf_can_be_answered()
     {
         var page = await CatalogAsync();
         var sonic = (await Empty(page)).Rows.Single(r => r.Text == "Sonic").Key;
@@ -155,7 +155,7 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_note_after_an_item_survives_the_next_tick()
+    public async Task A_note_after_an_item_survives_the_next_answer()
     {
         var page = await CatalogAsync();
         var rows = await Empty(page);
@@ -172,11 +172,11 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
     }
 
     /// <summary>The rule the grid runs on: whoever may read the list sees everyone's
-    /// ticks against it. Ticking is joining in, and asking each participant to publish a
+    /// answers against it. Answering is joining in, and asking each participant to publish a
     /// second page before their column counted would be withholding a permission nobody
     /// meant to withhold.</summary>
     [Fact]
-    public async Task Everyone_who_can_read_the_list_sees_everyone_s_ticks()
+    public async Task Everyone_who_can_read_the_list_sees_everyone_s_answers()
     {
         var page = await CatalogAsync();
         var mine = await collections.SetAsync(alice, page.Id,
@@ -224,9 +224,9 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
     }
 
     /// <summary>An orphan is only actionable by whoever owns the file it is in, and the
-    /// list's readers were shown ticks rather than the state of somebody's page.</summary>
+    /// list's readers were shown answers rather than the state of somebody's page.</summary>
     [Fact]
-    public async Task Orphaned_ticks_are_reported_to_their_owner_and_nobody_else()
+    public async Task Orphaned_answers_are_reported_to_their_owner_and_nobody_else()
     {
         var page = await CatalogAsync();
         await collections.SetAsync(alice, page.Id, KeyOf(await Empty(page), "Tails"),
@@ -247,16 +247,16 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
 
         var view = await collections.GetAsync(null, page.Id);
 
-        Assert.False(view.CanTick);
+        Assert.False(view.CanAnswer);
         Assert.Null(view.TallyId);
         Assert.Equal(1, Assert.Single(view.Columns).Count);
         Assert.False(view.Columns[0].IsViewer);
     }
 
-    /// <summary>Ticks are made against a text item, then the item gains a page. The
+    /// <summary>Answers are made against a text item, then the item gains a page. The
     /// promotion has to be lossless or nobody will ever do it.</summary>
     [Fact]
-    public async Task Ticks_keep_counting_when_an_item_gains_a_page()
+    public async Task Answers_keep_counting_when_an_item_gains_a_page()
     {
         var page = await CatalogAsync();
         await collections.SetAsync(alice, page.Id, KeyOf(await Empty(page), "Tails"),
@@ -272,10 +272,10 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
     }
 
     /// <summary>Alice cannot rewrite Bob's tally to follow her rename — it is his file —
-    /// so the ticks stop matching. Saying so is the requirement; silence is what would
+    /// so the answers stop matching. Saying so is the requirement; silence is what would
     /// be unacceptable.</summary>
     [Fact]
-    public async Task A_rename_orphans_the_ticks_it_stranded_and_says_so()
+    public async Task A_rename_orphans_the_answers_it_stranded_and_says_so()
     {
         var page = await CatalogAsync();
         await collections.SetAsync(alice, page.Id, KeyOf(await Empty(page), "Sonic", "Gold"),
@@ -292,15 +292,15 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
     }
 
     /// <summary>An orphan is kept in the file, so a catalog that changes its mind back
-    /// finds the tick still there.</summary>
+    /// finds the answer still there.</summary>
     [Fact]
-    public async Task An_orphaned_tick_comes_back_when_its_item_does()
+    public async Task An_orphaned_answer_comes_back_when_its_item_does()
     {
         var page = await CatalogAsync();
         await collections.SetAsync(alice, page.Id, KeyOf(await Empty(page), "Tails"),
             collected: true);
         await files.SaveTextAsync(alice, page.Id, Roster.Replace("- Tails", "- Tails the Fox"));
-        // Another tick, so the tally is rewritten while the orphan is stranded.
+        // Another answer, so the tally is rewritten while the orphan is stranded.
         await collections.SetAsync(alice, page.Id,
             KeyOf(await collections.GetAsync(alice, page.Id), "Storm Scout"), collected: true);
 
@@ -493,6 +493,77 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
             collected: true);
 
         Assert.Equal(2, Assert.Single(both.Columns).Count);
+    }
+
+    /// <summary>A poll reports how many, never who. Withheld in the answer rather than in
+    /// the markup, because a name the response still carries is a name anybody can read —
+    /// and the totals are still of everybody, not of whoever this reader may see.</summary>
+    [Fact]
+    public async Task A_poll_reports_how_many_and_never_who()
+    {
+        var page = await files.CreateTextNodeAsync(alice, null, "Where for dinner?", """
+            :::poll Dinner
+            - Thai
+            - Pizza
+            :::
+            """);
+        await access.SetAccessAsync(alice, page.Id, AccessMode.Authenticated);
+        var rows = await collections.GetAsync(alice, page.Id);
+        await collections.SetAsync(alice, page.Id, KeyOf(rows, "Thai"), collected: true);
+        await collections.SetAsync(bob, page.Id, KeyOf(rows, "Thai"), collected: true);
+
+        var seen = await collections.GetAsync(bob, page.Id);
+
+        // Bob's own column, and nobody else's — not even a name.
+        var mine = Assert.Single(seen.Columns);
+        Assert.True(mine.IsViewer);
+        Assert.Equal(bob, mine.OwnerId);
+        Assert.DoesNotContain(seen.Columns, c => c.OwnerId == alice);
+        // But the count is of everyone who answered, and says there are two of them.
+        Assert.Equal(2, seen.Participants);
+        Assert.Equal(2, seen.Rows.Single(r => r.Text == "Thai").Answers);
+        Assert.Equal(0, seen.Rows.Single(r => r.Text == "Pizza").Answers);
+    }
+
+    /// <summary>The other questions are asked <em>of</em> people, so they keep naming
+    /// them: "who can make Friday" has no useful answer without the who.</summary>
+    [Fact]
+    public async Task Every_other_question_still_names_who_answered()
+    {
+        var page = await files.CreateTextNodeAsync(alice, null, "Game nights", """
+            :::availability Nights
+            - Fri Oct 3
+            :::
+            """);
+        await access.SetAccessAsync(alice, page.Id, AccessMode.Authenticated);
+        var rows = await collections.GetAsync(alice, page.Id);
+        await collections.SetAsync(alice, page.Id, KeyOf(rows, "Fri Oct 3"), collected: true);
+        await collections.SetAsync(bob, page.Id, KeyOf(rows, "Fri Oct 3"), collected: true);
+
+        var seen = await collections.GetAsync(bob, page.Id);
+
+        Assert.Equal(2, seen.Columns.Count);
+        Assert.Contains(seen.Columns, c => c.OwnerId == alice);
+        Assert.Equal(2, seen.Rows.Single(r => r.Text == "Fri Oct 3").Answers);
+    }
+
+    /// <summary>Every list counts its rows, whether or not it shows the column that would
+    /// let a reader check the number by eye.</summary>
+    [Fact]
+    public async Task A_rows_total_counts_everybody_who_said_yes()
+    {
+        var page = await CatalogAsync();
+        var rows = await Empty(page);
+        await collections.SetAsync(alice, page.Id, KeyOf(rows, "Tails"), collected: true);
+        await collections.SetAsync(bob, page.Id, KeyOf(rows, "Tails"), collected: true);
+        await collections.SetAsync(bob, page.Id, KeyOf(rows, "Sonic", "Gold"), collected: true);
+
+        var seen = await collections.GetAsync(alice, page.Id);
+
+        Assert.Equal(2, seen.Rows.Single(r => r.Text == "Tails").Answers);
+        Assert.Equal(1, seen.Rows.Single(r => r.Text == "Sonic")
+            .Variants.Single(v => v.Text == "Gold").Answers);
+        Assert.Equal(2, seen.Participants);
     }
 
     private Task<CollectionView> Empty(Node page) => collections.GetAsync(alice, page.Id);

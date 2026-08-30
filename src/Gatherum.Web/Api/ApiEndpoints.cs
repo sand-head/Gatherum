@@ -369,10 +369,10 @@ public static class ApiEndpoints
                 await collections.GetAsync(http.User.GetUserIdOrNull(), id, list))))
             .AllowAnonymous().RequireRateLimiting(AnonymousRateLimits.Read);
 
-        // Ticking writes the caller's own tally and nobody else's, so there is no
+        // Answering writes the caller's own tally and nobody else's, so there is no
         // anonymous door here — a column in a shared grid is somebody's file.
         api.MapPost("/nodes/{id:guid}/collection", async (CollectionService collections,
-            HttpContext http, Guid id, CollectTickRequest request) =>
+            HttpContext http, Guid id, CollectAnswerRequest request) =>
             Results.Ok(CollectionDto.From(await collections.SetAsync(http.User.GetUserId(), id,
                 request.Key, request.Collected, request.List))));
 

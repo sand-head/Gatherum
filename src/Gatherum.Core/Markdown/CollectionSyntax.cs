@@ -14,7 +14,7 @@ namespace Gatherum.Core.Markdown;
 /// everyone answers. One whose argument names another node <em>tracks</em> that node's
 /// list — a tally, one person's answers. Inside, the vocabulary is the dialect's own:
 /// bulleted items, nested one level for variants, a task marker where a tally records a
-/// tick, and an em-dashed tail that is a note rather than part of the item.
+/// answer, and an em-dashed tail that is a note rather than part of the item.
 ///
 /// The construct is one mechanism with several words for it — the same shape
 /// <c>CalloutExtension</c> has, where five spellings share one implementation. Nothing
@@ -46,6 +46,15 @@ public static class CollectionSyntax
     public static bool PicksOne(string? word) =>
         string.Equals(word, "poll", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>Whether a list names who answered what, or only reports the totals. A
+    /// roster and a schedule are asked <em>of</em> people — "who can make Friday" has no
+    /// useful answer without the who — while a poll is asked of a group and answered by
+    /// individuals, and being seen to change your mind in front of everybody is a
+    /// different act from voting. Like <see cref="PicksOne"/> this is decided here rather
+    /// than in a component, because withholding a name in the markup while the data
+    /// carries it is not withholding it at all.</summary>
+    public static bool NamesAnswers(string? word) => !PicksOne(word);
+
     /// <summary>The word a list is written with when nothing says otherwise.</summary>
     public const string Word = "collection";
 
@@ -57,7 +66,7 @@ public static class CollectionSyntax
         @"^\[(?<text>[^\]]+)\]\(node://(?<id>[0-9a-fA-F-]{36})\)$", RegexOptions.Compiled);
 
     private static readonly Regex Item = new(
-        @"^(?<indent>\s*)[-*+][ \t]+(\[(?<tick>[ xX])\][ \t]+)?(?<body>.*)$", RegexOptions.Compiled);
+        @"^(?<indent>\s*)[-*+][ \t]+(\[(?<answer>[ xX])\][ \t]+)?(?<body>.*)$", RegexOptions.Compiled);
 
     /// <summary>Every collection fence in a body, in the order they appear.</summary>
     public static IReadOnlyList<CollectionBlock> Read(string? markdown)
@@ -99,10 +108,10 @@ public static class CollectionSyntax
     }
 
     /// <summary>The whole fence as source, ready to stand in a file. Items that carry no
-    /// tick state — a catalog's — are written as plain bullets, so declaring a list
+    /// answer state — a catalog's — are written as plain bullets, so declaring a list
     /// never puts an empty checkbox in front of every line of it.</summary>
     public static string Write(string word, string argument,
-        IReadOnlyList<CollectionEntry> items, bool ticked)
+        IReadOnlyList<CollectionEntry> items, bool answered)
     {
         var source = new StringBuilder();
         source.Append(Fence).Append(Known(word) ? word : Word);
@@ -110,7 +119,7 @@ public static class CollectionSyntax
             source.Append(' ').Append(argument);
         source.Append('\n');
         foreach (var item in items)
-            WriteItem(source, item, ticked, depth: 0);
+            WriteItem(source, item, answered, depth: 0);
         source.Append(Fence);
         return source.ToString();
     }
@@ -130,7 +139,7 @@ public static class CollectionSyntax
     /// <summary>Whether a catalog's item and a tally's are the same collectible.
     /// Two linked items are the ids they carry, which is what makes a rename survivable;
     /// anything else is its text, which is what makes linking optional. The asymmetry is
-    /// deliberate — it is the rule that lets an item gain a page later without the ticks
+    /// deliberate — it is the rule that lets an item gain a page later without the answers
     /// already made against it stopping counting.</summary>
     public static bool Matches(CollectionEntry catalogItem, CollectionEntry tallyItem) =>
         catalogItem.NodeId is { } mine && tallyItem.NodeId is { } theirs
@@ -282,21 +291,21 @@ public static class CollectionSyntax
             ? parsed
             : (Guid?)null;
         return new CollectionEntry(body, id, PlainText(body), note,
-            match.Groups["tick"].Value is "x" or "X", []);
+            match.Groups["answer"].Value is "x" or "X", []);
     }
 
-    private static void WriteItem(StringBuilder source, CollectionEntry item, bool ticked,
+    private static void WriteItem(StringBuilder source, CollectionEntry item, bool answered,
         int depth)
     {
         source.Append(new string(' ', depth * 2)).Append("- ");
-        if (ticked)
+        if (answered)
             source.Append(item.Checked ? "[x] " : "[ ] ");
         source.Append(item.Label);
         if (item.Note.Length > 0)
             source.Append(" — ").Append(item.Note);
         source.Append('\n');
         foreach (var variant in item.Variants)
-            WriteItem(source, variant, ticked, depth + 1);
+            WriteItem(source, variant, answered, depth + 1);
     }
 }
 
@@ -324,7 +333,7 @@ public sealed record CollectionBlock(
 public sealed record CollectionTarget(Guid? NodeId, string? Title, string List);
 
 /// <summary>One line of a collection: what it says, the page it links if it has one, the
-/// note after it, whether this file ticks it, and the variants nested under it.</summary>
+/// note after it, whether this file answers it, and the variants nested under it.</summary>
 public sealed record CollectionEntry(
     string Label,
     Guid? NodeId,

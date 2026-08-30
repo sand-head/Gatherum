@@ -1,7 +1,7 @@
 # Status
 
 As of shared lists — a `:::collection` fence makes a list something a group works rather
-than reads, with each person's ticks a page of their own, and the same grid answers who
+than reads, with each person's answers a page of their own, and the same grid answers who
 can make which night as readily as who has which sprite. Before that:
 search runs a full-text half and a meaning half and fuses their rankings, with the
 embedding model that powers the second half shipping in the box, and the taxonomy (which
@@ -68,22 +68,23 @@ browser sessions — including against the built container).
   the edits (verified in-browser against the running app, light and dark, and by
   round-trip tests).
 - **Shared lists** — a `:::collection` fence makes a list something a group works
-  rather than reads. The page declares the catalog; each participant's ticks live in a
+  rather than reads. The page declares the catalog; each participant's answers live in a
   page of their own under their own root, written by nobody else. The catalog's audience
-  is the grid's audience — whoever may read the list sees every column on it, so ticking
+  is the grid's audience — whoever may read the list sees every column on it, so answering
   is joining in and there is no second gesture to publish your own answers — while a
   tally's own access still governs its *page*, so a column in the grid is not a license to
   open the file behind it, find it in a tree, or search it up.
   Items are lines of text; linking a page for one is optional and makes it rename-proof,
-  and promotion is lossless, so ticks made before it keep counting. Variants nest one
+  and promotion is lossless, so answers made before it keep counting. Variants nest one
   level and are optional per item, because rosters are ragged — which also makes every
-  count a count of collectibles rather than of lines. A rename orphans the ticks it
+  count a count of collectibles rather than of lines. A rename orphans the answers it
   stranded: they stay in the file and the grid tells their owner so. Read view only, through slopedit
-  2.7.0's widget blocks — the canvas keeps the source, so a tick is never an edit — and
-  signed out reads rather than ticking. One mechanism, several words for it: the fence's
-  word says what a tick means, so `:::availability` is who can make which night and
-  `:::poll` is who picked which option — one answer each, enforced where the file is
-  written — on the same grid that answers who has which sprite. Over REST and MCP
+  2.7.0's widget blocks — the canvas keeps the source, so an answer is never an edit — and
+  signed out reads rather than answering. One mechanism, several words for it: the fence's
+  word says what an answer means, so `:::availability` is who can make which night and
+  `:::poll` is who picked which option — one answer each, and totals without names, both
+  decided where the file is written and the answer is built rather than where the grid is
+  drawn — on the same grid that answers who has which sprite. Over REST and MCP
   too (`collection_status`,
   `mark_collected`). See COLLECTIONS.md.
 - **Awareness** — heartbeat presence ("Sam is editing", verified cross-user) and a
@@ -209,9 +210,9 @@ browser sessions — including against the built container).
   path spelling), collectible lists (the construct alone — declaration against tracking,
   ragged variants, notes, orphans, round trips; then the aggregate against real Postgres —
   a tally per person, a private tally that is still a column while its page stays shut to
-  everyone else, a list nobody may read that has no grid to leak, a promotion whose ticks
+  everyone else, a list nobody may read that has no grid to leak, a promotion whose answers
   keep counting, a rename whose orphans are kept and reported only to their owner, and the
-  parent row that refuses to be ticked), the widget seam the
+  parent row that refuses to be answered), the widget seam the
   read view claims a collection through (the hole, and the whole-body writer that ignores
   it so a static export still holds the catalog), and integration tests booting the app
   on Testcontainers Postgres
@@ -220,7 +221,7 @@ browser sessions — including against the built container).
   MCP; create a page → find it over REST by a question that shares none of its words;
   publish a page that mentions a private one → a stranger gets the page, the mention's
   text, and the answer that its target is not theirs to open; declare a collection over
-  REST → tick it over MCP → the tally is a page with the mention and the tick in it, and
+  REST → answer it over MCP → the tally is a page with the mention and the answer in it, and
   a public list's first response carries the grid itself with no checkbox for a visitor
   who is not signed in).
   The packaged model is tested as it ships (shape, normalization, determinism,

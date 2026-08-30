@@ -197,7 +197,7 @@ public class CollectionSyntaxTests
         var block = CollectionSyntax.Read(source)[0];
 
         Assert.Equal(source.ReplaceLineEndings("\n"),
-            CollectionSyntax.Write(block.Word, block.Argument, block.Items, ticked: true));
+            CollectionSyntax.Write(block.Word, block.Argument, block.Items, answered: true));
     }
 
     /// <summary>One answer each is a rule about the file, so it is stated where the file
@@ -213,6 +213,18 @@ public class CollectionSyntaxTests
         // And the reading view agrees, since it is what draws a radio instead of a box.
         Assert.All(ListVocabulary.All,
             words => Assert.Equal(CollectionSyntax.PicksOne(words.Key), words.Value.PicksOne));
+    }
+
+    /// <summary>Who answered what is withheld by the half that builds the answer, not by
+    /// the half that draws it — the reading view only says so.</summary>
+    [Fact]
+    public void Only_a_poll_keeps_who_answered_to_itself()
+    {
+        Assert.False(CollectionSyntax.NamesAnswers("poll"));
+        Assert.True(CollectionSyntax.NamesAnswers("collection"));
+        Assert.True(CollectionSyntax.NamesAnswers("availability"));
+        Assert.All(ListVocabulary.All, words =>
+            Assert.Equal(CollectionSyntax.NamesAnswers(words.Key), words.Value.NamesAnswers));
     }
 
     /// <summary>Two lists in two places, and no third: Core parses the words, the client
@@ -258,17 +270,17 @@ public class CollectionSyntaxTests
     {
         var block = CollectionSyntax.Read(Catalog)[0];
 
-        var source = CollectionSyntax.Write(block.Word, block.Argument, block.Items, ticked: false);
+        var source = CollectionSyntax.Write(block.Word, block.Argument, block.Items, answered: false);
         var again = CollectionSyntax.Read(source)[0];
 
-        Assert.Equal(source, CollectionSyntax.Write(again.Word, again.Argument, again.Items, ticked: false));
+        Assert.Equal(source, CollectionSyntax.Write(again.Word, again.Argument, again.Items, answered: false));
         Assert.Equal(block.Items.Select(i => i.Label), again.Items.Select(i => i.Label));
         Assert.Equal(block.Items[0].Variants.Select(v => v.Label),
             again.Items[0].Variants.Select(v => v.Label));
     }
 
     [Fact]
-    public void Ticks_and_notes_survive_the_round_trip()
+    public void Answers_and_notes_survive_the_round_trip()
     {
         const string tally = """
             :::collection [[Override sprites]]
@@ -280,7 +292,7 @@ public class CollectionSyntaxTests
             """;
 
         var block = CollectionSyntax.Read(tally)[0];
-        var written = CollectionSyntax.Write(block.Word, block.Argument, block.Items, ticked: true);
+        var written = CollectionSyntax.Write(block.Word, block.Argument, block.Items, answered: true);
 
         Assert.Equal(tally.ReplaceLineEndings("\n"), written);
     }
@@ -291,7 +303,7 @@ public class CollectionSyntaxTests
         var block = CollectionSyntax.Read(Catalog)[0];
 
         var rewritten = CollectionSyntax.Replace(Catalog, block,
-            CollectionSyntax.Write(block.Word, block.Argument, [block.Items[0]], ticked: false));
+            CollectionSyntax.Write(block.Word, block.Argument, [block.Items[0]], answered: false));
 
         Assert.StartsWith("Sprites arrive on Thursdays.", rewritten, StringComparison.Ordinal);
         Assert.EndsWith("More prose after it.", rewritten, StringComparison.Ordinal);
@@ -299,7 +311,7 @@ public class CollectionSyntaxTests
     }
 
     /// <summary>The rule that makes linking optional and promotion safe: two linked
-    /// items are their ids, and anything else is its text — so a tick made against
+    /// items are their ids, and anything else is its text — so an answer made against
     /// <c>Sonic</c> keeps counting once Sonic becomes a page.</summary>
     [Fact]
     public void An_item_is_matched_by_id_where_both_have_one_and_by_text_otherwise()

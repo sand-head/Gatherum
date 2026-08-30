@@ -27,6 +27,9 @@ namespace Gatherum.Client;
 /// only — radio buttons rather than checkboxes; the rule itself is
 /// <see cref="Gatherum.Core.Markdown.CollectionSyntax.PicksOne"/>, enforced where the
 /// file is written.</param>
+/// <param name="NamesAnswers">Whether the grid says who answered what. Presentation only
+/// again: <see cref="Gatherum.Core.Markdown.CollectionSyntax.NamesAnswers"/> is what
+/// actually withholds the columns, and this decides whether to tell the reader so.</param>
 public sealed record ListVocabulary(
     string Rows,
     string Total,
@@ -35,7 +38,8 @@ public sealed record ListVocabulary(
     string Yes,
     string No,
     bool Tallies = false,
-    bool PicksOne = false)
+    bool PicksOne = false,
+    bool NamesAnswers = true)
 {
     /// <summary>The words, by the one a fence opened with. Adding a question is adding a
     /// row here and the same word to Core's set — there is no third place.</summary>
@@ -65,7 +69,8 @@ public sealed record ListVocabulary(
                 Yes: "picked this",
                 No: "did not pick this",
                 Tallies: true,
-                PicksOne: true),
+                PicksOne: true,
+                NamesAnswers: false),
         };
 
     /// <summary>The words for a list, falling back to the commonest question rather than

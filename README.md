@@ -27,7 +27,7 @@ page-turner.
 - **Shared lists**: a `:::collection` fence turns a list into something a group
   works rather than reads — the page declares what exists to collect, each participant
   keeps their own tally as a page of their own, and the reading view draws the grid of
-  who has what. Share the list and ticking it is joining in: whoever can read the list
+  who has what. Share the list and answering it is joining in: whoever can read the list
   sees every column on it, with no second gesture to publish your own answers — while the
   tally itself stays its owner's file, so a column is not a license to open the page
   behind it. A page per collectible is optional and worth it for the few worth writing

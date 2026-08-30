@@ -64,14 +64,14 @@ public interface IAppData
     Task ShareAsync(Guid nodeId, Guid userId, string role);
     Task UnshareAsync(Guid nodeId, Guid userId);
 
-    /// <summary>A collectible list as everyone's ticks make it, asked of whichever page
+    /// <summary>A collectible list as everyone's answers make it, asked of whichever page
     /// the reader is on — a catalog aggregates itself, a tally aggregates the catalog
     /// it tracks. <paramref name="list"/> is the fence's own argument, which is what
     /// tells two lists on one page apart.</summary>
     Task<CollectionInfo> GetCollectionAsync(Guid nodeId, string? list);
 
     /// <summary>Records one collectible against the reader's own tally — written into
-    /// being the first time they tick anything — and answers with the list again.</summary>
+    /// being the first time they answer anything — and answers with the list again.</summary>
     Task<CollectionInfo> SetCollectedAsync(Guid nodeId, string key, bool collected, string? list);
 
     // A node's chrome: categories, file facts, history.
@@ -154,21 +154,22 @@ public record RelatedInfo(Guid Id, string Kind, string Title);
 /// with — which question this list asks, and so what the chrome around it says.</summary>
 public record CollectionInfo(Guid CatalogId, string CatalogTitle, string Kind, string List,
     IReadOnlyList<CollectionRowInfo> Rows, IReadOnlyList<CollectionColumnInfo> Columns,
-    Guid? TallyId, bool CanTick, int Collectibles);
+    int Participants, Guid? TallyId, bool CanAnswer, int Collectibles);
 
 /// <summary>One line of the catalog. A row with variants is a group and is not itself
-/// tickable: "give me all three" is a different statement from the three ticks.</summary>
+/// answerable: "give me all three" is a different statement from the three answers.</summary>
 public record CollectionRowInfo(string Key, string Text, Guid? NodeId, string Note,
-    IReadOnlyList<CollectionRowInfo> Variants);
+    IReadOnlyList<CollectionRowInfo> Variants, int Answers);
 
-/// <summary>One participant's column. Whoever may read the list sees every column on
-/// it, so there is no access to report here — a tally's own sharing governs its page,
-/// not its ticks.</summary>
+/// <summary>One participant's column. Whoever may read the list sees every column on it
+/// — except on a list that reports totals without naming anybody, where the only column
+/// is the reader's own. There is no access to report here: a tally's own sharing governs
+/// its page, not its answers.</summary>
 public record CollectionColumnInfo(Guid TallyId, Guid OwnerId, string DisplayName,
     bool IsViewer, IReadOnlyList<string> Held,
     IReadOnlyList<CollectionOrphanInfo> Orphans, int Count);
 
-/// <summary>A tick that no longer matches an item, because the catalog was edited
+/// <summary>An answer that no longer matches an item, because the catalog was edited
 /// under it. Shown rather than swallowed.</summary>
 public record CollectionOrphanInfo(string Text, string Note);
 public record KeyInfo(Guid Id, string Name, string Prefix, DateTimeOffset CreatedAt,

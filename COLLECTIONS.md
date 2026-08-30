@@ -17,10 +17,10 @@ person, and a mark where that person says yes. "Who has which sprite" and "who c
 which night" are that same question asked of different nouns. So the construct is one
 mechanism with a small vocabulary of words for it — `:::collection`, `:::availability`,
 `:::poll` — exactly the shape `CalloutExtension` has, where five spellings share one
-implementation. The word decides what a tick means, the words the reading view puts
-around the grid, whether a row's own total is worth a column, and whether a person has
-one answer or many; a new question costs a row in `CollectionSyntax.Kinds` and a row in
-`ListVocabulary`. Read "collectible" below as "row" and every argument holds.
+implementation. The word decides what an answer means, the words the reading view puts
+around the grid, whether a row's own total is worth a column, whether a person has one
+answer or many, and whether the grid names who answered what; a new question costs a row
+in `CollectionSyntax.Kinds` and a row in `ListVocabulary`. Read "collectible" below as "row" and every argument holds.
 
 ## First, a correction to the premise
 
@@ -53,7 +53,7 @@ completely different tempos, authors, and privacy needs:
 | Who should see it | everybody it's shared with | everybody the catalog is shared with |
 | Edited how often | weekly | daily |
 
-One shared set of checkboxes cannot answer both. If Alice ticks "Sonic", has Bob got it?
+One shared set of checkboxes cannot answer both. If Alice answers "Sonic", has Bob got it?
 The checkbox has nowhere to put the answer.
 
 Split them and both halves get easy. The catalog is **a page** — and therefore already
@@ -80,15 +80,15 @@ Two things about that roster matter more than the roster:
    community winners staggered through the season.
 
 So the catalog is a *living document* that will be corrected and extended dozens of times
-while people are ticking against it. That makes the interesting problem not the checkbox.
+while people are answering against it. That makes the interesting problem not the checkbox.
 It is:
 
 ## Item identity is the interesting problem
 
-A tick has to name an item, and what it names decides whether a season's collecting
+An answer has to name an item, and what it names decides whether a season's collecting
 survives an edit to the catalog.
 
-- **By line number** — a Sprite Day inserts a row and every tick below it shifts. Fails on
+- **By line number** — a Sprite Day inserts a row and every answer below it shifts. Fails on
   the most common edit there is.
 - **By item text** — survives insertion and reordering, breaks on a rename.
 - **By node id** — survives everything, because outliving a rename is what node identity
@@ -96,7 +96,7 @@ survives an edit to the catalog.
 
 The first draft of this design concluded that only the third is sound, and therefore that
 every collectible must be its own page. That was wrong in the way that matters: it made the
-expensive option mandatory. Wanting to tick off forty sprites is not wanting to write forty
+expensive option mandatory. Wanting to answer off forty sprites is not wanting to write forty
 pages about sprites, and a design that demands the second to deliver the first will not get
 used.
 
@@ -114,13 +114,13 @@ immune to renaming. A plain item is keyed by its normalized text and survives ev
 except a rename. You pay for stability only where you wanted a page anyway.
 
 **Promotion has to be lossless**, or nobody will ever do it: when an item gains a link,
-matching falls back from id to text, so ticks made against `Sonic` keep counting once
+matching falls back from id to text, so answers made against `Sonic` keep counting once
 `Sonic` becomes `[Sonic](node://…)`. One rule, and it makes the optional half safe to opt
 into later.
 
 **A rename orphans the plain items, and that is surfaced rather than hidden.** Alice cannot
-rewrite Bob's tally to follow her rename — it is his file, under his root — so the ticks
-simply stop matching. The grid says so: *"3 ticks no longer match an item"*, with the
+rewrite Bob's tally to follow her rename — it is his file, under his root — so the answers
+simply stop matching. The grid says so: *"3 answers no longer match an item"*, with the
 orphans listed and a click to re-point them. Silence is what would be unacceptable here,
 not the mismatch.
 
@@ -132,7 +132,7 @@ should be — an upgrade for the handful you care about, filed in whatever categ
 ## Variants are nested items, because the roster is ragged
 
 A sprite is not one collectible. Each carries Base, Gold and Cheat Master, so "have you got
-Sonic" has three answers, and a tick has to be able to say which.
+Sonic" has three answers, and an answer has to be able to say which.
 
 The tempting fix is to declare the variants once on the fence and apply them to every item —
 and the worked example is exactly why that fails. Sources disagree about whether Gold is in
@@ -175,8 +175,8 @@ collectibles, not lines, or the progress it reports is fiction.
 **A row is now a group.** The grid shows an item's row with a three-segment indicator per
 person — how much of that item each of them holds — and expands to the variant rows on
 demand. Collapsed, the list reads at twelve rows, which is what makes it scannable; expanded
-is where the ticking happens. Ticking a parent row is deliberately *not* a control: "give me
-all three" is a different statement from the three ticks it would stand in for, and the one
+is where the answering happens. Answering a parent row is deliberately *not* a control: "give me
+all three" is a different statement from the three answers it would stand in for, and the one
 place this design must not guess is what somebody has.
 
 The alternative considered and rejected was flattening — `- Sonic (Gold)` as its own line,
@@ -198,28 +198,28 @@ It is a node like any other, and it carries its own `AccessMode`.
 The first draft made that `AccessMode` decide the grid too — Alice shares her tally and her
 column appears, Bob leaves his private and collects alone — and that was wrong, in the way
 a rule can be locally correct and globally absurd. It made joining a shared list a
-two-gesture act: tick, then publish a second page, or your column counts for nobody. Nobody
+two-gesture act: answer, then publish a second page, or your column counts for nobody. Nobody
 sharing a roster with their group means "and each of you must separately publish your
 answers before anyone can see them". It is permission overkill, and the cost of it lands on
 exactly the thing the feature is for.
 
 So: **the catalog's audience is the grid's audience.** Whoever may read the list sees
-every column on it. Ticking is joining in, and that is the whole of joining in.
+every column on it. Answering is joining in, and that is the whole of joining in.
 
 That is not the same as publishing the tally, and the distinction is the point. Its
 `AccessMode` is untouched and still governs the *node* — whether it opens at its own URL,
 whether it appears in anybody's tree, whether search finds it — so a tally stays its
-owner's file, private like any other new node, while the ticks on it count in the list they
-were made against. What the grid discloses is exactly the rows somebody ticked and the name
-they tick under. Their notes, and the ticks the catalog has since orphaned, stay theirs.
+owner's file, private like any other new node, while the answers on it count in the list they
+were made against. What the grid discloses is exactly the rows somebody answered and the name
+they answer under. Their notes, and the answers the catalog has since orphaned, stay theirs.
 
 Two consequences to state rather than discover. A **public** catalog's grid is public,
 participants' display names included — which is what a public collectible list is, and why
 publishing one is a decision about other people as well as about the page. And there is no
-half-in: the way not to be in a grid is not to tick, or to delete the tally. A mode meaning
+half-in: the way not to be in a grid is not to answer, or to delete the tally. A mode meaning
 "counted but hidden" would be a checkbox that lies in the other direction.
 
-**A tally is content, not ephemera.** It is tempting to add a `NodeTicks` table and be done
+**A tally is content, not ephemera.** It is tempting to add a `NodeAnswers` table and be done
 in an afternoon, and that would be wrong: `ReadingPositions` earns its database-only
 exception because losing one costs exactly a page number, and a season of collecting is not
 that. A tally must be a file under the storage root — rebuildable by `Reindexer`, carried
@@ -268,7 +268,7 @@ an unlisted catalog cannot be named that way. That is now a fact about writing t
 not about who is reading the grid: matching a fence's title against the catalog's own is
 what the aggregate does, so the answer no longer depends on the reader. Naming the
 catalog with a `node://` mention works regardless, because an id is permission, which is
-why a tally written by ticking uses that spelling.
+why a tally written by answering uses that spelling.
 
 ### A fence declares the list
 
@@ -308,7 +308,7 @@ Three things fall out of choosing a region rather than a page:
 - **A key that outlives the page title.** The fence's name identifies the list, so renaming
   the page it lives on orphans nothing.
 - **Ordinary checkboxes stay ordinary, everywhere.** `- [ ]` outside a collection is what it
-  has always been. The alternative on the table was to make ticking mean one thing in the
+  has always been. The alternative on the table was to make answering mean one thing in the
   editor and another in the read view, which is clever and would have confused everybody.
 
 And the affordance appears only where an author asked for it, instead of on every list in
@@ -369,7 +369,7 @@ Everything this design needed, it has:
   was.
 - **Widgets are a reading-view feature.** The canvas paints the same run as blocks wearing the
   card its extension declared, which is what we wanted to see while rearranging a shared list.
-  It also means a tick can never register as an edit of the open document, and the canvas
+  It also means an answer can never register as an edit of the open document, and the canvas
   never has to place a row whose height is the browser's business.
 - **Links inside a widget are the host's own.** `OnLinkActivated` claims only the anchors the
   view itself emitted, so `node://` routing inside the grid is wired the way we wire
@@ -415,13 +415,13 @@ No new relation, no new table, no new visibility rule, no new sidecar. One new c
 
 ## Signed out: read-only, or counted — not the thing in between
 
-An earlier draft had a third answer, and it was wrong. Signed-out visitors were to tick
+An earlier draft had a third answer, and it was wrong. Signed-out visitors were to answer
 freely into their own browser's `localStorage`, seeing everyone else's columns while
 contributing to none of them — the same mechanism that already keeps an anonymous reader's
 place in a book.
 
 The mechanism is fine; using it here is not. In a grid where every other column is a real
-person's real ticks, a checkbox that writes to nobody but this browser is **a control that
+person's real answers, a checkbox that writes to nobody but this browser is **a control that
 misrepresents itself**. It looks exactly like the ones that count, it feels like joining in,
 it contributes nothing, and it is gone when the browser is cleared. A reading position can
 be quietly local because nobody else was ever going to see it. A column in a shared grid is
@@ -503,7 +503,7 @@ docs with "two people" as their justification, and that premise has changed:
   write, which is always the caller's own file). Every rule here.
 - **Client** — `CollectionExtension` in the dialect, its card in `DocumentChrome`, and
   `CollectionWidget` — the grid, claimed out of the reading view by `Block.Tag` through
-  slopedit's widget blocks, ticking through `IAppData` and nothing else. No `localStorage`:
+  slopedit's widget blocks, answering through `IAppData` and nothing else. No `localStorage`:
   signed out has no checkbox.
 - **Web** — `GET`/`POST /api/nodes/{id}/collection`, the `collection_status` and
   `mark_collected` MCP tools, and `Docs/collections.md`.
@@ -514,7 +514,7 @@ docs with "two people" as their justification, and that premise has changed:
 
 ## What not to do
 
-- No `NodeTicks` table. A tally is content and lives on disk.
+- No `NodeAnswers` table. A tally is content and lives on disk.
 - No second taxonomy verb, and no taxonomy at all in the list machinery. A catalog is a
   page with a list on it; categories file it exactly as they file anything else.
 - No page required per item. Pages are the optional half, for the items worth writing about.
@@ -528,10 +528,10 @@ docs with "two people" as their justification, and that premise has changed:
    first: `AccessMode.Authenticated`, carried on a second axis rather than a fourth rung of
    `NodeReach` (DECISIONS.md, "Authenticated is a second axis, not a fourth rung"). A
    group-shared list no longer has to choose between twenty grants and the open internet.
-2. **Does a tick want structure** — date acquired, variant, a note — or is trailing prose
+2. **Does an answer want structure** — date acquired, variant, a note — or is trailing prose
    after the item enough? **Prose.** Anything after ` — ` on an item is a note, kept
-   through every later tick, and it costs no format. Variants turned out to be structure
-   the *catalog* declares, not the tick.
+   through every later answer, and it costs no format. Variants turned out to be structure
+   the *catalog* declares, not the answer.
 3. **Read-only or counted for signed-out visitors?** **Read-only**, per *Why the order is
    read-only first*: the move to counted is additive and the reverse is not.
 4. **Do guest tallies appear in the aggregate immediately, or after the owner approves
@@ -542,7 +542,7 @@ pages; variants are nested items rather than a set declared once; the catalog is
 rather than a category; a tally is declared by the fence rather than inferred; an
 "everyone who can sign in" reach exists now, so a group-shared list no longer has to choose
 between twenty grants and the open internet; and the grid follows the catalog's audience
-rather than each tally's, so ticking is one gesture and not two.
+rather than each tally's, so answering is one gesture and not two.
 
 ## Sources for the worked example
 

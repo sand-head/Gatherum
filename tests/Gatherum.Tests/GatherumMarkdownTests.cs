@@ -45,10 +45,10 @@ public class GatherumMarkdownTests
     }
 
     /// <summary>The tally spelling — a fence whose argument names another node — and the
-    /// task marks that are somebody's ticks. Both halves have to survive, or a page saved
+    /// task marks that are somebody's answers. Both halves have to survive, or a page saved
     /// through the editor would stop being a tally.</summary>
     [Fact]
-    public void A_tally_fence_and_its_ticks_round_trip()
+    public void A_tally_fence_and_its_answers_round_trip()
     {
         var id = Guid.NewGuid();
         var source = $$"""
