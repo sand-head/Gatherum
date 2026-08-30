@@ -1,9 +1,14 @@
-# Collaborative collectible lists — a proposal
+# Collaborative collectible lists
 
-**Status: proposed, not built.** This is beyond `PLAN.md` scope, so it is written down for
-the owner to accept, amend, or throw out rather than implemented. If it is accepted it
-earns a `DECISIONS.md` entry and this file becomes the design behind it, the way
-`FILESYSTEM.md` sits behind storage.
+**Status: built.** This was written as a proposal and accepted; it is now the design
+behind the feature, the way `FILESYSTEM.md` sits behind storage, and `DECISIONS.md` carries
+the entry for what shipped and what it cost. What is here is the reasoning; the manual page
+a reader is pointed at is `src/Gatherum.Web/Docs/collections.md`.
+
+Everything below is built except the guest tallies of *Counted anonymously*, which stay
+designed and unbuilt on purpose — signed out is read-only, per that section's own argument.
+Where the text still reads as a proposal ("would touch", "open questions"), read it as the
+record of how the decision was reached.
 
 ## First, a correction to the premise
 
@@ -451,17 +456,21 @@ docs with "two people" as their justification, and that premise has changed:
 5. **File bytes are never garbage-collected** when nodes are deleted (`STATUS.md`). Storage
    growth now scales with the number of people.
 
-## What it would touch
+## What it touched
 
-- **Core** — a `CollectionService` (catalogue rows + visible tallies, matched and fused),
-  and task-item reading in `Markdown/`. All the business rules here, per the brief.
-- **Client** — one island rendering the grid, ticking through `IAppData` → `SaveTextAsync`
-  on the reader's own tally; `localStorage` for the signed-out case.
-- **Web** — a REST endpoint, an MCP tool or two (`collection_status`, `mark_collected`) so
-  an agent can tick, and a page in `src/Gatherum.Web/Docs` — the manual is part of the
-  feature, not a follow-up.
-- **Tests** — service tests against real Postgres for aggregation and visibility (including
-  the unlisted-tally case), and round-trip tests for tally parsing.
+- **Core** — `Markdown/CollectionSyntax` (the fence, read and written, pure), and
+  `Services/CollectionService` (catalogue rows fused with the visible tallies, and the one
+  write, which is always the caller's own file). Every rule here.
+- **Client** — `CollectionExtension` in the dialect, its card in `DocumentChrome`, and
+  `CollectionWidget` — the grid, claimed out of the reading view by `Block.Tag` through
+  slopedit's widget blocks, ticking through `IAppData` and nothing else. No `localStorage`:
+  signed out has no checkbox.
+- **Web** — `GET`/`POST /api/nodes/{id}/collection`, the `collection_status` and
+  `mark_collected` MCP tools, and `Docs/collections.md`.
+- **Tests** — `CollectionSyntaxTests` for the construct alone, `CollectionServiceTests`
+  against real Postgres for aggregation and visibility (the unlisted-tally case included),
+  round trips in `GatherumMarkdownTests`, the widget seam in `ReadOnlyHtmlTests`, and two
+  cross-surface flows in `AppIntegrationTests`.
 
 ## What not to do
 
@@ -473,18 +482,20 @@ docs with "two people" as their justification, and that premise has changed:
 - No anonymous write endpoint, in any disguise.
 - No new Markdown construct. Task lists and mentions already say all of it.
 
-## Open questions for the owner
+## The questions this raised, and how they were answered
 
-1. **Does a catalogue need an "everyone who can sign in" reach?** This is the one that
-   changes the order of work rather than the design. `Shared` means naming twenty people;
-   `Public` means the open internet; there is nothing in between, and once the front door
-   is an OIDC group that gap is what a group-sized instance feels first. It is also the
-   only part of this that touches `NodeReach`, the type every visibility query filters on.
+1. **Does a catalogue need an "everyone who can sign in" reach?** Yes, and it was built
+   first: `AccessMode.Authenticated`, carried on a second axis rather than a fourth rung of
+   `NodeReach` (DECISIONS.md, "Authenticated is a second axis, not a fourth rung"). A
+   group-shared list no longer has to choose between twenty grants and the open internet.
 2. **Does a tick want structure** — date acquired, variant, a note — or is trailing prose
-   after the item enough? Prose is free; structure is a format.
-3. **Do guest tallies appear in the aggregate immediately, or after the owner approves
-   each?** Approval is the strongest anti-spam answer and also the most work; it matters
-   only if a catalogue is ever linked somewhere busy.
+   after the item enough? **Prose.** Anything after ` — ` on an item is a note, kept
+   through every later tick, and it costs no format. Variants turned out to be structure
+   the *catalogue* declares, not the tick.
+3. **Read-only or counted for signed-out visitors?** **Read-only**, per *Why the order is
+   read-only first*: the move to counted is additive and the reverse is not.
+4. **Do guest tallies appear in the aggregate immediately, or after the owner approves
+   each?** Still open, and still only matters if guest tallies are ever built.
 
 Settled since the first draft: items are text with optional node links rather than mandatory
 pages; variants are nested items rather than a set declared once; the catalogue is a page

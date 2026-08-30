@@ -17,6 +17,7 @@ public class GatherumMcpTools(
     CategoryService categories,
     FileService files,
     BookmarkService bookmarks,
+    CollectionService collections,
     SearchService search,
     IHttpContextAccessor httpContext)
 {
@@ -190,6 +191,34 @@ public class GatherumMcpTools(
         var backlinks = await Run(() => nodes.GetBacklinksAsync(UserId, id));
         return backlinks.Select(NodeSummaryDto.From);
     }
+
+    [McpServerTool(Name = "collection_status")]
+    [Description("A collaborative collectible list: what the catalogue says exists, and " +
+        "which of it each participant has. Ask it of the catalogue page or of any tally " +
+        "that tracks it — both answer with the same grid. Every row carries the key a " +
+        "tick names it by; a row with variants is a group, and only its variants can be " +
+        "ticked. Columns are the tallies you may enumerate, so a private tally is not " +
+        "one of them.")]
+    public async Task<CollectionDto> CollectionStatus(
+        [Description("The node id of the catalogue, or of a tally that tracks it.")] Guid id,
+        [Description("Which list, where the page declares more than one. Defaults to " +
+            "the first.")]
+        string? list = null) =>
+        await Run(async () => CollectionDto.From(await collections.GetAsync(UserId, id, list)));
+
+    [McpServerTool(Name = "mark_collected")]
+    [Description("Record — or take back — one collectible against your own tally, which " +
+        "is written as a page under your root the first time you tick anything. Never " +
+        "anybody else's: a tally is a node, and a node is written by its owner. Take the " +
+        "key from collection_status; only a row with no variants of its own can be ticked.")]
+    public async Task<CollectionDto> MarkCollected(
+        [Description("The node id of the catalogue, or of a tally that tracks it.")] Guid id,
+        [Description("The row key, from collection_status.")] string key,
+        [Description("True to record it, false to take it back. Default true.")]
+        bool? collected = null,
+        [Description("Which list, where the page declares more than one.")] string? list = null) =>
+        await Run(async () => CollectionDto.From(
+            await collections.SetAsync(UserId, id, key, collected ?? true, list)));
 
     private static NodeKind ParseKind(string kind) =>
         Enum.TryParse<NodeKind>(kind, ignoreCase: true, out var parsed)

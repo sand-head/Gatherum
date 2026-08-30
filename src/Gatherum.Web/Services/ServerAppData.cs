@@ -1,6 +1,7 @@
 using Gatherum.Client;
 using Gatherum.Core.Domain;
 using Gatherum.Core.Markdown;
+using Gatherum.Core.Services;
 using Gatherum.Infrastructure.Epub;
 using Gatherum.Web.Auth;
 using Microsoft.AspNetCore.Components.Authorization;
@@ -236,6 +237,30 @@ public sealed class ServerAppData(
                 .ToList(),
             file);
     }
+
+    public async Task<CollectionInfo> GetCollectionAsync(Guid nodeId, string? list)
+    {
+        var userId = await ViewerIdAsync();
+        return Collection(await ops.Collections(s => s.GetAsync(userId, nodeId, list)));
+    }
+
+    public async Task<CollectionInfo> SetCollectedAsync(Guid nodeId, string key, bool collected,
+        string? list)
+    {
+        var userId = await UserIdAsync();
+        return Collection(
+            await ops.Collections(s => s.SetAsync(userId, nodeId, key, collected, list)));
+    }
+
+    private static CollectionInfo Collection(CollectionView view) => new(view.CatalogueId,
+        view.CatalogueTitle, view.List, [.. view.Rows.Select(Row)],
+        [.. view.Columns.Select(c => new CollectionColumnInfo(c.TallyId, c.OwnerId, c.DisplayName,
+            c.IsViewer, c.Access.ToString(), [.. c.Held],
+            [.. c.Orphans.Select(o => new CollectionOrphanInfo(o.Text, o.Note))], c.Count))],
+        view.TallyId, view.CanTick, view.Collectibles);
+
+    private static CollectionRowInfo Row(CollectionRow row) =>
+        new(row.Key, row.Text, row.NodeId, row.Note, [.. row.Variants.Select(Row)]);
 
     public async Task<IReadOnlyList<RelatedInfo>> GetSimilarAsync(Guid nodeId, int limit)
     {

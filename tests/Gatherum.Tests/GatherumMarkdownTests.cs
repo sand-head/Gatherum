@@ -11,6 +11,99 @@ public class GatherumMarkdownTests
         GatherumMarkdown.Parse(markdown, isDark: false);
 
     [Fact]
+    public void A_collection_reads_as_tagged_blocks_and_writes_its_fence_back()
+    {
+        var doc = Parse("""
+            Sprites arrive on Thursdays.
+
+            :::collection Override sprites
+            - Sonic
+              - Base
+              - Gold
+            - Storm Scout
+            :::
+            """);
+
+        var tagged = doc.Blocks.Where(b => BlockTags.IsCollection(b.Tag)).ToList();
+        Assert.Equal(4, tagged.Count);
+        Assert.All(tagged, b => Assert.Equal(BlockKind.ListItem, b.Kind));
+        // The tag carries the fence's own argument, which is how the read view knows
+        // which list it is drawing and how two lists on one page stay two.
+        Assert.Equal("Override sprites", BlockTags.ArgumentOf(tagged[0].Tag));
+
+        var written = GatherumMarkdown.ToMarkdown(doc);
+        Assert.Equal("""
+            Sprites arrive on Thursdays.
+
+            :::collection Override sprites
+            - Sonic
+              - Base
+              - Gold
+            - Storm Scout
+            :::
+            """.ReplaceLineEndings("\n"), written);
+    }
+
+    /// <summary>The tally spelling — a fence whose argument names another node — and the
+    /// task marks that are somebody's ticks. Both halves have to survive, or a page saved
+    /// through the editor would stop being a tally.</summary>
+    [Fact]
+    public void A_tally_fence_and_its_ticks_round_trip()
+    {
+        var id = Guid.NewGuid();
+        var source = $$"""
+            :::collection [Override sprites](node://{{id}})
+            - [x] Sonic — Gold, Sprite Day 2
+              - [x] Base
+              - [ ] Gold
+            - [ ] Storm Scout
+            :::
+            """.ReplaceLineEndings("\n");
+
+        var written = GatherumMarkdown.ToMarkdown(Parse(source));
+
+        Assert.Equal(source, written);
+    }
+
+    /// <summary>The construct is a run of consecutive blocks sharing a tag, so two lists
+    /// separated by the blank line an author writes between two fences are two lists —
+    /// and never one card that eats the second one's opening line.</summary>
+    [Fact]
+    public void Two_collections_in_a_row_stay_two_collections()
+    {
+        var doc = Parse("""
+            :::collection Sprites
+            - Sonic
+            :::
+
+            :::collection Emotes
+            - Floss
+            :::
+            """);
+
+        var tags = doc.Blocks.Where(b => BlockTags.IsCollection(b.Tag))
+            .Select(b => b.Tag).Distinct().ToList();
+        Assert.Equal(2, tags.Count);
+        Assert.Equal(["Sprites", "Emotes"], tags.Select(BlockTags.ArgumentOf));
+        Assert.Equal(2, GatherumMarkdown.ToMarkdown(doc).Split(":::collection").Length - 1);
+    }
+
+    /// <summary>Its blocks are ordinary blocks, which is the whole point of building a
+    /// construct out of the vocabulary rather than an opaque payload: an item's link is a
+    /// real link the server backlinks, and its text is text a search finds.</summary>
+    [Fact]
+    public void An_items_wiki_link_is_a_real_link()
+    {
+        var doc = Parse("""
+            :::collection Sprites
+            - [[Klombo]]
+            :::
+            """);
+
+        Assert.Contains("Klombo", WikiLinks.TargetsIn(doc));
+    }
+
+    [Fact]
     public void An_infobox_reads_as_tagged_blocks_and_writes_its_fence_back()
     {
         var doc = Parse("""

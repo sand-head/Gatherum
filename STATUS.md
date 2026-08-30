@@ -1,8 +1,10 @@
 # Status
 
-As of semantic search — search runs a full-text half and a meaning half and fuses their
-rankings, with the embedding model that powers the second half shipping in the box, and the taxonomy (which replaced tags) files a page under a subject rather than
-labelling it with one. Everything listed as working has
+As of collectible lists — a `:::collection` fence makes a shared list something a group
+works rather than reads, with each person's ticks a page of their own. Before that:
+search runs a full-text half and a meaning half and fuses their rankings, with the
+embedding model that powers the second half shipping in the box, and the taxonomy (which
+replaced tags) files a page under a subject rather than labelling it with one. Everything listed as working has
 been exercised end-to-end (unit/integration tests, API smoke tests, or scripted
 browser sessions — including against the built container).
 
@@ -64,6 +66,19 @@ browser sessions — including against the built container).
   is plain Markdown in the file: opening a page and saving it back changes nothing but
   the edits (verified in-browser against the running app, light and dark, and by
   round-trip tests).
+- **Collectible lists** — a `:::collection` fence makes a list something a group works
+  rather than reads. The page declares the catalogue; each participant's ticks live in a
+  page of their own under their own root, carrying their own `AccessMode`, so nobody's
+  sharing gesture publishes anybody else's answers and the grid's columns are exactly the
+  tallies a reader may enumerate (an unlisted tally is not one, whoever holds its link).
+  Items are lines of text; linking a page for one is optional and makes it rename-proof,
+  and promotion is lossless, so ticks made before it keep counting. Variants nest one
+  level and are optional per item, because rosters are ragged — which also makes every
+  count a count of collectibles rather than of lines. A rename orphans the ticks it
+  stranded: they stay in the file and the grid says so. Read view only, through slopedit
+  2.7.0's widget blocks — the canvas keeps the source, so a tick is never an edit — and
+  signed out reads rather than ticking. Over REST and MCP too (`collection_status`,
+  `mark_collected`). See COLLECTIONS.md.
 - **Awareness** — heartbeat presence ("Sam is editing", verified cross-user) and a
   newer-version warning in the editor (verified: fires when another user saves the
   open document). Concurrent saves are serialized per node; nobody's save is ever
@@ -163,7 +178,7 @@ browser sessions — including against the built container).
 - **Auth** — OIDC-only via discovery, defensive `offline_access`, first user becomes
   admin, cookie sessions; API keys hashed at rest, revocable, shown once; dev
   auto-login only when no authority is configured.
-- **REST API** (`/api`) and **MCP** (`/mcp`, all thirteen tools) — thin adapters over the
+- **REST API** (`/api`) and **MCP** (`/mcp`, all fifteen tools) — thin adapters over the
   same services; page bodies are Markdown verbatim in both directions.
 - **Privacy** — per-subtree private flag enforced by one `INodeAuthorizer` in every
   read path, and a published page renders for whoever may reach it: signed out, the node
@@ -173,7 +188,7 @@ browser sessions — including against the built container).
   exercised against a postgres container, editor verified in-browser against the
   containerized app), compose.yaml, Podman Quadlets, `/healthz`, JSON console logs
   outside Development, migrations on startup with opt-out.
-- **Tests** — 229 passing: the Markdown dialect (infobox/figure/callout round trips,
+- **Tests** — 342 passing: the Markdown dialect (infobox/figure/callout round trips,
   wiki-link spellings, extension composition, derived chrome, red-link inking, in-app
   URL shapes) and the same dialect as read-only HTML (the aside and its card, a
   callout's tint, a wiki link's URL, a mention that keeps its look and loses its
@@ -184,12 +199,22 @@ browser sessions — including against the built container).
   markdown links, docx extraction/editing/backlinks, tree ops, privacy,
   versions (collapse, restore, re-upload, cross-author), search, title resolution, API
   keys, storage/extraction, the taxonomy (nesting, counts, privacy, rename/move/delete,
-  path spelling), and integration tests booting the app on Testcontainers Postgres
+  path spelling), collectible lists (the construct alone — declaration against tracking,
+  ragged variants, notes, orphans, round trips; then the aggregate against real Postgres —
+  a tally per person, a private one nobody else sees, an unlisted one that is reachable
+  but never a column, a promotion whose ticks keep counting, a rename whose orphans are
+  reported and kept, and the parent row that refuses to be ticked), the widget seam the
+  read view claims a collection through (the hole, and the whole-body writer that ignores
+  it so a static export still holds the catalogue), and integration tests booting the app
+  on Testcontainers Postgres
   (create page → search → MCP `get_node`; wiki link → backlink → `resolve-titles`;
   file a page in a nested category → find it from the category above, over REST and
   MCP; create a page → find it over REST by a question that shares none of its words;
   publish a page that mentions a private one → a stranger gets the page, the mention's
-  text, and the answer that its target is not theirs to open).
+  text, and the answer that its target is not theirs to open; declare a collection over
+  REST → tick it over MCP → the tally is a page with the mention and the tick in it, and
+  a public list's first response carries the grid itself with no checkbox for a visitor
+  who is not signed in).
   The packaged model is tested as it ships (shape, normalization, determinism,
   batch-invariance, that it tells two subjects apart, and that the shipped `MaxDistance`
   falls between kin and strangers). Everything *around* semantic search is tested against
@@ -197,10 +222,10 @@ browser sessions — including against the built container).
   thing — because a real model's answers are approximate and an assertion about ranking
   made against one is a coin toss.
 
-- **A manual in the box** — ten pages (`src/Gatherum.Web/Docs`) embedded in the assembly
-  and served at `/docs`: what a node is, the Markdown dialect in full, categories,
-  search, sharing, the REST API, the MCP server, a briefing for agents, and
-  configuration. Also served as their own source — `/docs/<page>.md`, `/docs/all.md`,
+- **A manual in the box** — eleven pages (`src/Gatherum.Web/Docs`) embedded in the
+  assembly and served at `/docs`: what a node is, the Markdown dialect in full,
+  categories, collectible lists, search, sharing, the REST API, the MCP server, a
+  briefing for agents, and configuration. Also served as their own source — `/docs/<page>.md`, `/docs/all.md`,
   `/docs/llms.txt` — because the dialect is syntax no model has seen and a link is how
   you teach it one. Unauthenticated (it describes the software, not the instance) and
   under the anonymous read budget. Each page's outline goes in the sidebar rail through

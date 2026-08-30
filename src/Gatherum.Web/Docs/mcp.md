@@ -27,7 +27,7 @@ claude mcp add --transport http gatherum http://localhost:5140/mcp \
   --header "Authorization: Bearer gk_…"
 ```
 
-`/mcp` inside Claude Code should then list the `gatherum` server with thirteen tools.
+`/mcp` inside Claude Code should then list the `gatherum` server with fifteen tools.
 
 ## The tools
 
@@ -46,6 +46,8 @@ claude mcp add --transport http gatherum http://localhost:5140/mcp \
 | `list_categories` | `matching?` | Every category, with member counts and its parents' ids |
 | `browse_category` | `name`, `deep?` | The category, its parents, subcategories and nodes |
 | `get_backlinks` | `id` | Nodes linking to the given node |
+| `collection_status` | `id` (catalogue or tally), `list?` | A [collectible list](/docs/collections)'s rows, and each participant's ticks |
+| `mark_collected` | `id`, `key`, `collected?`, `list?` | The list again, with your own tally rewritten |
 
 Media that a model has analyzed comes back from `get_node` with `transcript` and
 `summary` beside its text, and `analysis` saying whether that is `None`, `Pending`,

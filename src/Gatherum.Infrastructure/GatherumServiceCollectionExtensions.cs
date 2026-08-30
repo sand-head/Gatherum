@@ -52,6 +52,7 @@ public static class GatherumServiceCollectionExtensions
         services.AddScoped<CategoryService>();
         services.AddScoped<FileService>();
         services.AddScoped<BookmarkService>();
+        services.AddScoped<CollectionService>();
         services.AddScoped<SearchService>();
         services.AddScoped<EmbeddingService>();
         services.AddScoped<UserService>();

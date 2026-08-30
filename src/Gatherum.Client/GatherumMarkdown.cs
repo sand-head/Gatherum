@@ -18,6 +18,7 @@ public static class GatherumMarkdown
         new WikiLinkExtension(),
         new AsideExtension(),
         new CalloutExtension(),
+        new CollectionExtension(),
     ];
 
     /// <summary>A page as an editable document, dressed for the current mode.</summary>

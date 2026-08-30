@@ -28,8 +28,8 @@ public sealed class DocsLibrary
     /// alphabetically — so adding a file to <c>Docs/</c> is enough to publish it.</summary>
     private static readonly string[] Order =
     [
-        "index", "markdown", "pages-and-files", "categories", "search", "sharing",
-        "api", "mcp", "agents", "configuration",
+        "index", "markdown", "pages-and-files", "categories", "collections", "search",
+        "sharing", "api", "mcp", "agents", "configuration",
     ];
 
     /// <summary>Prose, not pages: the docs are the app's own words, so raw HTML stays

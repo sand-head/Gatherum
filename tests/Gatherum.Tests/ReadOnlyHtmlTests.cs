@@ -16,6 +16,56 @@ public class ReadOnlyHtmlTests
     private static string Html(string markdown, bool isDark = false) =>
         RichHtmlWriter.WriteBody(GatherumMarkdown.Parse(markdown, isDark), new RichHtmlOptions());
 
+    /// <summary>The one construct the reading view renders as a component instead of as
+    /// prose. Claiming the tag is the whole declaration — the blocks are unchanged, and
+    /// what changes is only that the body arrives in pieces with a hole where the run
+    /// was, for the caller to put a component in.</summary>
+    [Fact]
+    public void A_collection_is_handed_over_as_a_hole_for_the_grid()
+    {
+        var doc = GatherumMarkdown.Parse("""
+            Sprites arrive on Thursdays.
+
+            :::collection Override sprites
+            - Sonic
+            - Storm Scout
+            :::
+
+            More prose after it.
+            """, isDark: false);
+        var tag = doc.Blocks.Select(b => b.Tag).First(BlockTags.IsCollection)!;
+
+        var segments = RichHtmlWriter.WriteSegments(doc,
+            new RichHtmlOptions { WidgetTags = [tag] });
+
+        var widget = Assert.Single(segments, s => s.IsWidget);
+        Assert.Equal(tag, widget.WidgetTag);
+        Assert.Equal(2, widget.BlockCount);
+        // Markup, hole, markup: every piece is well-formed on its own, because each is
+        // parsed in isolation by whoever renders it.
+        Assert.Equal(3, segments.Count);
+        Assert.Contains("Sprites arrive on Thursdays.", segments[0].Html, StringComparison.Ordinal);
+        Assert.DoesNotContain("Storm Scout", segments[0].Html, StringComparison.Ordinal);
+        Assert.Contains("More prose after it.", segments[2].Html, StringComparison.Ordinal);
+    }
+
+    /// <summary>A string is exactly the place a component cannot go, so the whole-body
+    /// writer ignores the claim: a static export holds the catalogue rather than a gap
+    /// where one was.</summary>
+    [Fact]
+    public void A_static_render_of_a_collection_still_holds_its_items()
+    {
+        var html = Html("""
+            :::collection Override sprites
+            - Sonic
+            - Storm Scout
+            :::
+            """);
+
+        Assert.Contains("Sonic", html, StringComparison.Ordinal);
+        Assert.Contains("Storm Scout", html, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void The_wikis_own_constructs_reach_the_reader()
     {

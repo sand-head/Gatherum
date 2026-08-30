@@ -70,6 +70,7 @@ public class DocsTests
 
         Assert.Contains($":::{BlockTags.Infobox}", dialect, StringComparison.Ordinal);
         Assert.Contains($":::{BlockTags.Figure}", dialect, StringComparison.Ordinal);
+        Assert.Contains($":::{BlockTags.Collection}", dialect, StringComparison.Ordinal);
         Assert.Contains("[[Title]]", dialect, StringComparison.Ordinal);
         Assert.Contains("node://", dialect, StringComparison.Ordinal);
         Assert.Contains("/api/files/", dialect, StringComparison.Ordinal);

@@ -1,0 +1,160 @@
+/* A collection list on the reading surface. The grid is a table because that is what it
+   is — a row per collectible, a column per person — and a table gets a screen reader,
+   find-in-page and native selection for nothing. It scrolls inside its own box rather
+   than pushing the article sideways: a roster with a dozen participants is wide, and a
+   page that scrolls horizontally is broken. */
+
+.collection {
+    margin: 20px 0;
+    border: 1px solid var(--outline-dim);
+    border-radius: var(--radius);
+    background: var(--surface-dim);
+    font-family: var(--font-ui);
+    font-size: 0.9rem;
+}
+
+.collection-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 16px 10px;
+    border-bottom: 1px solid var(--outline-dim);
+
+    & h4 {
+        margin: 0;
+        font-size: 0.95rem;
+        font-weight: 500;
+    }
+}
+
+.collection-score {
+    color: var(--on-surface-dim);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.collection-scroll { overflow-x: auto; }
+
+.collection-grid {
+    width: 100%;
+    border-collapse: collapse;
+
+    & th, & td {
+        padding: 5px 10px;
+        text-align: center;
+        font-weight: 400;
+    }
+
+    & thead th {
+        position: sticky;
+        top: 0;
+        color: var(--on-surface-dim);
+        font-size: 0.8rem;
+        white-space: nowrap;
+        background: var(--surface-dim);
+        border-bottom: 1px solid var(--outline-dim);
+    }
+
+    & th.item {
+        text-align: left;
+        width: 100%;
+        white-space: nowrap;
+    }
+
+    & tbody tr:hover { background: var(--hover); }
+    & tr.variant th.item { padding-left: 34px; color: var(--on-surface-dim); }
+    & tr.group th.item { font-weight: 500; }
+
+    /* An item that earned a page links to it — the payoff for the optional half of
+       this construct. One the reader may not open is its own plain text instead. */
+    & th.item a { color: var(--link); text-decoration: none; }
+    & th.item a:hover { text-decoration: underline; }
+
+    & td.mine, & th.mine { background: color-mix(in srgb, var(--primary) 8%, transparent); }
+}
+
+/* The column headers' running totals, so a glance answers "who is ahead". */
+.tally {
+    display: inline-block;
+    margin-left: 5px;
+    padding: 0 6px;
+    border-radius: var(--radius-full);
+    background: var(--chip-bg);
+    color: var(--on-chip);
+    font-variant-numeric: tabular-nums;
+}
+
+.chevron {
+    display: inline-grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    margin-right: 4px;
+    vertical-align: -5px;
+    padding: 0;
+    border: none;
+    border-radius: var(--radius-full);
+    background: none;
+    color: var(--on-surface-dim);
+
+    & svg { transition: transform 0.15s; }
+    &.open svg { transform: rotate(90deg); }
+    &:hover { background: var(--hover-strong); color: var(--on-surface); }
+}
+
+/* A group's cell reports and does not offer: one segment per variant, filled for the
+   ones that person holds. Ticking a parent would stand in for statements nobody made. */
+.progress {
+    display: inline-flex;
+    gap: 2px;
+}
+
+.seg {
+    width: 9px;
+    height: 9px;
+    border-radius: 2px;
+    background: color-mix(in srgb, var(--on-surface) 22%, transparent);
+
+    &.on { background: var(--primary); }
+}
+
+/* Somebody else's tick: a mark, never a control. */
+.mark {
+    display: inline-block;
+    width: 11px;
+    height: 11px;
+    border-radius: var(--radius-full);
+    border: 1px solid color-mix(in srgb, var(--on-surface) 30%, transparent);
+
+    &.on {
+        background: var(--primary);
+        border-color: var(--primary);
+    }
+}
+
+.collection-grid input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    accent-color: var(--primary);
+    cursor: pointer;
+
+    &:disabled { cursor: default; opacity: 0.6; }
+}
+
+.collection-note, .collection-orphans {
+    margin: 0;
+    padding: 10px 16px;
+    border-top: 1px solid var(--outline-dim);
+    color: var(--on-surface-dim);
+    font-size: 0.85rem;
+}
+
+.collection-note.error { color: var(--danger); }
+
+.collection-orphans {
+    color: var(--warn);
+
+    & span { color: var(--on-surface); }
+}

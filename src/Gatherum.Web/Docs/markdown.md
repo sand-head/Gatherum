@@ -249,6 +249,60 @@ Each renders as a tinted card in its kind's accent, with the title line inked to
 - **An unknown kind stays a plain quote.** `> [!nope] …` is a block quote that happens
   to start with a bracket, which is exactly what it looks like.
 
+## Collectible lists — `:::collection`
+
+A shared list people tick against, each keeping their own answer. Everything about it
+is in [collections](/docs/collections); the syntax is one fence with two spellings.
+
+A fence whose argument is a **name** declares the list — the catalogue, what exists to
+collect:
+
+```markdown
+:::collection Override sprites
+- Sonic
+  - Base
+  - Gold
+- [Klombo](node://8f6b1f5e-9a5a-4a2e-9d16-6b8a1c2d3e4f)
+- Storm Scout
+  - Base
+:::
+```
+
+A fence whose argument **names another node** tracks that node's list, which makes this
+page a tally — one person's record of what they have:
+
+```markdown
+:::collection [[Override sprites]]
+- [x] Sonic — Gold, Sprite Day 2
+- [ ] Storm Scout
+:::
+```
+
+Inside the fence everything is vocabulary from further up this page: bulleted items,
+nested one level for variants, task marks for ticks, mentions and wiki links.
+
+- **An item is a line of text, and a page for it is optional.** A plain item is matched
+  by its text; one that links a node is matched by that id, and so survives a rename.
+  Ticks made against `Sonic` keep counting once Sonic becomes `[Sonic](node://…)`.
+- **Variants are nested items**, one level, and optional per item: a sprite held back
+  with only its base form lists only that.
+- **Only a variant can be ticked** where an item has any. "Give me all three" is a
+  different statement from the three ticks it would stand in for.
+- **A trailing `—` makes the rest a note**: `- [x] Sonic — Gold, Sprite Day 2`. `--`
+  works too, for a keyboard without an em dash.
+- **A tally naming its catalogue with `[[Title]]` resolves by title**, which is a
+  search — so it cannot reach an **unlisted** catalogue. A `node://` mention can,
+  because an id is permission and a title is a search.
+- Where a page declares more than one list, a tally says which after the link:
+  `:::collection [[Season 4]] Sprites`.
+- Ordinary checklists elsewhere are untouched. `- [ ]` outside a collection still means
+  *it is done* — shared state, one answer for everybody — which is the commoner kind in
+  a wiki and the reason this construct is opt-in.
+
+Reading the page draws the fence as a grid: the catalogue's rows, a column per
+participant, checkboxes in your own. Editing it shows the list itself, on a card — the
+source is what you want while rearranging a roster.
+
 ## Footnotes
 
 Pandoc's footnotes: a superscript marker in prose, and the note on a line of its own —
@@ -375,6 +429,15 @@ systemctl --user start gatherum
 
 > [!NOTE] Optional title              a callout: note, tip, important, warning, caution
 > The body.
+
+:::collection Override sprites        a collectible list: the catalogue
+- Sonic
+  - Gold                              a variant, nested one level
+:::
+
+:::collection [[Override sprites]]    a tally: one person's ticks against that catalogue
+- [x] Sonic — a note after the dash
+:::
 
 x^2^  H~2~O                           superscript, subscript
 Prose.[^key]                          a footnote marker — readers see a derived number

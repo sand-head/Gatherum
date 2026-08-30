@@ -1650,3 +1650,67 @@ routing it through the new axis as well would let it outlive `Sharing.AllowPubli
 documented meaning is that a node claiming to be public is treated as private by every
 query. Keeping it out means this change moves nothing for an instance that has the internet
 switched off.
+
+## A collection is one construct, and both halves of it are files
+`COLLECTIONS.md` is the design; this is what got built and what it cost.
+
+A collaborative collectible list conflates two documents with different tempos: what
+exists to collect, written once by one author, and what *I* have, written constantly by
+each participant. One set of checkboxes cannot answer both — if you tick Sonic, has anyone
+else got it, and where would the checkbox put the answer? So the catalogue is a page and a
+tally is a page per person, and the whole aggregate is "the tallies this reader may
+enumerate", which `INodeAuthorizer.VisibleTo` already answers. No new relation, no new
+table, no new visibility rule.
+
+**A tally is content, not ephemera.** `NodeTicks` would have been an afternoon's work and
+wrong: `ReadingPositions` earns its database-only exception because losing one costs a page
+number, and a season of collecting is not that. A tally is a file under its owner's root —
+rebuildable by `Reindexer`, carried by the backup, readable when Gatherum is not running.
+
+**One construct, declared by a fence.** Making every Markdown checklist per-person was
+considered and rejected: `- [ ]` already means *it is done* — shared state, one answer for
+everybody, and the commoner kind in a knowledge base — so reinterpreting it would break the
+first kind silently. A per-page setting is the wrong unit (two lists on one page cannot
+both be it) and has nowhere to live. So the list declares itself, and the same fence does
+both jobs: an argument that is a name declares a catalogue, an argument that names another
+node tracks it. Recognition is exact rather than inferred — an earlier draft recognized a
+tally structurally, by it linking a catalogue and carrying matching task items, which would
+have counted any page discussing the list with example checkboxes as somebody's column.
+
+**Item identity is the interesting problem, and the answer is that pages are optional.**
+Keying by line number fails on the commonest edit there is; by text, on a rename; by node
+id, never. The first draft therefore made a page per collectible mandatory, which is the
+expensive option made compulsory — wanting to tick off forty sprites is not wanting to write
+forty pages. So an item is a line of text that *may* link a node, and matching is: two
+linked items are their ids, anything else is its text. That asymmetry is what makes
+promotion lossless, so ticks made against `Sonic` keep counting once Sonic becomes a page.
+A rename orphans the plain ticks it stranded — Alice cannot rewrite Bob's file to follow
+her wording — so the orphans are kept in his file and reported in the grid. Silence is the
+one unacceptable answer.
+
+**Variants are nested items because rosters are ragged.** Declaring the variant set once on
+the fence would be a lie from the first week: things are held back, arrive late, and do not
+all carry the same forms. Nesting also forces the counting rule — every number is of
+collectibles, never of lines — and makes a parent row a group rather than a control:
+"give me all three" is a different statement from the three ticks it would stand in for,
+and the one thing this must not do is guess what somebody has.
+
+**Signed out is read-only.** A third answer was on the table — tick freely into this
+browser's `localStorage`, the mechanism that already keeps an anonymous reader's place in a
+book — and it is wrong here. A reading position can be quietly local because nobody else was
+ever going to see it; in a grid where every other column is a real person's real ticks, a
+checkbox that writes to nobody looks exactly like the ones that count. So there is no
+checkbox at all, and an invitation to sign in instead. Guest tallies (a hashed capability
+token, its file under the catalogue owner's root, off by default) remain designed and
+unbuilt: going from read-only to counted is purely additive, and the other direction is not.
+
+What this cost outside Core: one Markdown extension, one component, two endpoints and two
+MCP tools. The construct is the dialect's first *interactive* one, and it needed a hole in
+the reading view to put a component in — which slopedit 2.7.0 shipped as widget blocks,
+keyed by the `Block.Tag` an extension already stamps. The blocks stay blocks, so items
+reach search and a `[[wiki link]]` in one is still a real link; the canvas keeps painting
+the source, so a tick can never register as an edit of an open document; and `WriteBody`
+ignores the claim, so a static export holds the catalogue rather than a gap. Two behaviours
+to design around rather than discover: a tagged run inside a float renders as blocks, so a
+collection inside an `:::infobox` is a plain list, and a collapsible section holding a
+widget keeps its chevron rather than folding a component out of the page.

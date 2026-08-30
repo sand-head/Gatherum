@@ -38,13 +38,15 @@ in the order an agent needs it.
   versions, and what Gatherum reads out of a file.
 - **[Categories](/docs/categories)** — what a node is *about*. Each one is a page of its
   own, and nesting one is filing it under another.
+- **[Collectible lists](/docs/collections)** — a shared list people tick against, each
+  keeping their own answer, and everyone seeing everyone else's.
 - **[Search](/docs/search)** — the two halves of the search box and when to reach for
   each.
 - **[Sharing and privacy](/docs/sharing)** — private, shared, unlisted, public, and the
   difference between reaching a node and finding one.
 - **[REST API](/docs/api)** — every endpoint under `/api`, with the shapes it takes and
   returns.
-- **[MCP server](/docs/mcp)** — the thirteen tools at `/mcp`, and how to point an agent
+- **[MCP server](/docs/mcp)** — the fifteen tools at `/mcp`, and how to point an agent
   at them.
 - **[Working with agents](/docs/agents)** — the briefing to give a model that is going
   to write here.

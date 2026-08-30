@@ -46,6 +46,8 @@ claude mcp add --transport http gatherum http://localhost:5140/mcp \
 | `list_categories` | `matching?` | The category tree in path order, with member counts |
 | `browse_category` | `path`, `deep?` | The category, its ancestry, its subcategories and its nodes |
 | `get_backlinks` | `id` | Nodes linking to the given node |
+| `collection_status` | `id` (catalogue or tally), `list?` | A collectible list's rows, and each participant's ticks against them |
+| `mark_collected` | `id`, `key`, `collected?`, `list?` | The list again, with your own tally rewritten |
 
 ### Search
 
@@ -60,6 +62,25 @@ pass `mode=text` when the exact spelling is the point — an identifier, a filen
 phrase you are quoting. `mode=semantic` asks for meaning alone. If embeddings are turned
 off, or the owner has pointed Gatherum at an endpoint that is unreachable, every mode
 still answers from full-text search: a search never fails because a model is down.
+
+### Collectible lists
+
+A `:::collection` fence on a page declares a **catalogue** — what exists to collect. A
+fence naming another node *tracks* it, which makes that page a **tally**: one person's
+record of what they have. `collection_status` fuses them, and answers the same grid
+whether it is asked of the catalogue or of any tally that tracks it.
+
+Every row carries the `key` a tick names it by, so read the list before writing to it. A
+row with variants nested under it is a group and cannot be ticked — its variants can,
+because "give me all three" is a different statement from the three ticks it stands in
+for. `collected` counts variants rather than lines, which is the only number a progress
+report may be made of.
+
+`mark_collected` writes the caller's own tally, creating it under `Collections/` the
+first time and never touching anybody else's — a tally is a node, and a node is written
+by its owner. A new tally is private like every other new node, so its column shows to
+nobody until its owner shares it. Columns are the tallies the caller may *enumerate*, so
+an unlisted tally never appears in one, whoever holds its link.
 
 ### Bookmarks
 

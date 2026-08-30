@@ -64,6 +64,16 @@ public interface IAppData
     Task ShareAsync(Guid nodeId, Guid userId, string role);
     Task UnshareAsync(Guid nodeId, Guid userId);
 
+    /// <summary>A collectible list as everyone's ticks make it, asked of whichever page
+    /// the reader is on — a catalogue aggregates itself, a tally aggregates the catalogue
+    /// it tracks. <paramref name="list"/> is the fence's own argument, which is what
+    /// tells two lists on one page apart.</summary>
+    Task<CollectionInfo> GetCollectionAsync(Guid nodeId, string? list);
+
+    /// <summary>Records one collectible against the reader's own tally — written into
+    /// being the first time they tick anything — and answers with the list again.</summary>
+    Task<CollectionInfo> SetCollectedAsync(Guid nodeId, string key, bool collected, string? list);
+
     // A node's chrome: categories, file facts, history.
     Task<NodeInfo> GetNodeAsync(Guid nodeId);
     Task<IReadOnlyList<RelatedInfo>> GetSimilarAsync(Guid nodeId, int limit);
@@ -138,6 +148,25 @@ public record CategoryRef(Guid Id, string Name);
 public record CategoryInfo(Guid Id, string Name, IReadOnlyList<Guid> ParentIds, int Members,
     int SubtreeMembers);
 public record RelatedInfo(Guid Id, string Kind, string Title);
+
+/// <summary>A collectible list: the catalogue's rows in the author's order, one column
+/// per tally this reader may enumerate, and which of them is theirs.</summary>
+public record CollectionInfo(Guid CatalogueId, string CatalogueTitle, string List,
+    IReadOnlyList<CollectionRowInfo> Rows, IReadOnlyList<CollectionColumnInfo> Columns,
+    Guid? TallyId, bool CanTick, int Collectibles);
+
+/// <summary>One line of the catalogue. A row with variants is a group and is not itself
+/// tickable: "give me all three" is a different statement from the three ticks.</summary>
+public record CollectionRowInfo(string Key, string Text, Guid? NodeId, string Note,
+    IReadOnlyList<CollectionRowInfo> Variants);
+
+public record CollectionColumnInfo(Guid TallyId, Guid OwnerId, string DisplayName,
+    bool IsViewer, string Access, IReadOnlyList<string> Held,
+    IReadOnlyList<CollectionOrphanInfo> Orphans, int Count);
+
+/// <summary>A tick that no longer matches an item, because the catalogue was edited
+/// under it. Shown rather than swallowed.</summary>
+public record CollectionOrphanInfo(string Text, string Note);
 public record KeyInfo(Guid Id, string Name, string Prefix, DateTimeOffset CreatedAt,
     DateTimeOffset? LastUsedAt, bool IsActive);
 public record CreatedKey(Guid Id, string Name, string Token);
@@ -271,6 +300,22 @@ public sealed class HttpAppData(HttpClient http) : IAppData
 
     public async Task UnshareAsync(Guid nodeId, Guid userId) =>
         Ensure(await http.DeleteAsync($"/api/nodes/{nodeId}/grants/{userId}"));
+
+    public async Task<CollectionInfo> GetCollectionAsync(Guid nodeId, string? list) =>
+        (await http.GetFromJsonAsync<CollectionInfo>(
+            $"/api/nodes/{nodeId}/collection{ListQuery(list)}"))!;
+
+    public async Task<CollectionInfo> SetCollectedAsync(Guid nodeId, string key, bool collected,
+        string? list)
+    {
+        var response = await http.PostAsJsonAsync($"/api/nodes/{nodeId}/collection",
+            new { key, collected, list });
+        await EnsureAsync(response);
+        return (await response.Content.ReadFromJsonAsync<CollectionInfo>())!;
+    }
+
+    private static string ListQuery(string? list) =>
+        list is { Length: > 0 } ? $"?list={Uri.EscapeDataString(list)}" : "";
 
     public async Task<NodeInfo> GetNodeAsync(Guid nodeId) =>
         (await http.GetFromJsonAsync<NodeInfo>($"/api/nodes/{nodeId}"))!;
