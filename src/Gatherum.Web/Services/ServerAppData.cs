@@ -255,7 +255,7 @@ public sealed class ServerAppData(
     private static CollectionInfo Collection(CollectionView view) => new(view.CatalogueId,
         view.CatalogueTitle, view.List, [.. view.Rows.Select(Row)],
         [.. view.Columns.Select(c => new CollectionColumnInfo(c.TallyId, c.OwnerId, c.DisplayName,
-            c.IsViewer, c.Access.ToString(), [.. c.Held],
+            c.IsViewer, [.. c.Held],
             [.. c.Orphans.Select(o => new CollectionOrphanInfo(o.Text, o.Note))], c.Count))],
         view.TallyId, view.CanTick, view.Collectibles);
 

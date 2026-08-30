@@ -160,8 +160,11 @@ public record CollectionInfo(Guid CatalogueId, string CatalogueTitle, string Lis
 public record CollectionRowInfo(string Key, string Text, Guid? NodeId, string Note,
     IReadOnlyList<CollectionRowInfo> Variants);
 
+/// <summary>One participant's column. Whoever may read the list sees every column on
+/// it, so there is no access to report here — a tally's own sharing governs its page,
+/// not its ticks.</summary>
 public record CollectionColumnInfo(Guid TallyId, Guid OwnerId, string DisplayName,
-    bool IsViewer, string Access, IReadOnlyList<string> Held,
+    bool IsViewer, IReadOnlyList<string> Held,
     IReadOnlyList<CollectionOrphanInfo> Orphans, int Count);
 
 /// <summary>A tick that no longer matches an item, because the catalogue was edited

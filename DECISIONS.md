@@ -1658,9 +1658,36 @@ A collaborative collectible list conflates two documents with different tempos: 
 exists to collect, written once by one author, and what *I* have, written constantly by
 each participant. One set of checkboxes cannot answer both — if you tick Sonic, has anyone
 else got it, and where would the checkbox put the answer? So the catalogue is a page and a
-tally is a page per person, and the whole aggregate is "the tallies this reader may
-enumerate", which `INodeAuthorizer.VisibleTo` already answers. No new relation, no new
-table, no new visibility rule.
+tally is a page per person. No new relation, no new table, no new visibility rule.
+
+**The catalogue's audience is the grid's audience**, and this is the correction that
+mattered most. The first cut made each tally's own `AccessMode` decide whether its column
+appeared, which is locally impeccable — only an owner sets access — and globally absurd:
+it made joining a shared list a two-gesture act, tick and then publish a second page, or
+your column counts for nobody. Nobody who shares a roster with their group means "and each
+of you must separately publish your answers first". So authorization happens once, at the
+door the service already knocks on — `NodeService.GetWithBodyAsync` on the catalogue,
+which is `INodeAuthorizer`'s answer — and a reader who got past it gets the whole grid.
+The aggregate then asks no visibility question of its own, which is not a second door left
+unlocked but the same door knocked on once; `INodeAuthorizer` stays the only one, and the
+rule survives because nothing here re-spells it.
+
+What that deliberately does *not* do is publish the tally page. Its `AccessMode` is
+untouched and still governs the node — its own URL, the tree, search — so a tally stays
+private as a file while the ticks on it count in the list they were made against. The
+disclosure is exactly the rows somebody ticked and the name they tick under; notes and
+orphans stay their owner's, and orphans are reported only to the person who can act on
+one. Two consequences worth saying out loud: a public catalogue's grid is public, display
+names included, so publishing one is a decision about other people as well as about the
+page; and there is no half-in — the way out of a grid is not to tick, or to delete the
+tally, because a mode meaning "counted but hidden" would be a checkbox lying in the other
+direction.
+
+It also moved the wiki-link caveat somewhere better. A tally naming its catalogue
+`[[by title]]` is matched by comparing that title against the catalogue's own rather than
+by resolving it, so whether the match happens no longer depends on who is *reading*: an
+unlisted catalogue still cannot be named by title, but that is now a fact about the author
+writing the link, which is where it belongs.
 
 **A tally is content, not ephemera.** `NodeTicks` would have been an afternoon's work and
 wrong: `ReadingPositions` earns its database-only exception because losing one costs a page

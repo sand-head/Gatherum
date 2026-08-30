@@ -110,7 +110,7 @@ public sealed class ServiceHarness : IAsyncDisposable
             [Analyzer], AnalysisQueue, Clock, NullLogger<FileService>.Instance);
         Categories = new CategoryService(Db, Nodes, Files, authorizer, Sidecar, Clock);
         Bookmarks = new BookmarkService(Db, Nodes, Files, Archiver, Sidecar);
-        Collections = new CollectionService(Db, authorizer, Nodes, Files);
+        Collections = new CollectionService(Db, Nodes, Files);
         Search = new SearchService(Db, authorizer, Embeddings);
     }
 

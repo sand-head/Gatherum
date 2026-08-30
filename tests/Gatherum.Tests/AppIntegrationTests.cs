@@ -664,8 +664,6 @@ public class AppIntegrationTests(PostgresFixture postgres) : IAsyncLifetime
         var column = Assert.Single(ticked.GetProperty("columns").EnumerateArray().ToList());
         Assert.True(column.GetProperty("isViewer").GetBoolean());
         Assert.Equal(1, column.GetProperty("count").GetInt32());
-        // Private like every other new node: nobody sees this column until its owner says so.
-        Assert.Equal("Private", column.GetProperty("access").GetString());
 
         var tallyId = ticked.GetProperty("tallyId").GetGuid();
         var tally = await CallMcpToolAsync("get_node", new { id = tallyId });

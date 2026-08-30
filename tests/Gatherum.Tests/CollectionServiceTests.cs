@@ -114,8 +114,7 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
     {
         var page = await CatalogueAsync();
         var rows = await Empty(page);
-        var hers = await collections.SetAsync(alice, page.Id, KeyOf(rows, "Tails"), collected: true);
-        await access.SetAccessAsync(alice, hers.TallyId!.Value, AccessMode.Authenticated);
+        await collections.SetAsync(alice, page.Id, KeyOf(rows, "Tails"), collected: true);
         await collections.SetAsync(bob, page.Id, KeyOf(rows, "Storm Scout"), collected: true);
         await collections.SetAsync(bob, page.Id, KeyOf(rows, "Sonic", "Gold"), collected: true);
 
@@ -172,48 +171,79 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
         Assert.Equal("traded for it", again.Items.Single(i => i.Text == "Tails").Note);
     }
 
-    /// <summary>The whole reason a tally is its own node: its owner's access, and
-    /// nobody else's gesture.</summary>
+    /// <summary>The rule the grid runs on: whoever may read the list sees everyone's
+    /// ticks against it. Ticking is joining in, and asking each participant to publish a
+    /// second page before their column counted would be withholding a permission nobody
+    /// meant to withhold.</summary>
     [Fact]
-    public async Task A_tally_is_private_until_its_owner_says_otherwise()
+    public async Task Everyone_who_can_read_the_list_sees_everyone_s_ticks()
     {
         var page = await CatalogueAsync();
         var mine = await collections.SetAsync(alice, page.Id,
             KeyOf(await Empty(page), "Tails"), collected: true);
 
-        Assert.Equal(AccessMode.Private, Assert.Single(mine.Columns).Access);
-        Assert.Empty((await collections.GetAsync(bob, page.Id)).Columns);
-
-        await access.SetAccessAsync(alice, mine.TallyId!.Value, AccessMode.Authenticated);
-
-        var shared = Assert.Single((await collections.GetAsync(bob, page.Id)).Columns);
-        Assert.Equal(alice, shared.OwnerId);
-        Assert.False(shared.IsViewer);
+        var hers = Assert.Single((await collections.GetAsync(bob, page.Id)).Columns);
+        Assert.Equal(alice, hers.OwnerId);
+        Assert.False(hers.IsViewer);
+        Assert.Equal(1, hers.Count);
+        // And nothing was published to do it: the page behind that column is still hers.
+        var tally = await harness.ReloadAsync(alice, mine.TallyId!.Value);
+        Assert.Equal(AccessMode.Private, tally.Access);
     }
 
-    /// <summary>A column in a grid is enumeration, and unlisted is exactly where the two
-    /// visibility questions differ: holding a tally's link must not put it in a column.</summary>
+    /// <summary>What a tally's own access still governs: the page. A column in the grid
+    /// is not a licence to open the file behind it, nor to find it in a tree or a
+    /// search.</summary>
     [Fact]
-    public async Task An_unlisted_tally_stays_out_of_the_grid()
+    public async Task A_column_in_the_grid_does_not_open_the_page_behind_it()
     {
         var page = await CatalogueAsync();
         var mine = await collections.SetAsync(alice, page.Id,
             KeyOf(await Empty(page), "Tails"), collected: true);
-        await access.SetAccessAsync(alice, mine.TallyId!.Value, AccessMode.Unlisted);
 
-        Assert.Empty((await collections.GetAsync(bob, page.Id)).Columns);
-        // Still Alice's own, and still reachable by anyone she hands the link to.
-        Assert.Single((await collections.GetAsync(alice, page.Id)).Columns);
-        Assert.NotNull(await harness.Nodes.GetVisibleAsync(bob, mine.TallyId.Value));
+        Assert.Single((await collections.GetAsync(bob, page.Id)).Columns);
+
+        await Assert.ThrowsAnyAsync<Exception>(
+            () => harness.Nodes.GetVisibleAsync(bob, mine.TallyId!.Value));
+        Assert.DoesNotContain(await harness.Nodes.GetTreeAsync(bob),
+            n => n.Id == mine.TallyId!.Value);
+    }
+
+    /// <summary>The gate is the catalogue and nothing else, so a list nobody may read has
+    /// no grid to leak — not even the columns on it.</summary>
+    [Fact]
+    public async Task A_list_the_reader_cannot_see_has_no_columns_to_show()
+    {
+        var page = await CatalogueAsync();
+        await collections.SetAsync(alice, page.Id, KeyOf(await Empty(page), "Tails"),
+            collected: true);
+        await access.SetAccessAsync(alice, page.Id, AccessMode.Private);
+
+        await Assert.ThrowsAsync<NotFoundException>(() => collections.GetAsync(bob, page.Id));
+        await Assert.ThrowsAsync<NotFoundException>(() => collections.GetAsync(null, page.Id));
+    }
+
+    /// <summary>An orphan is only actionable by whoever owns the file it is in, and the
+    /// list's readers were shown ticks rather than the state of somebody's page.</summary>
+    [Fact]
+    public async Task Orphaned_ticks_are_reported_to_their_owner_and_nobody_else()
+    {
+        var page = await CatalogueAsync();
+        await collections.SetAsync(alice, page.Id, KeyOf(await Empty(page), "Tails"),
+            collected: true);
+        await files.SaveTextAsync(alice, page.Id, Roster.Replace("- Tails", "- Tails the Fox"));
+
+        Assert.NotEmpty(Assert.Single((await collections.GetAsync(alice, page.Id)).Columns)
+            .Orphans);
+        Assert.Empty(Assert.Single((await collections.GetAsync(bob, page.Id)).Columns).Orphans);
     }
 
     [Fact]
     public async Task Signed_out_reads_a_public_list_and_writes_nothing()
     {
         var page = await CatalogueAsync(AccessMode.Public);
-        var mine = await collections.SetAsync(alice, page.Id,
+        await collections.SetAsync(alice, page.Id,
             KeyOf(await Empty(page), "Tails"), collected: true);
-        await access.SetAccessAsync(alice, mine.TallyId!.Value, AccessMode.Public);
 
         var view = await collections.GetAsync(null, page.Id);
 

@@ -38,7 +38,7 @@ completely different tempos, authors, and privacy needs:
 | --- | --- | --- |
 | What it says | what exists to collect | what *I* have |
 | Who writes it | one author, occasionally | each participant, constantly |
-| Who should see it | everybody it's shared with | its owner, plus whoever they choose |
+| Who should see it | everybody it's shared with | everybody the catalogue is shared with |
 | Edited how often | weekly | daily |
 
 One shared set of checkboxes cannot answer both. If Alice ticks "Sonic", has Bob got it?
@@ -46,8 +46,8 @@ The checkbox has nowhere to put the answer.
 
 Split them and both halves get easy. The catalogue is **a page** — and therefore already
 has versions, search, categories, backlinks, MCP tools, and a manual entry. The tally is
-**a page per person** — and therefore already has its own `AccessMode`, set by its owner
-and nobody else.
+**a page per person** — and therefore already has an owner, a history, and a place on
+disk, with the list it was made against deciding who reads it.
 
 Nothing here needs a new kind of thing. That is the test this design is trying to pass.
 
@@ -181,11 +181,31 @@ alice/Collections/Override sprites.md      ← Alice's tally, her node, her acce
 bob/Collections/Override sprites.md        ← Bob's, entirely separately
 ```
 
-It is a node like any other, and it carries its own `AccessMode` — which is the call made
-when this was proposed. Alice sets hers `Public` and her column shows to everyone; Bob
-leaves his `Private` and collects alone. Nobody's sharing gesture publishes anybody else's
-tally, which keeps "only an owner sets access" intact. Setting the *catalogue* public
-publishes the catalogue and nothing else.
+It is a node like any other, and it carries its own `AccessMode`.
+
+The first draft made that `AccessMode` decide the grid too — Alice shares her tally and her
+column appears, Bob leaves his private and collects alone — and that was wrong, in the way
+a rule can be locally correct and globally absurd. It made joining a shared list a
+two-gesture act: tick, then publish a second page, or your column counts for nobody. Nobody
+sharing a roster with their group means "and each of you must separately publish your
+answers before anyone can see them". It is permission overkill, and the cost of it lands on
+exactly the thing the feature is for.
+
+So: **the catalogue's audience is the grid's audience.** Whoever may read the list sees
+every column on it. Ticking is joining in, and that is the whole of joining in.
+
+That is not the same as publishing the tally, and the distinction is the point. Its
+`AccessMode` is untouched and still governs the *node* — whether it opens at its own URL,
+whether it appears in anybody's tree, whether search finds it — so a tally stays its
+owner's file, private like any other new node, while the ticks on it count in the list they
+were made against. What the grid discloses is exactly the rows somebody ticked and the name
+they tick under. Their notes, and the ticks the catalogue has since orphaned, stay theirs.
+
+Two consequences to state rather than discover. A **public** catalogue's grid is public,
+participants' display names included — which is what a public collectible list is, and why
+publishing one is a decision about other people as well as about the page. And there is no
+half-in: the way not to be in a grid is not to tick, or to delete the tally. A mode meaning
+"counted but hidden" would be a checkbox that lies in the other direction.
 
 **A tally is content, not ephemera.** It is tempting to add a `NodeTicks` table and be done
 in an afternoon, and that would be wrong: `ReadingPositions` earns its database-only
@@ -217,18 +237,26 @@ NodeService.GetBacklinksAsync(userId, catalogueId)   → the candidate tallies
 FileService … read the catalogue body                → the rows, in the author's order
 ```
 
-`GetBacklinksAsync` already filters through `INodeAuthorizer.VisibleTo`, so the visibility
-rule is spelled exactly once, where it always was. Parse each candidate for `- [x]` items,
-match them to rows by id or text, and that is the grid.
+Parse each candidate for `- [x]` items, match them to rows by id or text, and that is the
+grid.
 
-Note which door it is: a column in an aggregate is *enumeration*, so `VisibleTo`/`Listed`,
-never `CanSee`/`WithLink`. Unlisted is precisely the case where answering one with the other
-leaks — an unlisted tally must not appear in a column just because its id was reachable.
+**Where the authorization is** follows from the rule above, and it is worth being exact
+because this is the one place a reader might expect a `VisibleTo` and not find one. Reading
+the catalogue is the permission: `NodeService.GetWithBodyAsync` answers it, through
+`INodeAuthorizer`, before anything else happens — and a reader who got past it gets the
+whole grid. So the tally query asks no visibility question of its own. That is not a second
+door left unlocked; it is the same door, knocked on once. The seam rule survives intact
+precisely because the aggregate declines to re-spell the rule rather than spelling it a
+second way.
 
-One wrinkle worth writing down: `[[Wiki link]]` resolves by *title*, which is the
-enumeration question, so a tally cannot name an unlisted catalogue that way. Naming it with
-a `node://` mention instead works, because an id is permission. Unlisted catalogues are
-therefore fine; they just want the other spelling.
+One wrinkle worth writing down, and the change above moves it somewhere better.
+`[[Wiki link]]` resolves by *title*, which is the enumeration question — so a tally spelled
+that way finds its catalogue only if its **author** could enumerate it when they saved, and
+an unlisted catalogue cannot be named that way. That is now a fact about writing the link,
+not about who is reading the grid: matching a fence's title against the catalogue's own is
+what the aggregate does, so the answer no longer depends on the reader. Naming the
+catalogue with a `node://` mention works regardless, because an id is permission, which is
+why a tally written by ticking uses that spelling.
 
 ### A fence declares the list
 
@@ -376,7 +404,7 @@ No new relation, no new table, no new visibility rule, no new sidecar. One new c
 ## Signed out: read-only, or counted — not the thing in between
 
 An earlier draft had a third answer, and it was wrong. Signed-out visitors were to tick
-freely into their own browser's `localStorage`, seeing everyone's shared columns while
+freely into their own browser's `localStorage`, seeing everyone else's columns while
 contributing to none of them — the same mechanism that already keeps an anonymous reader's
 place in a book.
 
@@ -391,7 +419,7 @@ So it is one or the other.
 
 ### Read-only (recommended for v1)
 
-A signed-out visitor sees the list and every shared column, and has no checkbox at all. In
+A signed-out visitor sees the list and every column on it, and has no checkbox at all. In
 place of one, a plain invitation to sign in, and — where the owner has allowed it — to
 start a guest tally.
 
@@ -499,9 +527,10 @@ docs with "two people" as their justification, and that premise has changed:
 
 Settled since the first draft: items are text with optional node links rather than mandatory
 pages; variants are nested items rather than a set declared once; the catalogue is a page
-rather than a category; a tally is declared by the fence rather than inferred; and an
+rather than a category; a tally is declared by the fence rather than inferred; an
 "everyone who can sign in" reach exists now, so a group-shared list no longer has to choose
-between twenty grants and the open internet.
+between twenty grants and the open internet; and the grid follows the catalogue's audience
+rather than each tally's, so ticking is one gesture and not two.
 
 ## Sources for the worked example
 

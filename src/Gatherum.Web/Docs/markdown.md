@@ -290,9 +290,9 @@ nested one level for variants, task marks for ticks, mentions and wiki links.
   different statement from the three ticks it would stand in for.
 - **A trailing `—` makes the rest a note**: `- [x] Sonic — Gold, Sprite Day 2`. `--`
   works too, for a keyboard without an em dash.
-- **A tally naming its catalogue with `[[Title]]` resolves by title**, which is a
-  search — so it cannot reach an **unlisted** catalogue. A `node://` mention can,
-  because an id is permission and a title is a search.
+- **A tally naming its catalogue with `[[Title]]` resolves by title when it is saved**,
+  and a title is a search — so that spelling cannot find an **unlisted** catalogue. A
+  `node://` mention can, because an id is permission and a title is a search.
 - Where a page declares more than one list, a tally says which after the link:
   `:::collection [[Season 4]] Sprites`.
 - Ordinary checklists elsewhere are untouched. `- [ ]` outside a collection still means

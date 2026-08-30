@@ -78,9 +78,10 @@ report may be made of.
 
 `mark_collected` writes the caller's own tally, creating it under `Collections/` the
 first time and never touching anybody else's — a tally is a node, and a node is written
-by its owner. A new tally is private like every other new node, so its column shows to
-nobody until its owner shares it. Columns are the tallies the caller may *enumerate*, so
-an unlisted tally never appears in one, whoever holds its link.
+by its owner. Ticking is joining in: whoever may read the list sees every column on it,
+including the caller's, and no separate sharing gesture is needed. What a tally's own
+access still governs is its *page* — a column in the grid is not a licence to open the
+file behind it, nor to find it in a tree or a search.
 
 ### Bookmarks
 

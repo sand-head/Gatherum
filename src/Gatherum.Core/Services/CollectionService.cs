@@ -11,19 +11,27 @@ namespace Gatherum.Core.Services;
 ///
 /// The two are separate documents on purpose. The catalogue is a page with a
 /// <c>:::collection</c> fence on it — one author, occasionally edited, shared once. A
-/// tally is a page per person with a fence tracking that catalogue — its owner's file,
-/// under its owner's root, carrying its owner's <see cref="AccessMode"/>. So nobody's
-/// sharing gesture publishes anybody else's ticks, and the aggregate is nothing more
-/// than "the tallies this reader may enumerate", which
-/// <see cref="INodeAuthorizer.VisibleTo"/> already answers.
+/// tally is a page per person with a fence tracking that catalogue: its owner's file,
+/// under its owner's root, written by nobody else.
 ///
-/// A column in a grid is enumeration, so it is <c>VisibleTo</c> throughout and never
-/// <c>CanSee</c>: an unlisted tally must not appear in a column merely because somebody
-/// holds its link.
+/// <b>The catalogue's audience is the grid's audience.</b> Whoever may read the list may
+/// see everyone's ticks against it — ticking is joining in, and a shared list whose
+/// participants each had to publish a second page before their column counted would be
+/// asking for a permission nobody meant to withhold. So authorization happens once, at
+/// the door this service already knocks on: <see cref="ResolveAsync"/> reads the
+/// catalogue through <see cref="NodeService.GetWithBodyAsync"/>, which is
+/// <see cref="INodeAuthorizer"/>'s answer, and a reader who got past it gets the whole
+/// grid. Nothing here re-asks a visibility question, and nothing here spells one.
+///
+/// What that does <em>not</em> do is publish the tally page. Its own
+/// <see cref="AccessMode"/> is untouched and still governs the node — whether it opens
+/// at its own URL, whether it is in anybody's tree, whether search finds it — so a tally
+/// stays private as a page while the ticks on it count in the list they were made
+/// against. The exposure is exactly the row keys somebody ticked and the name they tick
+/// under; the notes and orphans in their file are their own.
 /// </summary>
 public class CollectionService(
     GatherumDbContext db,
-    INodeAuthorizer authorizer,
     NodeService nodes,
     FileService files)
 {
@@ -43,12 +51,14 @@ public class CollectionService(
         var leaves = rows.SelectMany(Leaves).Select(r => r.Key).ToHashSet(StringComparer.Ordinal);
 
         var columns = new List<CollectionColumn>();
-        foreach (var tally in await TalliesAsync(userId, catalogue.Id, declared, ct))
+        foreach (var tally in await TalliesAsync(catalogue, declared, ct))
         {
             var read = Reconcile(declared.Items, tally.Tracking.Items, parent: null);
+            var isViewer = userId is { } viewer && tally.OwnerId == viewer;
+            // Orphans are their owner's business — only they can act on one, and the
+            // catalogue's readers were shown ticks, not the state of somebody's file.
             columns.Add(new CollectionColumn(tally.Id, tally.OwnerId, tally.DisplayName,
-                userId is { } viewer && tally.OwnerId == viewer,
-                tally.Access, read.Held, Orphans(read.Orphans, ""),
+                isViewer, read.Held, isViewer ? Orphans(read.Orphans, "") : [],
                 read.Held.Count(leaves.Contains)));
         }
         // The reader's own column first, then the fullest, then by name: a grid is read
@@ -75,7 +85,7 @@ public class CollectionService(
         if (!rows.SelectMany(Leaves).Any(r => r.Key == rowKey))
             throw new NotFoundException($"Nothing in this list is keyed '{rowKey}'.");
 
-        var mine = (await TalliesAsync(userId, catalogue.Id, declared, ct))
+        var mine = (await TalliesAsync(catalogue, declared, ct))
             .FirstOrDefault(t => t.OwnerId == userId);
         // A tally names its catalogue by id, not by title: an id is permission, so the
         // spelling that works for an unlisted catalogue is the one written by default.
@@ -141,62 +151,55 @@ public class CollectionService(
         return (catalogue, declared);
     }
 
-    /// <summary>Every tally of this catalogue the reader may enumerate, each with the
-    /// fence that does the tracking. A tally is found by the link its fence already
-    /// made — naming a node is what put the row in <c>NodeLinks</c> — and confirmed by
-    /// reading the fence, so a page that merely mentions the catalogue is not somebody's
-    /// column.</summary>
-    private async Task<List<Tally>> TalliesAsync(Guid? userId,
-        Guid catalogueId, CollectionBlock declared, CancellationToken ct)
+    /// <summary>Every tally of this catalogue — all of them, because the reader already
+    /// proved they may read the list and that is the only question there is here. A tally
+    /// is found by the link its fence already made, since naming a node is what put the
+    /// row in <c>NodeLinks</c>, and confirmed by reading the fence, so a page that merely
+    /// mentions the catalogue is not somebody's column.</summary>
+    private async Task<List<Tally>> TalliesAsync(Node catalogue, CollectionBlock declared,
+        CancellationToken ct)
     {
         // The head version's text and nothing else: a tally is rewritten on every tick, so
         // materializing its whole history to read one body would make the commonest page
         // view in this feature the most expensive one.
-        var candidates = await authorizer.VisibleTo(db.Nodes, userId)
-            .Where(n => n.MediaType == MediaTypes.Markdown && n.Id != catalogueId
+        var candidates = await db.Nodes
+            .Where(n => n.MediaType == MediaTypes.Markdown && n.Id != catalogue.Id
                 && n.File!.Versions.Any()
-                && n.OutboundLinks.Any(l => l.TargetId == catalogueId))
+                && n.OutboundLinks.Any(l => l.TargetId == catalogue.Id))
             .Select(n => new
             {
                 n.Id,
                 n.OwnerId,
-                n.Access,
                 Owner = n.Owner!.DisplayName.Length > 0 ? n.Owner.DisplayName : n.Owner.Username,
                 Body = n.File!.Versions.OrderByDescending(v => v.Number).First().ExtractedText,
             })
             .ToListAsync(ct);
-
-        var byTitle = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
-        var titles = candidates
-            .SelectMany(n => CollectionSyntax.Read(n.Body))
-            .Select(b => b.Tracks?.Title)
-            .Where(t => t is { Length: > 0 })
-            .Select(t => t!)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        if (titles.Count > 0)
-            byTitle = new Dictionary<string, Guid>(
-                await nodes.ResolveTitlesAsync(userId, titles, ct), StringComparer.OrdinalIgnoreCase);
 
         var tallies = new List<Tally>();
         foreach (var node in candidates)
         {
             foreach (var block in CollectionSyntax.Read(node.Body))
             {
-                if (block.Tracks is not { } target)
+                if (block.Tracks is not { } target || !Names(target, catalogue)
+                    || !SameList(target.List, declared.Argument))
                     continue;
-                var named = target.NodeId
-                    ?? (target.Title is { Length: > 0 } title && byTitle.TryGetValue(title, out var id)
-                        ? id
-                        : null);
-                if (named != catalogueId || !SameList(target.List, declared.Argument))
-                    continue;
-                tallies.Add(new Tally(node.Id, node.OwnerId, node.Owner, node.Access, node.Body,
-                    block));
+                tallies.Add(new Tally(node.Id, node.OwnerId, node.Owner, node.Body, block));
                 break;
             }
         }
         return tallies;
     }
+
+    /// <summary>Whether a tracking fence names this catalogue. An id says so outright; a
+    /// title is checked against the catalogue's own rather than resolved, because the
+    /// resolution that matters already happened — the page is a backlink at all only
+    /// because its author's <c>[[title]]</c> found this node when they saved. Asking again
+    /// here would answer with the <em>reader's</em> search instead of the writer's, which
+    /// is a different question and the wrong one.</summary>
+    private static bool Names(CollectionTarget target, Node catalogue) =>
+        target.NodeId is { } id
+            ? id == catalogue.Id
+            : string.Equals(target.Title, catalogue.Title, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>A tally that names no list follows the catalogue's first, which is the
     /// only one most pages have.</summary>
@@ -321,8 +324,8 @@ public class CollectionService(
 
     /// <summary>One person's column: their page as the grid needs it, and the fence on
     /// it that does the tracking.</summary>
-    private sealed record Tally(Guid Id, Guid OwnerId, string DisplayName, AccessMode Access,
-        string Body, CollectionBlock Tracking);
+    private sealed record Tally(Guid Id, Guid OwnerId, string DisplayName, string Body,
+        CollectionBlock Tracking);
 
     /// <summary>What one tally says once it has been read against the catalogue.</summary>
     private sealed record TallyReading(HashSet<string> Held, List<CollectionEntry> Orphans,
@@ -354,15 +357,15 @@ public sealed record CollectionView(
 public sealed record CollectionRow(string Key, string Text, Guid? NodeId, string Note,
     IReadOnlyList<CollectionRow> Variants);
 
-/// <summary>One participant's column: their tally, what it holds, what it holds that the
-/// catalogue no longer has, and who may see it — because a tally is private until its
-/// owner says otherwise, and a column nobody else can read should say so.</summary>
+/// <summary>One participant's column: their tally, and what it holds. <c>Orphans</c> —
+/// ticks the catalogue no longer has an item for — is filled in for the reader's own
+/// column and empty for everybody else's, because only its owner can do anything about
+/// one.</summary>
 public sealed record CollectionColumn(
     Guid TallyId,
     Guid OwnerId,
     string DisplayName,
     bool IsViewer,
-    AccessMode Access,
     IReadOnlySet<string> Held,
     IReadOnlyList<CollectionOrphan> Orphans,
     int Count);

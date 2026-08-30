@@ -124,14 +124,19 @@
         }
         else if (Mine is null)
         {
-            <p class="collection-note">Tick anything to start your own list.</p>
-        }
-        else if (Mine.Access == "Private")
-        {
             <p class="collection-note">
-                Only you can see your column.
-                <a href="/nodes/@Mine.TallyId">Share your list</a> to put it in front of
-                everyone else's.
+                Tick anything to start your own list. Your ticks show to everyone who can
+                read this one.
+            </p>
+        }
+        else
+        {
+            @* No sharing gesture to prompt for: the catalogue's audience is the grid's,
+               so joining in is the whole of joining in. What the tally page itself is
+               shared with is a separate question and still its owner's alone. *@
+            <p class="collection-note">
+                Your ticks show to everyone who can read this list.
+                <a href="/nodes/@Mine.TallyId">Your list</a> is a page of your own.
             </p>
         }
 

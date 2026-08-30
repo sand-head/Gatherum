@@ -45,8 +45,8 @@ auto-login. Migrations: `dotnet ef migrations add <Name> -p src/Gatherum.Infrast
   `CategoryIndex` the one-snapshot-per-operation view of its graph,
   `FileService` = bodies/versions/text editing, `BookmarkService` = a URL captured as
   a file node and captured again on demand, `CollectionService` = a collectible list's
-  catalogue fused with every tally of it the reader may enumerate, and the one write,
-  which is always the caller's own tally), `Markdown/MarkdownContent`,
+  catalogue fused with every tally of it, and the one write, which is always the
+  caller's own tally), `Markdown/MarkdownContent`,
   `Markdown/WikiLinkSyntax` and `Markdown/CollectionSyntax` (the conventions a body
   carries, read server-side without an editor), the seam
   interfaces in `Abstractions/`, `Services/MediaAnalysisQueue` — the hand-off from
@@ -125,11 +125,14 @@ fresh DI scope via `Services/AppOperations`.
   bytes it was read from.
 - A collection list is two documents. The catalogue is a page with a `:::collection`
   fence; a tally is a page per person whose fence names that catalogue, under its owner's
-  root, carrying its owner's `AccessMode`. Nobody writes anybody else's tally, and the
-  aggregate is `VisibleTo` — enumeration, never `CanSee` — so an unlisted tally is not a
-  column. Ticks are content, so they are a file: no `NodeTicks` table, ever. Ordinary
-  `- [ ]` outside a fence still means shared state, and reinterpreting it would break the
-  commoner kind of checklist silently. See COLLECTIONS.md.
+  root, and nobody writes anybody else's. **The catalogue's audience is the grid's
+  audience**: whoever may read the list sees every column on it, so the whole
+  authorization is the one `GetWithBodyAsync` on the catalogue already does — the
+  aggregate re-asks nothing and spells nothing. A tally's own `AccessMode` still governs
+  its *page* (its URL, the tree, search), which is why ticking never publishes one. Ticks
+  are content, so they are a file: no `NodeTicks` table, ever. Ordinary `- [ ]` outside a
+  fence still means shared state, and reinterpreting it would break the commoner kind of
+  checklist silently. See COLLECTIONS.md.
 - One tree for placement, one graph for subject, and nothing else names a subject. A node
   has one place in the node tree. A category is a *page* — a node with `IsCategory` set —
   and `NodeCategory` is the taxonomy's only relation: an edge to a category is a

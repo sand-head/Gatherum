@@ -68,14 +68,16 @@ browser sessions — including against the built container).
   round-trip tests).
 - **Collectible lists** — a `:::collection` fence makes a list something a group works
   rather than reads. The page declares the catalogue; each participant's ticks live in a
-  page of their own under their own root, carrying their own `AccessMode`, so nobody's
-  sharing gesture publishes anybody else's answers and the grid's columns are exactly the
-  tallies a reader may enumerate (an unlisted tally is not one, whoever holds its link).
+  page of their own under their own root, written by nobody else. The catalogue's audience
+  is the grid's audience — whoever may read the list sees every column on it, so ticking
+  is joining in and there is no second gesture to publish your own answers — while a
+  tally's own access still governs its *page*, so a column in the grid is not a licence to
+  open the file behind it, find it in a tree, or search it up.
   Items are lines of text; linking a page for one is optional and makes it rename-proof,
   and promotion is lossless, so ticks made before it keep counting. Variants nest one
   level and are optional per item, because rosters are ragged — which also makes every
   count a count of collectibles rather than of lines. A rename orphans the ticks it
-  stranded: they stay in the file and the grid says so. Read view only, through slopedit
+  stranded: they stay in the file and the grid tells their owner so. Read view only, through slopedit
   2.7.0's widget blocks — the canvas keeps the source, so a tick is never an edit — and
   signed out reads rather than ticking. Over REST and MCP too (`collection_status`,
   `mark_collected`). See COLLECTIONS.md.
@@ -201,9 +203,10 @@ browser sessions — including against the built container).
   keys, storage/extraction, the taxonomy (nesting, counts, privacy, rename/move/delete,
   path spelling), collectible lists (the construct alone — declaration against tracking,
   ragged variants, notes, orphans, round trips; then the aggregate against real Postgres —
-  a tally per person, a private one nobody else sees, an unlisted one that is reachable
-  but never a column, a promotion whose ticks keep counting, a rename whose orphans are
-  reported and kept, and the parent row that refuses to be ticked), the widget seam the
+  a tally per person, a private tally that is still a column while its page stays shut to
+  everyone else, a list nobody may read that has no grid to leak, a promotion whose ticks
+  keep counting, a rename whose orphans are kept and reported only to their owner, and the
+  parent row that refuses to be ticked), the widget seam the
   read view claims a collection through (the hole, and the whole-body writer that ignores
   it so a static export still holds the catalogue), and integration tests booting the app
   on Testcontainers Postgres

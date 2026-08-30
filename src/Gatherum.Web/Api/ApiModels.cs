@@ -224,15 +224,15 @@ public record CollectionRowDto(string Key, string Text, Guid? NodeId, string Not
         row.Note, [.. row.Variants.Select(From)]);
 }
 
-/// <summary>One participant's column: their tally node, the row keys it holds, the ticks
-/// on it that no longer match an item, and who may see it — a tally is private until its
-/// owner says otherwise, and a column nobody else can read should say so.</summary>
+/// <summary>One participant's column: their tally node, and the row keys it holds.
+/// Whoever may read the list sees every column on it. <c>Orphans</c> — ticks the
+/// catalogue no longer has an item for — comes back for the caller's own column and
+/// empty for everybody else's.</summary>
 public record CollectionColumnDto(Guid TallyId, Guid OwnerId, string DisplayName, bool IsViewer,
-    string Access, IReadOnlyList<string> Held, IReadOnlyList<CollectionOrphanDto> Orphans,
-    int Count)
+    IReadOnlyList<string> Held, IReadOnlyList<CollectionOrphanDto> Orphans, int Count)
 {
     public static CollectionColumnDto From(CollectionColumn column) => new(column.TallyId,
-        column.OwnerId, column.DisplayName, column.IsViewer, column.Access.ToString(),
+        column.OwnerId, column.DisplayName, column.IsViewer,
         [.. column.Held], [.. column.Orphans.Select(o => new CollectionOrphanDto(o.Text, o.Note))],
         column.Count);
 }

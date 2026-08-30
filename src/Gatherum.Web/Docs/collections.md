@@ -13,7 +13,7 @@ different tempos, authors, and privacy needs.
 | --- | --- | --- |
 | What it says | what exists to collect | what *I* have |
 | Who writes it | one author, occasionally | each participant, constantly |
-| Who should see it | everybody it is shared with | its owner, plus whoever they choose |
+| Who should see it | everybody it is shared with | everybody the catalogue is shared with |
 
 One shared set of checkboxes cannot answer both: if you tick "Sonic", has anyone else got
 it? The checkbox has nowhere to put the answer.
@@ -85,13 +85,21 @@ it in a backup:
 
 ## Who sees whose column
 
-A tally carries its own sharing, set by its owner and nobody else — so a new tally is
-**private**, and its column shows to nobody until its owner says otherwise. Sharing the
-catalogue publishes the catalogue and nothing else.
+**The list's audience is the grid's audience.** Whoever may read the catalogue sees every
+column on it — so ticking is joining in, and there is nothing to share to make your
+column count. Share the catalogue with your group and their ticks appear in it; publish
+it and a public list is public, names and all.
 
-The columns in a grid are the tallies you may *enumerate*. That is the listing question,
-not the reaching one, so an **unlisted** tally never appears in a column, whoever holds
-its link. See [sharing](/docs/sharing) for what the modes mean.
+That is deliberately not the same as publishing your tally. Its own sharing is untouched
+and still governs the **page**: whether it opens at its own URL, whether it shows in
+anybody's tree, whether search finds it. So a tally stays yours as a file — private
+unless you say otherwise, like any other new node — while the ticks on it count in the
+list they were made against. What the grid shows of somebody else is exactly the rows
+they ticked and the name they tick under; the notes in their file, and any ticks of
+theirs the catalogue has since orphaned, are their own business.
+
+If you do not want your answers seen by the list's readers, do not tick — or delete your
+tally. There is no half-in.
 
 A signed-out visitor to a public list reads it and has no checkbox at all. In a grid
 where every other column is a real person's real ticks, a control that recorded nothing
@@ -120,10 +128,10 @@ tally says which after the link:
 
 The name is what identifies the list, so renaming the page it lives on orphans nothing.
 
-A tally naming its catalogue with `[[Title]]` resolves by title, which is a search — so
-that spelling cannot reach an **unlisted** catalogue. A `node://` mention can, because an
-id is permission and a title is a search. Ticking writes the mention spelling for that
-reason.
+A tally naming its catalogue with `[[Title]]` resolves by title when you save the page,
+and a title is a search — so that spelling cannot find an **unlisted** catalogue, and a
+tally written that way would track nothing. A `node://` mention can, because an id is
+permission and a title is a search. Ticking writes the mention spelling for that reason.
 
 ## Ordinary checklists are untouched
 
@@ -138,7 +146,7 @@ Two MCP tools, and the same over REST:
 
 | | |
 | --- | --- |
-| `collection_status` | the list's rows, and every visible tally's ticks |
+| `collection_status` | the list's rows, and every tally's ticks against them |
 | `mark_collected` | record or take back one collectible on your own tally |
 | `GET /api/nodes/{id}/collection` | the same, unauthenticated for a public list |
 | `POST /api/nodes/{id}/collection` | `{ key, collected, list? }` |

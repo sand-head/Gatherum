@@ -27,10 +27,11 @@ page-turner.
 - **Collectible lists**: a `:::collection` fence turns a list into something a group
   works rather than reads — the page declares what exists to collect, each participant
   keeps their own tally as a page of their own, and the reading view draws the grid of
-  who has what. Ticks belong to their owner: a tally is that person's file under that
-  person's root, carrying that person's sharing, so nobody's gesture publishes anybody
-  else's answers. A page per collectible is optional and worth it for the few worth
-  writing about, ragged rosters are expressible (variants nest, per item), and a signed-out
+  who has what. Share the list and ticking it is joining in: whoever can read the list
+  sees every column on it, with no second gesture to publish your own answers — while the
+  tally itself stays its owner's file, so a column is not a licence to open the page
+  behind it. A page per collectible is optional and worth it for the few worth writing
+  about, ragged rosters are expressible (variants nest, per item), and a signed-out
   visitor to a public list reads it rather than being handed a checkbox that records
   nothing. Ordinary `- [ ]` checklists are untouched — they still mean *it is done*.
 - **Files**: drag-drop or picker upload anywhere in the tree, content-addressed
