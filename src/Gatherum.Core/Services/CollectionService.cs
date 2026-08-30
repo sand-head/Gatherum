@@ -69,8 +69,9 @@ public class CollectionService(
                 ? b.Count - a.Count
                 : string.Compare(a.DisplayName, b.DisplayName, StringComparison.OrdinalIgnoreCase));
 
-        return new CollectionView(catalogue.Id, catalogue.Title, declared.Argument, rows,
-            columns, columns.FirstOrDefault(c => c.IsViewer)?.TallyId, userId is not null,
+        return new CollectionView(catalogue.Id, catalogue.Title, declared.Word,
+            declared.Argument, rows, columns,
+            columns.FirstOrDefault(c => c.IsViewer)?.TallyId, userId is not null,
             leaves.Count);
     }
 
@@ -105,7 +106,9 @@ public class CollectionService(
         else
             read.Held.Remove(rowKey);
 
-        var fence = CollectionSyntax.Write(argument,
+        // The tally opens with the catalogue's own word, so a list of nights reads as
+        // nights on both pages rather than as a collection of them.
+        var fence = CollectionSyntax.Write(mine?.Tracking.Word ?? declared.Word, argument,
             [.. Mirror(declared.Items, parent: null, read.Held, read.Notes), .. read.Orphans],
             ticked: true);
 
@@ -346,6 +349,10 @@ public class CollectionService(
 public sealed record CollectionView(
     Guid CatalogueId,
     string CatalogueTitle,
+    /// <summary>The word the catalogue's fence opened with — which question this list
+    /// asks, and so which words a reading view puts around it. The catalogue's, never the
+    /// tally's: a grid read from either page says the same thing.</summary>
+    string Kind,
     string List,
     IReadOnlyList<CollectionRow> Rows,
     IReadOnlyList<CollectionColumn> Columns,

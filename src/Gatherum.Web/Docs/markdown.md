@@ -249,13 +249,13 @@ Each renders as a tinted card in its kind's accent, with the title line inked to
 - **An unknown kind stays a plain quote.** `> [!nope] …` is a block quote that happens
   to start with a bracket, which is exactly what it looks like.
 
-## Collectible lists — `:::collection`
+## Shared lists — `:::collection`, `:::availability`
 
-A shared list people tick against, each keeping their own answer. Everything about it
-is in [collections](/docs/collections); the syntax is one fence with two spellings.
+A list people tick against, each keeping their own answer. Everything about it is in
+[shared lists](/docs/collections); the syntax is one fence with two spellings.
 
-A fence whose argument is a **name** declares the list — the catalogue, what exists to
-collect:
+A fence whose argument is a **name** declares the list — the catalogue, the rows
+everyone answers:
 
 ```markdown
 :::collection Override sprites
@@ -280,6 +280,26 @@ page a tally — one person's record of what they have:
 
 Inside the fence everything is vocabulary from further up this page: bulleted items,
 nested one level for variants, task marks for ticks, mentions and wiki links.
+
+**The word the fence opens with says what a tick means**, and nothing else. `collection`
+asks who *has* each row; `availability` asks who *can make* it. Same grid, same rules,
+different nouns:
+
+```markdown
+:::availability Game nights
+- Fri 3 Oct
+- Fri 10 Oct
+- Fri 17 Oct
+:::
+```
+
+```markdown
+:::availability [[Game nights]]
+- [x] Fri 3 Oct
+- [ ] Fri 10 Oct
+- [x] Fri 17 Oct
+:::
+```
 
 - **An item is a line of text, and a page for it is optional.** A plain item is matched
   by its text; one that links a node is matched by that id, and so survives a rename.
@@ -430,13 +450,17 @@ systemctl --user start gatherum
 > [!NOTE] Optional title              a callout: note, tip, important, warning, caution
 > The body.
 
-:::collection Override sprites        a collectible list: the catalogue
+:::collection Override sprites        a shared list: the catalogue everyone answers
 - Sonic
   - Gold                              a variant, nested one level
 :::
 
 :::collection [[Override sprites]]    a tally: one person's ticks against that catalogue
 - [x] Sonic — a note after the dash
+:::
+
+:::availability Game nights           the same grid, asking who can make each row
+- Fri 3 Oct
 :::
 
 x^2^  H~2~O                           superscript, subscript

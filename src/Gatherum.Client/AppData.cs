@@ -149,9 +149,10 @@ public record CategoryInfo(Guid Id, string Name, IReadOnlyList<Guid> ParentIds, 
     int SubtreeMembers);
 public record RelatedInfo(Guid Id, string Kind, string Title);
 
-/// <summary>A collectible list: the catalogue's rows in the author's order, one column
-/// per tally this reader may enumerate, and which of them is theirs.</summary>
-public record CollectionInfo(Guid CatalogueId, string CatalogueTitle, string List,
+/// <summary>A shared list: the catalogue's rows in the author's order, one column per
+/// participant, and which of them is theirs. <c>Kind</c> is the word its fence opened
+/// with — which question this list asks, and so what the chrome around it says.</summary>
+public record CollectionInfo(Guid CatalogueId, string CatalogueTitle, string Kind, string List,
     IReadOnlyList<CollectionRowInfo> Rows, IReadOnlyList<CollectionColumnInfo> Columns,
     Guid? TallyId, bool CanTick, int Collectibles);
 

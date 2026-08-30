@@ -19,6 +19,8 @@ public static class BlockTags
     public const string Infobox = "infobox";
     public const string Figure = "figure";
     public const string Callout = "callout";
+    /// <summary>The word a shared list opens with when nothing says otherwise; the rest
+    /// are <see cref="ListVocabulary.All"/>'s keys.</summary>
     public const string Collection = "collection";
 
     private static int instances;
@@ -50,8 +52,10 @@ public static class BlockTags
     public static bool IsCallout(string? tag) => KindOf(tag) == Callout;
 
     /// <summary>Whether the tag belongs to <see cref="CollectionExtension"/> — the one
-    /// construct the reading view renders as a component rather than as prose.</summary>
-    public static bool IsCollection(string? tag) => KindOf(tag) == Collection;
+    /// construct the reading view renders as a component rather than as prose. Several
+    /// words open one; they differ only in what the reading view calls things.</summary>
+    public static bool IsCollection(string? tag) =>
+        KindOf(tag) is { } kind && ListVocabulary.All.ContainsKey(kind);
 
     /// <summary>What a collection fence named, from the tag its blocks wear: a list, a
     /// <c>[[title]]</c> or a mention, spelled the way the source spelled it.</summary>

@@ -1,4 +1,4 @@
-# Collaborative collectible lists
+# Collaborative shared lists
 
 **Status: built.** This was written as a proposal and accepted; it is now the design
 behind the feature, the way `FILESYSTEM.md` sits behind storage, and `DECISIONS.md` carries
@@ -9,6 +9,17 @@ Everything below is built except the guest tallies of *Counted anonymously*, whi
 designed and unbuilt on purpose — signed out is read-only, per that section's own argument.
 Where the text still reads as a proposal ("would touch", "open questions"), read it as the
 record of how the decision was reached.
+
+**One thing generalized after it shipped, and it is worth stating up front because the
+rest of this document is written in the narrower vocabulary.** Nothing under the fence
+ever knew what a row *meant*: the whole mechanism is a row per thing, a column per
+person, and a mark where that person says yes. "Who has which sprite" and "who can make
+which night" are that same question asked of different nouns. So the construct is one
+mechanism with a small vocabulary of words for it — `:::collection`, `:::availability` —
+exactly the shape `CalloutExtension` has, where five spellings share one implementation.
+The word decides what a tick means and the words the reading view puts around the grid;
+it decides nothing else, and a new question costs a row in `CollectionSyntax.Kinds` and
+a row in `ListVocabulary`. Read "collectible" below as "row" and every argument holds.
 
 ## First, a correction to the premise
 

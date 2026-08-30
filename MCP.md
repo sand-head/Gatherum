@@ -63,9 +63,10 @@ phrase you are quoting. `mode=semantic` asks for meaning alone. If embeddings ar
 off, or the owner has pointed Gatherum at an endpoint that is unreachable, every mode
 still answers from full-text search: a search never fails because a model is down.
 
-### Collectible lists
+### Shared lists
 
-A `:::collection` fence on a page declares a **catalogue** — what exists to collect. A
+A `:::collection` fence on a page declares a **catalogue** — the rows everyone answers.
+A
 fence naming another node *tracks* it, which makes that page a **tally**: one person's
 record of what they have. `collection_status` fuses them, and answers the same grid
 whether it is asked of the catalogue or of any tally that tracks it.

@@ -1,7 +1,8 @@
 # Status
 
-As of collectible lists — a `:::collection` fence makes a shared list something a group
-works rather than reads, with each person's ticks a page of their own. Before that:
+As of shared lists — a `:::collection` fence makes a list something a group works rather
+than reads, with each person's ticks a page of their own, and the same grid answers who
+can make which night as readily as who has which sprite. Before that:
 search runs a full-text half and a meaning half and fuses their rankings, with the
 embedding model that powers the second half shipping in the box, and the taxonomy (which
 replaced tags) files a page under a subject rather than labelling it with one. Everything listed as working has
@@ -66,7 +67,7 @@ browser sessions — including against the built container).
   is plain Markdown in the file: opening a page and saving it back changes nothing but
   the edits (verified in-browser against the running app, light and dark, and by
   round-trip tests).
-- **Collectible lists** — a `:::collection` fence makes a list something a group works
+- **Shared lists** — a `:::collection` fence makes a list something a group works
   rather than reads. The page declares the catalogue; each participant's ticks live in a
   page of their own under their own root, written by nobody else. The catalogue's audience
   is the grid's audience — whoever may read the list sees every column on it, so ticking
@@ -79,7 +80,10 @@ browser sessions — including against the built container).
   count a count of collectibles rather than of lines. A rename orphans the ticks it
   stranded: they stay in the file and the grid tells their owner so. Read view only, through slopedit
   2.7.0's widget blocks — the canvas keeps the source, so a tick is never an edit — and
-  signed out reads rather than ticking. Over REST and MCP too (`collection_status`,
+  signed out reads rather than ticking. One mechanism, several words for it: the fence's
+  word says what a tick means and decides nothing else, so `:::availability` is who can
+  make which night on the same grid that answers who has which sprite. Over REST and MCP
+  too (`collection_status`,
   `mark_collected`). See COLLECTIONS.md.
 - **Awareness** — heartbeat presence ("Sam is editing", verified cross-user) and a
   newer-version warning in the editor (verified: fires when another user saves the

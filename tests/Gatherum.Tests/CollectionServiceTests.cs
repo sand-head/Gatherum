@@ -402,5 +402,36 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
         await Assert.ThrowsAsync<NotFoundException>(() => collections.GetAsync(null, page.Id));
     }
 
+    /// <summary>The mechanism knows nothing about collectibles: "who has which sprite"
+    /// and "who can make which night" are the same grid asked of different nouns, and the
+    /// fence's word is carried through so the reading view can say which.</summary>
+    [Fact]
+    public async Task The_same_grid_answers_a_different_question()
+    {
+        var page = await files.CreateTextNodeAsync(alice, null, "Game nights", """
+            :::availability Game nights
+            - Fri 3 Oct
+            - Fri 10 Oct
+            - Fri 17 Oct
+            :::
+            """);
+        await access.SetAccessAsync(alice, page.Id, AccessMode.Authenticated);
+
+        var view = await collections.GetAsync(alice, page.Id);
+        Assert.Equal("availability", view.Kind);
+        Assert.Equal(3, view.Collectibles);
+
+        await collections.SetAsync(alice, page.Id, KeyOf(view, "Fri 3 Oct"), collected: true);
+        await collections.SetAsync(bob, page.Id, KeyOf(view, "Fri 3 Oct"), collected: true);
+        await collections.SetAsync(bob, page.Id, KeyOf(view, "Fri 17 Oct"), collected: true);
+
+        var everyone = await collections.GetAsync(bob, page.Id);
+        Assert.Equal(2, everyone.Columns.Count);
+        Assert.Equal([2, 1], everyone.Columns.Select(c => c.Count));
+        // And the tally it wrote opens with the catalogue's word, not the default one.
+        var tally = await files.GetTextAsync(bob, everyone.TallyId!.Value);
+        Assert.StartsWith(":::availability ", tally, StringComparison.Ordinal);
+    }
+
     private Task<CollectionView> Empty(Node page) => collections.GetAsync(alice, page.Id);
 }

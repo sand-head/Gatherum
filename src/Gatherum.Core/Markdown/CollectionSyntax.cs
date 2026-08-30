@@ -10,15 +10,35 @@ namespace Gatherum.Core.Markdown;
 /// loading an editor. The client's <c>CollectionExtension</c> is the other half, and the
 /// two have to agree about every line here.
 ///
-/// A fence whose argument is a name <em>declares</em> a list — the catalogue, what
-/// exists to collect. One whose argument names another node <em>tracks</em> that node's
-/// list — a tally, what one person has. Inside, the vocabulary is the dialect's own:
+/// A fence whose argument is a name <em>declares</em> a list — the catalogue, the rows
+/// everyone answers. One whose argument names another node <em>tracks</em> that node's
+/// list — a tally, one person's answers. Inside, the vocabulary is the dialect's own:
 /// bulleted items, nested one level for variants, a task marker where a tally records a
 /// tick, and an em-dashed tail that is a note rather than part of the item.
+///
+/// The construct is one mechanism with several words for it — the same shape
+/// <c>CalloutExtension</c> has, where five spellings share one implementation. Nothing
+/// under here knows what a row <em>means</em>: "who has which sprite" and "who can make
+/// which night" are the same question asked of different nouns, so the word a fence opens
+/// with is carried through the parse and the write and read back out again, and the only
+/// thing it decides is the words the reading view puts around the grid.
 /// </summary>
 public static class CollectionSyntax
 {
     public const string Fence = ":::";
+
+    /// <summary>The words that open one of these. Each is a different question with the
+    /// same shape, and the reading view says so — see <c>ListVocabulary</c>, the client
+    /// half, which keys its chrome off exactly these. Restated on the server for the
+    /// reason <see cref="WikiLinkSyntax"/> is: the aggregate has to find what a body says
+    /// without loading an editor.</summary>
+    public static readonly IReadOnlyList<string> Kinds =
+    [
+        "collection",       // what everyone has
+        "availability",     // when everyone can
+    ];
+
+    /// <summary>The word a list is written with when nothing says otherwise.</summary>
     public const string Word = "collection";
 
     /// <summary>What separates an item from the note after it. Two spellings because
@@ -41,14 +61,14 @@ public static class CollectionSyntax
         var lines = markdown.Replace("\r\n", "\n").Split('\n');
         for (var i = 0; i < lines.Length; i++)
         {
-            if (ArgumentOf(lines[i]) is not { } argument)
+            if (ArgumentOf(lines[i], out var word) is not { } argument)
                 continue;
             var end = i + 1;
             while (end < lines.Length && lines[end].Trim() != Fence)
                 end++;
             if (end >= lines.Length)
                 break;                          // unterminated: not a construct after all
-            blocks.Add(new CollectionBlock(argument, Tracked(argument),
+            blocks.Add(new CollectionBlock(word!, argument, Tracked(argument),
                 ReadItems(lines[(i + 1)..end]), i, end - i + 1));
             i = end;
         }
@@ -73,11 +93,11 @@ public static class CollectionSyntax
     /// <summary>The whole fence as source, ready to stand in a file. Items that carry no
     /// tick state — a catalogue's — are written as plain bullets, so declaring a list
     /// never puts an empty checkbox in front of every line of it.</summary>
-    public static string Write(string argument, IReadOnlyList<CollectionEntry> items,
-        bool ticked)
+    public static string Write(string word, string argument,
+        IReadOnlyList<CollectionEntry> items, bool ticked)
     {
         var source = new StringBuilder();
-        source.Append(Fence).Append(Word);
+        source.Append(Fence).Append(Known(word) ? word : Word);
         if (argument.Length > 0)
             source.Append(' ').Append(argument);
         source.Append('\n');
@@ -147,20 +167,31 @@ public static class CollectionSyntax
     public static string Words(string argument) =>
         string.Join(' ', argument.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 
-    /// <summary><c>:::collection Override sprites</c> — the argument this fence carries,
-    /// or null when the line opens something else (or nothing).</summary>
-    private static string? ArgumentOf(string line)
+    /// <summary>Whether a word opens one of these.</summary>
+    public static bool Known(string? word) =>
+        word is not null && Kinds.Contains(word, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary><c>:::collection Override sprites</c>, <c>:::availability Game nights</c>
+    /// — the word this fence opened with and the argument it carries, or null when the
+    /// line opens something else (or nothing).</summary>
+    private static string? ArgumentOf(string line, out string? word)
     {
+        word = null;
         var text = line.Trim();
         if (!text.StartsWith(Fence, StringComparison.Ordinal))
             return null;
         var rest = text[Fence.Length..].TrimStart();
-        if (!rest.StartsWith(Word, StringComparison.OrdinalIgnoreCase))
-            return null;
-        rest = rest[Word.Length..];
-        if (rest.Length > 0 && !char.IsWhiteSpace(rest[0]))
-            return null;                        // ":::collections" is somebody else's
-        return rest.Trim();
+        foreach (var candidate in Kinds)
+        {
+            if (!rest.StartsWith(candidate, StringComparison.OrdinalIgnoreCase))
+                continue;
+            var after = rest[candidate.Length..];
+            if (after.Length > 0 && !char.IsWhiteSpace(after[0]))
+                continue;                       // ":::collections" is somebody else's
+            word = candidate;
+            return after.Trim();
+        }
+        return null;
     }
 
     /// <summary>The node a fence's argument names, when it names one. A wiki link is a
@@ -264,6 +295,7 @@ public static class CollectionSyntax
 /// <summary>One <c>:::collection</c> fence as it stands in a file: what it said, what it
 /// holds, and where it is, so a write can put another one exactly there.</summary>
 public sealed record CollectionBlock(
+    string Word,
     string Argument,
     CollectionTarget? Tracks,
     IReadOnlyList<CollectionEntry> Items,

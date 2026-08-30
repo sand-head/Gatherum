@@ -1,8 +1,20 @@
-# Collectible lists
+# Shared lists
 
-A shared list people tick against — a set of sprites, the volumes of a series, the peaks
-in a range — where everyone sees what everyone else has, and each answer stays its
-owner's to give.
+A list people tick against — a set of sprites, the volumes of a series, the peaks in a
+range, the nights a group can play — where everyone sees everyone else's answers, and
+each answer stays its owner's to give.
+
+Underneath there is one thing: **a row per question, a column per person, a mark where
+that person says yes.** "Who has which sprite" and "who can make which night" differ in
+the noun and in nothing else, so they are one construct with a small vocabulary — the
+word the fence opens with says what a tick *means*, and decides nothing else.
+
+| Written | Asks | A tick says |
+| --- | --- | --- |
+| `:::collection` | who has each row | *has it* |
+| `:::availability` | who can make each row | *can make it* |
+
+Everything below is written with `:::collection`; swap the word and it all still holds.
 
 ## Two documents, not one
 
@@ -139,6 +151,21 @@ permission and a title is a search. Ticking writes the mention spelling for that
 one answer, shared by everybody, which is the commoner kind of checklist in a knowledge
 base. A release checklist does not become twenty private opinions because somebody
 elsewhere in the wiki is collecting sprites.
+
+## Asking a different question
+
+```markdown
+:::availability Game nights
+- Fri 3 Oct
+- Fri 10 Oct
+- Fri 17 Oct — after the con
+:::
+```
+
+Everything on this page applies unchanged: each person's answer is a page of their own,
+whoever can read the list sees every column, rows can nest (a night with an afternoon
+and an evening slot), an entry can link a page, and a renamed row orphans the ticks it
+stranded and says so.
 
 ## For agents
 

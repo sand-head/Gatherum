@@ -4,7 +4,8 @@ using SlopEdit.Core.Rich;
 namespace Gatherum.Client;
 
 /// <summary>
-/// A collaborative collectible list, as a directive fence beside the encyclopedia's own:
+/// A shared list everybody answers for themselves, as a directive fence beside the
+/// encyclopedia's own:
 /// <code>
 /// :::collection Override sprites
 /// - Sonic
@@ -17,7 +18,7 @@ namespace Gatherum.Client;
 /// - [x] Sonic — Gold, Sprite Day 2
 /// :::
 /// </code>
-/// The first spelling <em>declares</em> a list — the catalogue, what exists to collect.
+/// The first spelling <em>declares</em> a list — the catalogue, the rows everyone answers.
 /// The second, whose argument names another node, <em>tracks</em> it: the page is one
 /// person's tally, and the task marks are their ticks. That is the whole of how a page
 /// says which of the two it is, and it is exact rather than inferred — an earlier draft
@@ -44,7 +45,7 @@ public sealed class CollectionExtension : MarkdownBlockExtension
         IReadOnlyList<MarkdownExtension> siblings, out int consumed)
     {
         consumed = 0;
-        if (ArgumentOf(lines[at]) is not { } argument)
+        if (ArgumentOf(lines[at], out var word) is not { } argument)
             return false;
 
         var body = new List<string>();
@@ -60,9 +61,7 @@ public sealed class CollectionExtension : MarkdownBlockExtension
         var blocks = MarkdownSerializer.Parse(string.Join('\n', body), siblings);
         if (blocks.Count == 0)
             return false;
-        var tag = BlockTags.For(argument.Length > 0
-            ? $"{BlockTags.Collection} {argument}"
-            : BlockTags.Collection);
+        var tag = BlockTags.For(argument.Length > 0 ? $"{word} {argument}" : word);
         foreach (var block in blocks)
             block.Tag = tag;
         into.AddRange(blocks);
@@ -89,21 +88,28 @@ public sealed class CollectionExtension : MarkdownBlockExtension
         return true;
     }
 
-    /// <summary>The list this fence names, or null when the line opens something else.
-    /// The argument is kept as the source spelled it — a name, a <c>[[title]]</c> or a
-    /// mention — because the writer has to give it back unchanged, and because which of
-    /// the three it is decides what the page is.</summary>
-    private static string? ArgumentOf(string line)
+    /// <summary>The word this fence opened with and the list it names, or null when the
+    /// line opens something else. The argument is kept as the source spelled it — a name,
+    /// a <c>[[title]]</c> or a mention — because the writer has to give it back unchanged,
+    /// and because which of the three it is decides what the page is. The word rides in
+    /// the tag for the same reason, and because the reading view keys its chrome off it.</summary>
+    private static string? ArgumentOf(string line, out string word)
     {
+        word = "";
         var text = line.Trim();
         if (!text.StartsWith(Fence, StringComparison.Ordinal))
             return null;
         var rest = text[Fence.Length..].TrimStart();
-        if (!rest.StartsWith(BlockTags.Collection, StringComparison.OrdinalIgnoreCase))
-            return null;
-        rest = rest[BlockTags.Collection.Length..];
-        if (rest.Length > 0 && !char.IsWhiteSpace(rest[0]))
-            return null;                        // ":::collections" is somebody else's
-        return rest.Trim();
+        foreach (var candidate in ListVocabulary.All.Keys)
+        {
+            if (!rest.StartsWith(candidate, StringComparison.OrdinalIgnoreCase))
+                continue;
+            var after = rest[candidate.Length..];
+            if (after.Length > 0 && !char.IsWhiteSpace(after[0]))
+                continue;                       // ":::collections" is somebody else's
+            word = candidate;
+            return after.Trim();
+        }
+        return null;
     }
 }

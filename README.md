@@ -24,7 +24,7 @@ page-turner.
   around, and `> [!NOTE]` callouts. All of it is plain Markdown in the file, round-tripped
   losslessly, and an Insert menu writes the fences for you. Links go somewhere: a mention
   or a wiki link opens the node it names, an external link leaves the app.
-- **Collectible lists**: a `:::collection` fence turns a list into something a group
+- **Shared lists**: a `:::collection` fence turns a list into something a group
   works rather than reads — the page declares what exists to collect, each participant
   keeps their own tally as a page of their own, and the reading view draws the grid of
   who has what. Share the list and ticking it is joining in: whoever can read the list
@@ -33,7 +33,10 @@ page-turner.
   behind it. A page per collectible is optional and worth it for the few worth writing
   about, ragged rosters are expressible (variants nest, per item), and a signed-out
   visitor to a public list reads it rather than being handed a checkbox that records
-  nothing. Ordinary `- [ ]` checklists are untouched — they still mean *it is done*.
+  nothing. Ordinary `- [ ]` checklists are untouched — they still mean *it is done*. And the same
+  grid asks other questions: `:::availability` is who can make which night rather than
+  who has which sprite, because a row per thing and a column per person is one shape
+  whatever the noun.
 - **Files**: drag-drop or picker upload anywhere in the tree, content-addressed
   storage (SHA-256) on disk, inline previews (images, PDF, video, audio — and EPUBs
   open in a paginated reader, chapter by chapter, links and all), descriptions,
@@ -94,7 +97,7 @@ page-turner.
 ## Documentation
 
 Every copy of Gatherum serves its own manual at **`/docs`** — what a node is, the
-Markdown dialect pages are written in, categories, collectible lists, search, sharing,
+Markdown dialect pages are written in, categories, shared lists, search, sharing,
 the REST API, the MCP server, and configuration. It is built from
 [`src/Gatherum.Web/Docs`](src/Gatherum.Web/Docs) and embedded in the assembly, so it
 always describes the version that is running.

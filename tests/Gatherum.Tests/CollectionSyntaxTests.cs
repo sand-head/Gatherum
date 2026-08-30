@@ -1,9 +1,10 @@
+using Gatherum.Client;
 using Gatherum.Core.Markdown;
 
 namespace Gatherum.Tests;
 
 /// <summary>The construct on its own, with no database under it: what a fence says, what
-/// survives being written back out, and which two lines are the same collectible.</summary>
+/// survives being written back out, and which two lines are the same row.</summary>
 public class CollectionSyntaxTests
 {
     private const string Catalogue = """
@@ -159,6 +160,67 @@ public class CollectionSyntaxTests
             """));
     }
 
+    /// <summary>One grid, several questions. "Who has which sprite" and "who can make
+    /// which night" differ in nothing but the noun, so they are one construct with a small
+    /// vocabulary — the shape callouts already have.</summary>
+    [Fact]
+    public void Every_word_in_the_vocabulary_opens_the_same_construct()
+    {
+        foreach (var word in CollectionSyntax.Kinds)
+        {
+            var block = Assert.Single(CollectionSyntax.Read($"""
+                :::{word} Game nights
+                - Fri 3 Oct
+                - Fri 10 Oct
+                :::
+                """));
+
+            Assert.Equal(word, block.Word);
+            Assert.True(block.Declares);
+            Assert.Equal("Game nights", block.Name);
+            Assert.Equal(["Fri 3 Oct", "Fri 10 Oct"], block.Items.Select(i => i.Text));
+        }
+    }
+
+    /// <summary>The word is the source's, so it survives the trip — a list of nights does
+    /// not come back a collection of them.</summary>
+    [Fact]
+    public void A_lists_own_word_is_written_back()
+    {
+        const string source = """
+            :::availability [[Game nights]]
+            - [x] Fri 3 Oct
+            - [ ] Fri 10 Oct
+            :::
+            """;
+
+        var block = CollectionSyntax.Read(source)[0];
+
+        Assert.Equal(source.ReplaceLineEndings("\n"),
+            CollectionSyntax.Write(block.Word, block.Argument, block.Items, ticked: true));
+    }
+
+    /// <summary>Two lists in two places, and no third: Core parses the words, the client
+    /// says what each one calls things, and a word in one and not the other would render
+    /// a grid that reads as the wrong question.</summary>
+    [Fact]
+    public void The_parser_and_the_reading_view_know_the_same_words()
+    {
+        Assert.Equal(CollectionSyntax.Kinds.Order(), ListVocabulary.All.Keys.Order());
+        Assert.All(ListVocabulary.All.Values, words =>
+        {
+            Assert.NotEmpty(words.Rows);
+            Assert.Contains("{0}", words.Total, StringComparison.Ordinal);
+            Assert.Contains("{0}", words.Score, StringComparison.Ordinal);
+            Assert.Contains("{1}", words.Score, StringComparison.Ordinal);
+            Assert.NotEmpty(words.Invite);
+            Assert.NotEmpty(words.Yes);
+            Assert.NotEmpty(words.No);
+        });
+        // An unknown word still draws a grid rather than nothing.
+        Assert.Same(ListVocabulary.All["collection"], ListVocabulary.For("no-such-question"));
+    }
+
     [Fact]
     public void A_fence_that_opens_something_else_is_left_alone()
     {
@@ -178,10 +240,10 @@ public class CollectionSyntaxTests
     {
         var block = CollectionSyntax.Read(Catalogue)[0];
 
-        var source = CollectionSyntax.Write(block.Argument, block.Items, ticked: false);
+        var source = CollectionSyntax.Write(block.Word, block.Argument, block.Items, ticked: false);
         var again = CollectionSyntax.Read(source)[0];
 
-        Assert.Equal(source, CollectionSyntax.Write(again.Argument, again.Items, ticked: false));
+        Assert.Equal(source, CollectionSyntax.Write(again.Word, again.Argument, again.Items, ticked: false));
         Assert.Equal(block.Items.Select(i => i.Label), again.Items.Select(i => i.Label));
         Assert.Equal(block.Items[0].Variants.Select(v => v.Label),
             again.Items[0].Variants.Select(v => v.Label));
@@ -200,7 +262,7 @@ public class CollectionSyntaxTests
             """;
 
         var block = CollectionSyntax.Read(tally)[0];
-        var written = CollectionSyntax.Write(block.Argument, block.Items, ticked: true);
+        var written = CollectionSyntax.Write(block.Word, block.Argument, block.Items, ticked: true);
 
         Assert.Equal(tally.ReplaceLineEndings("\n"), written);
     }
@@ -211,7 +273,7 @@ public class CollectionSyntaxTests
         var block = CollectionSyntax.Read(Catalogue)[0];
 
         var rewritten = CollectionSyntax.Replace(Catalogue, block,
-            CollectionSyntax.Write(block.Argument, [block.Items[0]], ticked: false));
+            CollectionSyntax.Write(block.Word, block.Argument, [block.Items[0]], ticked: false));
 
         Assert.StartsWith("Sprites arrive on Thursdays.", rewritten, StringComparison.Ordinal);
         Assert.EndsWith("More prose after it.", rewritten, StringComparison.Ordinal);

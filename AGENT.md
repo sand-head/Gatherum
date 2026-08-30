@@ -44,7 +44,7 @@ auto-login. Migrations: `dotnet ef migrations add <Name> -p src/Gatherum.Infrast
   resolution, `CategoryService` = the taxonomy and what is filed in it, with
   `CategoryIndex` the one-snapshot-per-operation view of its graph,
   `FileService` = bodies/versions/text editing, `BookmarkService` = a URL captured as
-  a file node and captured again on demand, `CollectionService` = a collectible list's
+  a file node and captured again on demand, `CollectionService` = a shared list's
   catalogue fused with every tally of it, and the one write, which is always the
   caller's own tally), `Markdown/MarkdownContent`,
   `Markdown/WikiLinkSyntax` and `Markdown/CollectionSyntax` (the conventions a body
@@ -123,7 +123,11 @@ fresh DI scope via `Services/AppOperations`.
   misreport the page, and following it would only reach a 404. Locking is the read
   view's alone: it rewrites runs, and a document that can be saved has to write back the
   bytes it was read from.
-- A collection list is two documents. The catalogue is a page with a `:::collection`
+- A shared list is two documents, and one mechanism with several words for it — the
+  fence's word (`collection`, `availability`) says what a tick *means* and decides
+  nothing else, the way a callout's kind does. `CollectionSyntax.Kinds` parses them and
+  `ListVocabulary` says what each calls things; adding a question is a row in each, and
+  there is no third place. The catalogue is a page with a `:::collection`
   fence; a tally is a page per person whose fence names that catalogue, under its owner's
   root, and nobody writes anybody else's. **The catalogue's audience is the grid's
   audience**: whoever may read the list sees every column on it, so the whole
@@ -303,7 +307,7 @@ second icon set, and don't hand-draw a path when the pack has one.
 Deviations and judgment calls go in [DECISIONS.md](DECISIONS.md) when they happen —
 commit messages alone don't count.
 
-[COLLECTIONS.md](COLLECTIONS.md) is the design behind collectible lists — why a tally is a
+[COLLECTIONS.md](COLLECTIONS.md) is the design behind shared lists — why a tally is a
 file and not a table, why an item's page is optional, and why signing out means reading
 rather than ticking. Read it before changing anything under `:::collection`.
 

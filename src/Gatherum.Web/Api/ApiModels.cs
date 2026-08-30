@@ -193,13 +193,15 @@ public record DescriptionRequest(string Description);
 public record BookmarkRequest(string Url, Guid? ParentId);
 public record PresenceDto(IReadOnlyList<string> Editors, int HeadVersion);
 
-/// <summary>A collection list as everyone's ticks make it: the catalogue's rows in the
-/// author's order, one column per tally the caller may enumerate, and which of them —
-/// if any — is the caller's own. <c>Collectibles</c> counts variants rather than lines,
+/// <summary>A shared list as everyone's ticks make it: the catalogue's rows in the
+/// author's order, one column per participant, and which of them — if any — is the
+/// caller's own. <c>Kind</c> is the word the catalogue's fence opened with, which says
+/// what a tick on this list means. <c>Collectibles</c> counts variants rather than lines,
 /// which is the only number a progress report may be made of.</summary>
 public record CollectionDto(
     Guid CatalogueId,
     string CatalogueTitle,
+    string Kind,
     string List,
     IReadOnlyList<CollectionRowDto> Rows,
     IReadOnlyList<CollectionColumnDto> Columns,
@@ -208,7 +210,7 @@ public record CollectionDto(
     int Collectibles)
 {
     public static CollectionDto From(CollectionView view) => new(
-        view.CatalogueId, view.CatalogueTitle, view.List,
+        view.CatalogueId, view.CatalogueTitle, view.Kind, view.List,
         [.. view.Rows.Select(CollectionRowDto.From)],
         [.. view.Columns.Select(CollectionColumnDto.From)],
         view.TallyId, view.CanTick, view.Collectibles);

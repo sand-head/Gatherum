@@ -1651,7 +1651,7 @@ documented meaning is that a node claiming to be public is treated as private by
 query. Keeping it out means this change moves nothing for an instance that has the internet
 switched off.
 
-## A collection is one construct, and both halves of it are files
+## A shared list is one construct, and both halves of it are files
 `COLLECTIONS.md` is the design; this is what got built and what it cost.
 
 A collaborative collectible list conflates two documents with different tempos: what
@@ -1741,3 +1741,43 @@ ignores the claim, so a static export holds the catalogue rather than a gap. Two
 to design around rather than discover: a tagged run inside a float renders as blocks, so a
 collection inside an `:::infobox` is a plain list, and a collapsible section holding a
 widget keeps its chevron rather than folding a component out of the page.
+
+## One grid, several questions
+The collectible list shipped narrow: `:::collection`, a "catalogue" of "collectibles",
+copy about what you still have to find. Then the obvious question — what if a group wants
+to see which nights everyone can play D&D — and the answer turned out to be that the
+feature was already general and only the words were not.
+
+Nothing under the fence ever knew what a row meant. The mechanism is: a row per thing, a
+column per person, a mark where that person says yes, each column a page its owner writes.
+"Who has which sprite" and "who can make which night" are the same question asked of
+different nouns.
+
+Three ways to say so were on the table. Rename the construct to something neutral and let
+every list read blandly — which throws away the specificity that makes a collection page
+read well. Let each list configure its own labels, which is a settings-in-syntax smell and
+a schema nobody asked for. Or make the fence's *word* the vocabulary: one implementation,
+a small named set, each word buying a handful of phrases. The third is what callouts
+already do here — five spellings, one extension, a dictionary of kinds — so it is a shape
+this codebase has already agreed to, and a new question costs a row rather than a
+component.
+
+The word rides in `Block.Tag` where the construct's argument already rode, survives the
+round trip because the writer gives back what the source said, and reaches the reading
+view through `CollectionView.Kind` — the *catalogue's* word, not the tally's, so a grid
+read from either page says the same thing. What it decides is: what the first column is
+called, how the total and the score are phrased, what to say to somebody who has not
+answered, and what a screen reader hears at a mark. What it decides beyond that is
+nothing, which is the property that makes adding one safe.
+
+The set lives in two places by necessity — `CollectionSyntax.Kinds` parses without an
+editor, `ListVocabulary` says what each word calls things and cannot be in Core because it
+is chrome — and a test pins them equal, the way the manual is pinned to the constructs it
+documents. An unknown word still renders a grid in the commonest vocabulary rather than
+failing, because a file written by a newer build should degrade to a readable list rather
+than to nothing.
+
+The type names did not follow. `CollectionService`, `CollectionSyntax`, `CollectionWidget`
+still say collection, which is now the name of the flagship question rather than of the
+mechanism. Renaming them across Core, Web and Client is churn against no behaviour, and
+"a collection of everyone's answers" is a fair reading of what the service returns.
