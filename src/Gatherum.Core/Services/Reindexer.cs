@@ -72,12 +72,37 @@ public class Reindexer(
         // recomputed after it rather than before, so a category page written here — one
         // only a sidecar knew about — gets its reach computed in the same run it appeared.
         await WireTaxonomyAsync(filings, report, ct);
+        // Links come after the taxonomy for the same reason it came after the walk: a
+        // [[wiki link]] resolves by title, so every title has to exist before any of them
+        // can be looked up. Without this pass a rebuilt index has no backlinks at all
+        // until somebody re-saves each page — and a shared list, which finds everyone's
+        // answers by exactly these rows, would come back empty.
+        report.Links = await RewireLinksAsync(ct);
         await access.RecomputeAsync(ct);
         await db.SaveChangesAsync(ct);
         logger.LogInformation(
-            "Reindex complete: {Added} added, {Updated} updated, {Removed} removed.",
-            report.Added, report.Updated, report.Removed);
+            "Reindex complete: {Added} added, {Updated} updated, {Removed} removed, " +
+            "{Links} links.",
+            report.Added, report.Updated, report.Removed, report.Links);
         return report;
+    }
+
+    /// <summary>Rebuilds every node's outbound links from its own bytes. The bodies are
+    /// the system of record here as everywhere else: nothing is read from the old index,
+    /// which is the point — this runs when there is no old index to read.
+    ///
+    /// Titles resolve as the node's owner, which is who resolved them when the page was
+    /// written. A link the author could not have made is not one a rebuild should invent.</summary>
+    private async Task<int> RewireLinksAsync(CancellationToken ct)
+    {
+        var bodies = await db.Nodes
+            .Include(n => n.File!).ThenInclude(f => f.Versions)
+            .Where(n => n.File != null && n.File.Versions.Count > 0)
+            .ToListAsync(ct);
+        foreach (var node in bodies)
+            await nodes.RefreshLinksAsync(node, node.OwnerId, ct);
+        await db.SaveChangesAsync(ct);
+        return await db.NodeLinks.CountAsync(ct);
     }
 
     /// <summary>Every directory that holds something becomes a node, so the tree the user
@@ -378,5 +403,8 @@ public class ReindexReport
     public int Updated { get; set; }
     public int Moved { get; set; }
     public int Removed { get; set; }
+
+    /// <summary>How many links the rebuild derived from the bodies it read.</summary>
+    public int Links { get; set; }
     public List<string> SkippedRoots { get; } = [];
 }

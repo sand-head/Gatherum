@@ -85,8 +85,8 @@ browser sessions — including against the built container).
   `:::poll` is who picked which option — one answer each, and totals without names, both
   decided where the file is written and the answer is built rather than where the grid is
   drawn — on the same grid that answers who has which sprite. Over REST and MCP
-  too (`collection_status`,
-  `mark_collected`). See COLLECTIONS.md.
+  too (`get_list`,
+  `answer_list`). See LISTS.md.
 - **Awareness** — heartbeat presence ("Sam is editing", verified cross-user) and a
   newer-version warning in the editor (verified: fires when another user saves the
   open document). Concurrent saves are serialized per node; nobody's save is ever
@@ -207,20 +207,20 @@ browser sessions — including against the built container).
   markdown links, docx extraction/editing/backlinks, tree ops, privacy,
   versions (collapse, restore, re-upload, cross-author), search, title resolution, API
   keys, storage/extraction, the taxonomy (nesting, counts, privacy, rename/move/delete,
-  path spelling), collectible lists (the construct alone — declaration against tracking,
+  path spelling), shared lists (the construct alone — declaration against tracking,
   ragged variants, notes, orphans, round trips; then the aggregate against real Postgres —
   a tally per person, a private tally that is still a column while its page stays shut to
   everyone else, a list nobody may read that has no grid to leak, a promotion whose answers
   keep counting, a rename whose orphans are kept and reported only to their owner, and the
   parent row that refuses to be answered), the widget seam the
-  read view claims a collection through (the hole, and the whole-body writer that ignores
+  read view claims a shared list through (the hole, and the whole-body writer that ignores
   it so a static export still holds the catalog), and integration tests booting the app
   on Testcontainers Postgres
   (create page → search → MCP `get_node`; wiki link → backlink → `resolve-titles`;
   file a page in a nested category → find it from the category above, over REST and
   MCP; create a page → find it over REST by a question that shares none of its words;
   publish a page that mentions a private one → a stranger gets the page, the mention's
-  text, and the answer that its target is not theirs to open; declare a collection over
+  text, and the answer that its target is not theirs to open; declare a shared list over
   REST → answer it over MCP → the tally is a page with the mention and the answer in it, and
   a public list's first response carries the grid itself with no checkbox for a visitor
   who is not signed in).
@@ -233,7 +233,7 @@ browser sessions — including against the built container).
 
 - **A manual in the box** — eleven pages (`src/Gatherum.Web/Docs`) embedded in the
   assembly and served at `/docs`: what a node is, the Markdown dialect in full,
-  categories, collectible lists, search, sharing, the REST API, the MCP server, a
+  categories, shared lists, search, sharing, the REST API, the MCP server, a
   briefing for agents, and configuration. Also served as their own source — `/docs/<page>.md`, `/docs/all.md`,
   `/docs/llms.txt` — because the dialect is syntax no model has seen and a link is how
   you teach it one. Unauthenticated (it describes the software, not the instance) and

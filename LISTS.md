@@ -3,7 +3,7 @@
 **Status: built.** This was written as a proposal and accepted; it is now the design
 behind the feature, the way `FILESYSTEM.md` sits behind storage, and `DECISIONS.md` carries
 the entry for what shipped and what it cost. What is here is the reasoning; the manual page
-a reader is pointed at is `src/Gatherum.Web/Docs/collections.md`.
+a reader is pointed at is `src/Gatherum.Web/Docs/lists.md`.
 
 Everything below is built except the guest tallies of *Counted anonymously*, which stay
 designed and unbuilt on purpose — signed out is read-only, per that section's own argument.
@@ -20,7 +20,7 @@ mechanism with a small vocabulary of words for it — `:::collection`, `:::avail
 implementation. The word decides what an answer means, the words the reading view puts
 around the grid, whether a row's own total is worth a column, whether a person has one
 answer or many, and whether the grid names who answered what; a new question costs a row
-in `CollectionSyntax.Kinds` and a row in `ListVocabulary`. Read "collectible" below as "row" and every argument holds.
+in `SharedListSyntax.Kinds` and a row in `ListVocabulary`. Read "collectible" below as "row" and every argument holds.
 
 ## First, a correction to the premise
 
@@ -38,10 +38,10 @@ So "collaborative" in Gatherum means *two people can edit the same page without 
 other's work*. It does not mean shared cursors or character-level merging, and a feature
 that assumes a CRDT underneath would be building on something that isn't there.
 
-That turns out not to matter, because a collection list does not want co-editing. It wants
+That turns out not to matter, because a shared list does not want co-editing. It wants
 something the current model is actually better at.
 
-## The insight: a collection list is two documents, not one
+## The insight: a shared list is two documents, not one
 
 The reason shared checklists are awkward everywhere is that they conflate two things with
 completely different tempos, authors, and privacy needs:
@@ -189,8 +189,8 @@ finishing this one.
 **Ownership is the path**, so a tally lives under its owner's root:
 
 ```
-alice/Collections/Override sprites.md      ← Alice's tally, her node, her access
-bob/Collections/Override sprites.md        ← Bob's, entirely separately
+alice/Lists/Override sprites.md      ← Alice's tally, her node, her access
+bob/Lists/Override sprites.md        ← Bob's, entirely separately
 ```
 
 It is a node like any other, and it carries its own `AccessMode`.
@@ -277,7 +277,7 @@ Two wrong answers before the right one, because both are tempting.
 **All Markdown checklists cannot work this way.** A checklist already means two things and
 the syntax does not distinguish them: a release checklist, a packing list or a runbook step
 means *it is done* — shared state, and in a knowledge base the commoner kind — while a
-collection list means *I have this one*. Make every checklist per-person and the first kind
+shared list means *I have this one*. Make every checklist per-person and the first kind
 breaks silently.
 
 **A per-page setting is the wrong shape**, quite apart from having nowhere to live
@@ -349,7 +349,7 @@ the tags it claims and `DocumentHtmlView` renders those runs as components of it
 
 private readonly Dictionary<string, RenderFragment<DocumentWidget>> widgets = new()
 {
-    [CollectionExtension.Tag] = widget => @<CollectionWidget Widget="widget" />,
+    [CollectionExtension.Tag] = widget => @<SharedListWidget Widget="widget" />,
 };
 ```
 
@@ -498,16 +498,16 @@ docs with "two people" as their justification, and that premise has changed:
 
 ## What it touched
 
-- **Core** — `Markdown/CollectionSyntax` (the fence, read and written, pure), and
-  `Services/CollectionService` (catalog rows fused with the visible tallies, and the one
+- **Core** — `Markdown/SharedListSyntax` (the fence, read and written, pure), and
+  `Services/SharedListService` (catalog rows fused with the visible tallies, and the one
   write, which is always the caller's own file). Every rule here.
-- **Client** — `CollectionExtension` in the dialect, its card in `DocumentChrome`, and
-  `CollectionWidget` — the grid, claimed out of the reading view by `Block.Tag` through
+- **Client** — `SharedListExtension` in the dialect, its card in `DocumentChrome`, and
+  `SharedListWidget` — the grid, claimed out of the reading view by `Block.Tag` through
   slopedit's widget blocks, answering through `IAppData` and nothing else. No `localStorage`:
   signed out has no checkbox.
-- **Web** — `GET`/`POST /api/nodes/{id}/collection`, the `collection_status` and
-  `mark_collected` MCP tools, and `Docs/collections.md`.
-- **Tests** — `CollectionSyntaxTests` for the construct alone, `CollectionServiceTests`
+- **Web** — `GET`/`POST /api/nodes/{id}/list`, the `get_list` and
+  `answer_list` MCP tools, and `Docs/collections.md`.
+- **Tests** — `SharedListSyntaxTests` for the construct alone, `SharedListServiceTests`
   against real Postgres for aggregation and visibility (the unlisted-tally case included),
   round trips in `GatherumMarkdownTests`, the widget seam in `ReadOnlyHtmlTests`, and two
   cross-surface flows in `AppIntegrationTests`.

@@ -33,10 +33,10 @@ namespace Gatherum.Client;
 /// different from an aside is only where it is <em>read</em>: the reading view claims
 /// the run as a slopedit widget and draws the grid, because a reader wants to work a
 /// shared list rather than look at it. The server's half is
-/// <see cref="Gatherum.Core.Markdown.CollectionSyntax"/>, and the two have to agree
+/// <see cref="Gatherum.Core.Markdown.SharedListSyntax"/>, and the two have to agree
 /// about every line.
 /// </summary>
-public sealed class CollectionExtension : MarkdownBlockExtension
+public sealed class SharedListExtension : MarkdownBlockExtension
 {
     private const string Fence = ":::";
 
@@ -75,7 +75,7 @@ public sealed class CollectionExtension : MarkdownBlockExtension
     {
         consumed = 0;
         var tag = blocks[at].Tag;
-        if (!BlockTags.IsCollection(tag))
+        if (!BlockTags.IsSharedList(tag))
             return false;
         var end = at;
         while (end < blocks.Count && blocks[end].Tag == tag)

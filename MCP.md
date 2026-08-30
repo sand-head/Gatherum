@@ -46,8 +46,8 @@ claude mcp add --transport http gatherum http://localhost:5140/mcp \
 | `list_categories` | `matching?` | The category tree in path order, with member counts |
 | `browse_category` | `path`, `deep?` | The category, its ancestry, its subcategories and its nodes |
 | `get_backlinks` | `id` | Nodes linking to the given node |
-| `collection_status` | `id` (catalog or tally), `list?` | A collectible list's rows, and each participant's answers against them |
-| `mark_collected` | `id`, `key`, `collected?`, `list?` | The list again, with your own tally rewritten |
+| `get_list` | `id` (catalog or tally), `name?` | A shared list's rows, how many answered each, and — a poll excepted — who |
+| `answer_list` | `id`, `key`, `answered?`, `name?` | The list again, with your own tally rewritten |
 
 ### Search
 
@@ -68,7 +68,7 @@ still answers from full-text search: a search never fails because a model is dow
 A `:::collection` fence on a page declares a **catalog** — the rows everyone answers.
 A
 fence naming another node *tracks* it, which makes that page a **tally**: one person's
-record of what they have. `collection_status` fuses them, and answers the same grid
+record of what they have. `get_list` fuses them, and answers the same grid
 whether it is asked of the catalog or of any tally that tracks it.
 
 Every row carries the `key` an answer names it by, so read the list before writing to it. A
@@ -81,7 +81,7 @@ A `:::poll` answers with the totals and the caller's own column only — it repo
 many picked each option, never who. That is a courtesy rather than a guarantee: every
 answer is still a file its owner can share.
 
-`mark_collected` writes the caller's own tally, creating it under `Collections/` the
+`answer_list` writes the caller's own tally, creating it under `Lists/` the
 first time and never touching anybody else's — a tally is a node, and a node is written
 by its owner. Answering is joining in: whoever may read the list sees every column on it,
 including the caller's, and no separate sharing gesture is needed. What a tally's own

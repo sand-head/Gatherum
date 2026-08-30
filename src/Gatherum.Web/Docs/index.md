@@ -38,7 +38,7 @@ in the order an agent needs it.
   versions, and what Gatherum reads out of a file.
 - **[Categories](/docs/categories)** — what a node is *about*. Each one is a page of its
   own, and nesting one is filing it under another.
-- **[Shared lists](/docs/collections)** — a row per question, a column per person: who
+- **[Shared lists](/docs/lists)** — a row per question, a column per person: who
   has which sprite, who can make which night, who picked which option — each answer its
   owner's to give.
 - **[Search](/docs/search)** — the two halves of the search box and when to reach for

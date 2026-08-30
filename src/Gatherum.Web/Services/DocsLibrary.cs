@@ -28,7 +28,7 @@ public sealed class DocsLibrary
     /// alphabetically — so adding a file to <c>Docs/</c> is enough to publish it.</summary>
     private static readonly string[] Order =
     [
-        "index", "markdown", "pages-and-files", "categories", "collections", "search",
+        "index", "markdown", "pages-and-files", "categories", "lists", "search",
         "sharing", "api", "mcp", "agents", "configuration",
     ];
 

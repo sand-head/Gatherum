@@ -24,7 +24,7 @@ public class GatherumMarkdownTests
             :::
             """);
 
-        var tagged = doc.Blocks.Where(b => BlockTags.IsCollection(b.Tag)).ToList();
+        var tagged = doc.Blocks.Where(b => BlockTags.IsSharedList(b.Tag)).ToList();
         Assert.Equal(4, tagged.Count);
         Assert.All(tagged, b => Assert.Equal(BlockKind.ListItem, b.Kind));
         // The tag carries the fence's own argument, which is how the read view knows
@@ -69,7 +69,7 @@ public class GatherumMarkdownTests
     /// separated by the blank line an author writes between two fences are two lists —
     /// and never one card that eats the second one's opening line.</summary>
     [Fact]
-    public void Two_collections_in_a_row_stay_two_collections()
+    public void Two_lists_in_a_row_stay_two_lists()
     {
         var doc = Parse("""
             :::collection Sprites
@@ -81,7 +81,7 @@ public class GatherumMarkdownTests
             :::
             """);
 
-        var tags = doc.Blocks.Where(b => BlockTags.IsCollection(b.Tag))
+        var tags = doc.Blocks.Where(b => BlockTags.IsSharedList(b.Tag))
             .Select(b => b.Tag).Distinct().ToList();
         Assert.Equal(2, tags.Count);
         Assert.Equal(["Sprites", "Emotes"], tags.Select(BlockTags.ArgumentOf));

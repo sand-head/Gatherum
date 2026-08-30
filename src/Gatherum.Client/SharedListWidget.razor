@@ -9,16 +9,16 @@
    Everything on screen is decided by the server: the rows are the catalog's, in its
    author's order, and the columns are everyone's. This component contains no rule about
    who may see what — asking twice is how two surfaces come to disagree. *@
-<div class="collection">
+<div class="shared-list">
     @if (view is null)
     {
-        <p class="collection-foot">@(error ?? "Loading the list…")</p>
+        <p class="list-foot">@(error ?? "Loading the list…")</p>
     }
     else
     {
-        <div class="collection-head">
-            <p class="collection-name">@(view.List.Length > 0 ? view.List : view.CatalogTitle)</p>
-            <span class="collection-count">
+        <div class="list-head">
+            <p class="list-name">@(view.List.Length > 0 ? view.List : view.CatalogTitle)</p>
+            <span class="list-count">
                 @(view.Participants switch
                 {
                     0 => Total,
@@ -58,7 +58,7 @@
                                            poll everybody is 1 of 4 and the answer is
                                            down the rows, not across them. *@
                                         <span class="meter"><i style="width:@Percent(column.Count)%"></i></span>
-                                        <span class="have">@column.Count/@view.Collectibles</span>
+                                        <span class="have">@column.Count/@view.Answerable</span>
                                     }
                                 </span>
                             </th>
@@ -155,7 +155,7 @@
 
         @if (!NamesAnswers)
         {
-            <p class="collection-foot secret">
+            <p class="list-foot secret">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                      stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                     <rect width="18" height="11" x="3" y="11" rx="2" />
@@ -192,40 +192,22 @@
             </div>
         }
 
-        <div class="collection-foot">
-            <span>
-                @if (!view.CanAnswer)
-                {
-                    <text>
-                        <a href="@LoginHref">Sign in</a> to keep your own list of this one.
-                    </text>
-                }
-                else if (Mine is { } mine)
-                {
-                    <text>
-                        @Score(mine.Count)
-                        @if (NamesAnswers)
-                        {
-                            <text>Your answers show to everyone who can read this list.</text>
-                        }
-                    </text>
-                }
-                else
-                {
-                    <text>
-                        @Words.Invite
-                        @if (NamesAnswers)
-                        {
-                            <text>Your answers show to everyone who can read this list.</text>
-                        }
-                    </text>
-                }
-            </span>
+        <div class="list-foot">
+            @if (!view.CanAnswer)
+            {
+                <span>
+                    <a href="@LoginHref">Sign in</a> to keep your own answers to this one.
+                </span>
+            }
+            else
+            {
+                <span>@Footer</span>
+            }
         </div>
 
         @if (error is not null)
         {
-            <p class="collection-foot error">@error</p>
+            <p class="list-foot error">@error</p>
         }
     }
 </div>
@@ -237,7 +219,7 @@
     /// catalog answers for itself, a tally for the catalog it tracks.</summary>
     [Parameter, EditorRequired] public Guid NodeId { get; set; }
 
-    private CollectionInfo? view;
+    private SharedListInfo? view;
     private string? error;
 
     /// <summary>What this list's own word calls things. One grid, several questions —
@@ -251,10 +233,27 @@
     private bool NamesAnswers => Words.NamesAnswers;
 
     private string Total =>
-        string.Format(Words.Total, view?.Collectibles ?? 0);
+        string.Format(Words.Total, view?.Answerable ?? 0);
 
     private string Score(int held) => view is null ? ""
-        : string.Format(Words.Score, held, view.Collectibles, view.Collectibles - held);
+        : string.Format(Words.Score, held, view.Answerable, view.Answerable - held);
+
+    /// <summary>Where the reader stands, and — where the list names people — the reminder
+    /// that answering is a public act on it. For a reader who can answer at all; the one
+    /// who cannot is offered a way in instead. Joined here rather than in the markup
+    /// because two adjacent expressions lose the space between them.</summary>
+    private string Footer
+    {
+        get
+        {
+            if (view is null)
+                return "";
+            var said = Mine is { } mine ? Score(mine.Count) : Words.Invite;
+            if (!NamesAnswers)
+                return said;
+            return $"{said} Your answers show to everyone who can read this list.".TrimStart();
+        }
+    }
     private readonly HashSet<string> open = new(StringComparer.Ordinal);
 
     /// <summary>Which of the pages this list's items link the reader may actually open.
@@ -270,17 +269,17 @@
     private string List => BlockTags.ArgumentOf(Widget.Tag);
 
     /// <summary>The reader's own tally, once they have one.</summary>
-    private CollectionColumnInfo? Mine => view?.Columns.FirstOrDefault(c => c.IsViewer);
+    private SharedListColumnInfo? Mine => view?.Columns.FirstOrDefault(c => c.IsViewer);
 
     /// <summary>The columns the grid draws. A reader who may answer but has never answered
     /// owns no tally yet and so appears in nobody's aggregate — but the way to get one is
     /// to answer, so the column they are <em>about</em> to have is drawn empty rather than
     /// left out. Without it the first answer has nowhere to happen, which is the whole of
     /// how somebody joins a list.</summary>
-    private IReadOnlyList<CollectionColumnInfo> Columns =>
+    private IReadOnlyList<SharedListColumnInfo> Columns =>
         view is null ? []
         : !view.CanAnswer || Mine is not null ? view.Columns
-        : [new CollectionColumnInfo(Guid.Empty, Guid.Empty, "You", true, [], [], 0),
+        : [new SharedListColumnInfo(Guid.Empty, Guid.Empty, "You", true, [], [], 0),
            .. view.Columns];
 
     /// <summary>Where signing in should land: this page, said the way the login endpoint
@@ -294,7 +293,7 @@
     {
         try
         {
-            view = await Data.GetCollectionAsync(NodeId, List);
+            view = await Data.GetSharedListAsync(NodeId, List);
             error = null;
             await AddressItemsAsync();
         }
@@ -321,12 +320,12 @@
         }
     }
 
-    private static IEnumerable<CollectionRowInfo> Flatten(IEnumerable<CollectionRowInfo> rows) =>
+    private static IEnumerable<SharedListRowInfo> Flatten(IEnumerable<SharedListRowInfo> rows) =>
         rows.SelectMany(r => Flatten(r.Variants).Prepend(r));
 
-    private bool IsOpen(CollectionRowInfo row) => open.Contains(row.Key);
+    private bool IsOpen(SharedListRowInfo row) => open.Contains(row.Key);
 
-    private void Toggle(CollectionRowInfo row)
+    private void Toggle(SharedListRowInfo row)
     {
         if (row.Variants.Count == 0)
             return;
@@ -337,15 +336,15 @@
     /// <summary>How full a column's meter runs. Of collectibles, like every other number
     /// here — a bar measured in lines would be a different claim.</summary>
     private int Percent(int held) =>
-        view is { Collectibles: > 0 } ? held * 100 / view.Collectibles : 0;
+        view is { Answerable: > 0 } ? held * 100 / view.Answerable : 0;
 
-    private static int Progress(CollectionRowInfo row, CollectionColumnInfo column) =>
+    private static int Progress(SharedListRowInfo row, SharedListColumnInfo column) =>
         row.Variants.Count(v => column.Held.Contains(v.Key));
 
     /// <summary>How many people answered yes to one row, as a bar with the count beside
     /// it. The number is the server's, of everybody who answered — on a list that reports
     /// totals without naming anybody there are no columns to count instead.</summary>
-    private RenderFragment RowTally(CollectionRowInfo row) =>
+    private RenderFragment RowTally(SharedListRowInfo row) =>
         @<text>
             @if (row.Variants.Count == 0)
             {
@@ -356,10 +355,10 @@
             }
         </text>;
 
-    private int Share(CollectionRowInfo row) =>
+    private int Share(SharedListRowInfo row) =>
         view is { Participants: > 0 } ? row.Answers * 100 / view.Participants : 0;
 
-    private static string CellClass(CollectionColumnInfo column) =>
+    private static string CellClass(SharedListColumnInfo column) =>
         column.IsViewer ? "mark you" : "mark";
 
     /// <summary>An item's name, linked where it has a page the reader may open — with the
@@ -369,7 +368,7 @@
     /// the prose around it obeys, said with the vocabulary a grid has. A note the
     /// catalog put after an item rides along as a pill — it qualifies the row rather
     /// than continuing its name.</summary>
-    private RenderFragment Named(CollectionRowInfo row) =>
+    private RenderFragment Named(SharedListRowInfo row) =>
         @<text>
             @if (row.NodeId is { } id && reachable.Contains(id))
             {
@@ -397,7 +396,7 @@
     /// is not a permission this checks — it is the only control it offers. A mark rather
     /// than a disabled checkbox, because a grayed-out box reads as "you may not" instead
     /// of "this isn't yours".</summary>
-    private RenderFragment Mark(CollectionRowInfo row, CollectionColumnInfo column) =>
+    private RenderFragment Mark(SharedListRowInfo row, SharedListColumnInfo column) =>
         @<text>
             @if (column.IsViewer && Words.PicksOne)
             {
@@ -444,7 +443,7 @@
         busy = true;
         try
         {
-            view = await Data.SetCollectedAsync(NodeId, key, collected, List);
+            view = await Data.AnswerAsync(NodeId, key, collected, List);
             error = null;
         }
         catch (Exception)

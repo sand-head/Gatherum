@@ -37,8 +37,8 @@ client address.
 | `GET /api/nodes/{id}` | One node with its body — *anonymous* |
 | `GET /api/nodes/{id}/children` | Children in tree order — *anonymous* |
 | `GET /api/nodes/{id}/backlinks` | Nodes whose bodies link to this one — *anonymous* |
-| `GET /api/nodes/{id}/collection?list=` | A [shared list](/docs/collections): rows, and every tally's answers — *anonymous* |
-| `POST /api/nodes/{id}/collection` | `{ key, collected, list? }` — records one collectible on your own tally |
+| `GET /api/nodes/{id}/list?name=` | A [shared list](/docs/lists): rows, and every tally's answers — *anonymous* |
+| `POST /api/nodes/{id}/list` | `{ key, answered, name? }` — records one answer on your own tally |
 | `GET /api/nodes/{id}/similar?limit=` | Related nodes: shared categories, links, and semantic likeness — *anonymous* |
 | `GET /api/nodes/{id}/versions` | Version history, newest first |
 | `GET /api/search?query=&kind=&limit=&mode=` | See [Search](/docs/search) — *anonymous* |

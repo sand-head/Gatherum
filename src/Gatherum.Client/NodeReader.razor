@@ -87,7 +87,7 @@
     private RichDocument? doc;
 
     /// <summary>The runs this view renders as components of its own rather than as
-    /// prose, keyed by the tag their extension stamped on them. A collection list is the
+    /// prose, keyed by the tag their extension stamped on them. A shared list is the
     /// one construct in the dialect a reader is meant to <em>use</em>, and slopedit's
     /// widget blocks are exactly the hole to put it in: the blocks stay blocks, so the
     /// items still reach search and a link inside one is still a real link, and the
@@ -229,9 +229,9 @@
         if (doc is null)
             return;
         foreach (var tag in doc.Blocks.Select(b => b.Tag)
-            .Where(BlockTags.IsCollection).Distinct(StringComparer.Ordinal))
+            .Where(BlockTags.IsSharedList).Distinct(StringComparer.Ordinal))
         {
-            widgets[tag!] = widget => @<CollectionWidget Widget="widget" NodeId="NodeId" />;
+            widgets[tag!] = widget => @<SharedListWidget Widget="widget" NodeId="NodeId" />;
         }
     }
 

@@ -632,10 +632,10 @@ public class AppIntegrationTests(PostgresFixture postgres) : IAsyncLifetime
             $"/api/nodes/{page.Id}/rename", new { title = "defaced" })).StatusCode);
     }
 
-    /// <summary>The collectible list end to end: a catalog over REST, an answer over MCP,
-    /// and the tally that answer wrote showing up as a page like any other.</summary>
+    /// <summary>A shared list end to end: a catalog over REST, an answer over MCP, and
+    /// the tally that answer wrote showing up as a page like any other.</summary>
     [Fact]
-    public async Task A_collection_is_answered_over_mcp_and_the_tally_is_a_page()
+    public async Task A_shared_list_is_answered_over_mcp_and_the_tally_is_a_page()
     {
         var create = await client.PostAsJsonAsync("/api/pages", new
         {
@@ -653,13 +653,13 @@ public class AppIntegrationTests(PostgresFixture postgres) : IAsyncLifetime
             .GetProperty("id").GetGuid();
 
         var before = await client.GetFromJsonAsync<JsonElement>(
-            $"/api/nodes/{catalogId}/collection");
-        Assert.Equal(3, before.GetProperty("collectibles").GetInt32());
+            $"/api/nodes/{catalogId}/list");
+        Assert.Equal(3, before.GetProperty("answerable").GetInt32());
         Assert.Empty(before.GetProperty("columns").EnumerateArray());
         var gold = before.GetProperty("rows")[0].GetProperty("variants")[1]
             .GetProperty("key").GetString()!;
 
-        var answered = await CallMcpToolAsync("mark_collected",
+        var answered = await CallMcpToolAsync("answer_list",
             new { id = catalogId, key = gold });
         var column = Assert.Single(answered.GetProperty("columns").EnumerateArray().ToList());
         Assert.True(column.GetProperty("isViewer").GetBoolean());
@@ -672,7 +672,7 @@ public class AppIntegrationTests(PostgresFixture postgres) : IAsyncLifetime
         Assert.Contains("- [x] Gold", tally.GetProperty("markdown").GetString()!,
             StringComparison.Ordinal);
 
-        var status = await CallMcpToolAsync("collection_status", new { id = tallyId });
+        var status = await CallMcpToolAsync("get_list", new { id = tallyId });
         Assert.Equal(catalogId, status.GetProperty("catalogId").GetGuid());
     }
 
@@ -703,7 +703,7 @@ public class AppIntegrationTests(PostgresFixture postgres) : IAsyncLifetime
         using var visitor = factory.CreateClient();
         var html = await visitor.GetStringAsync($"/nodes/{id}");
 
-        Assert.Contains("collection-head", html, StringComparison.Ordinal);
+        Assert.Contains("list-head", html, StringComparison.Ordinal);
         Assert.Contains("Storm Scout", html, StringComparison.Ordinal);
         Assert.Contains("2 to collect", html, StringComparison.Ordinal);
         // Signed out is read-only: the column a reader would have had is an invitation,

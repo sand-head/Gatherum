@@ -1619,7 +1619,7 @@ the first account ever seen.
 What this deliberately leaves undone: the access modes still go from `Shared`, which names
 people, straight to `Unlisted` and `Public`, which mean the open internet. There is no mode
 for "anyone who got past the front door", and once the front door is a group that is the
-gap that will be felt first — see COLLECTIONS.md, which ran into it.
+gap that will be felt first — see LISTS.md, which ran into it.
 
 ## Authenticated is a second axis, not a fourth rung
 "Everyone who can sign in" is the mode a Gatherum shared by a group actually wants, and
@@ -1652,7 +1652,7 @@ query. Keeping it out means this change moves nothing for an instance that has t
 switched off.
 
 ## A shared list is one construct, and both halves of it are files
-`COLLECTIONS.md` is the design; this is what got built and what it cost.
+`LISTS.md` is the design; this is what got built and what it cost.
 
 A collaborative collectible list conflates two documents with different tempos: what
 exists to collect, written once by one author, and what *I* have, written constantly by
@@ -1764,13 +1764,13 @@ component.
 
 The word rides in `Block.Tag` where the construct's argument already rode, survives the
 round trip because the writer gives back what the source said, and reaches the reading
-view through `CollectionView.Kind` — the *catalog's* word, not the tally's, so a grid
+view through `SharedListView.Kind` — the *catalog's* word, not the tally's, so a grid
 read from either page says the same thing. What it decides is: what the first column is
 called, how the total and the score are phrased, what to say to somebody who has not
 answered, and what a screen reader hears at a mark. What it decides beyond that is
 nothing, which is the property that makes adding one safe.
 
-The set lives in two places by necessity — `CollectionSyntax.Kinds` parses without an
+The set lives in two places by necessity — `SharedListSyntax.Kinds` parses without an
 editor, `ListVocabulary` says what each word calls things and cannot be in Core because it
 is chrome — and a test pins them equal, the way the manual is pinned to the constructs it
 documents. An unknown word still renders a grid in the commonest vocabulary rather than
@@ -1781,7 +1781,7 @@ A poll came next and tested the shape, which is what it was for. Two of the thre
 it needed were vocabulary — "Option" for the first column, "picked this" at a mark — and
 the third was not: a poll is **one answer each**, which is a rule about what a file may
 say rather than about how a grid looks. So it went beside the parser
-(`CollectionSyntax.PicksOne`) and is enforced on the write path, where the tally is
+(`SharedListSyntax.PicksOne`) and is enforced on the write path, where the tally is
 actually produced; the reading view only reads it to draw a radio instead of a box, which
 is a promise the write then keeps. Withdrawing is still allowed — one answer *at most*,
 not one compulsorily.
@@ -1815,7 +1815,7 @@ thirds of them waste width on. The total is counted before any column is
 withheld, so a poll reports honestly rather than reporting whatever this reader was
 allowed to see.
 
-The type names did not follow. `CollectionService`, `CollectionSyntax`, `CollectionWidget`
+The type names did not follow. `SharedListService`, `SharedListSyntax`, `SharedListWidget`
 still say collection, which is now the name of the flagship question rather than of the
 mechanism. Renaming them across Core, Web and Client is churn against no behavior, and
 "a collection of everyone's answers" is a fair reading of what the service returns.

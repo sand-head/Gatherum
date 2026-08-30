@@ -44,10 +44,10 @@ auto-login. Migrations: `dotnet ef migrations add <Name> -p src/Gatherum.Infrast
   resolution, `CategoryService` = the taxonomy and what is filed in it, with
   `CategoryIndex` the one-snapshot-per-operation view of its graph,
   `FileService` = bodies/versions/text editing, `BookmarkService` = a URL captured as
-  a file node and captured again on demand, `CollectionService` = a shared list's
+  a file node and captured again on demand, `SharedListService` = a shared list's
   catalog fused with every tally of it, and the one write, which is always the
   caller's own tally), `Markdown/MarkdownContent`,
-  `Markdown/WikiLinkSyntax` and `Markdown/CollectionSyntax` (the conventions a body
+  `Markdown/WikiLinkSyntax` and `Markdown/SharedListSyntax` (the conventions a body
   carries, read server-side without an editor), the seam
   interfaces in `Abstractions/`, `Services/MediaAnalysisQueue` — the hand-off from
   an upload to the background analyzer — and search's two halves: `SearchService` fuses
@@ -75,7 +75,7 @@ auto-login. Migrations: `dotnet ef migrations add <Name> -p src/Gatherum.Infrast
   the foot of a page (`NodeCategories`), version panel, file view, and settings keys — plus Gatherum's Markdown dialect, which lives
   here because it is the editor's word: `GatherumMarkdown` (the extension set and the
   only read/write door), `AsideExtension`/`CalloutExtension`/`BlockTags`,
-  `CollectionExtension` and the `CollectionWidget` grid it is read as,
+  `SharedListExtension` and the `SharedListWidget` grid it is read as,
   `DocumentChrome` (floats and decorations derived from tags), `ChromeInk`,
   `DocumentFonts` (the shipped serif, embedded for Skia and served for `@font-face`), `WikiLinks`,
   `NodeLinks` (the padlock a link the reader may not follow wears) and `NodeUrl`. `IAppData` (`AppData.cs`) is their only view of the world —
@@ -126,11 +126,11 @@ fresh DI scope via `Services/AppOperations`.
 - A shared list is two documents, and one mechanism with several words for it — the
   fence's word (`collection`, `availability`, `poll`) says what an answer *means*, the way a
   callout's kind does. It decides the wording, whether a row's own total is worth a
-  column, whether a person has one answer or many (`CollectionSyntax.PicksOne`,
+  column, whether a person has one answer or many (`SharedListSyntax.PicksOne`,
   enforced on the write because the file is what everybody else reads), and whether the
   grid names who answered what (`NamesAnswers` — a poll does not, withheld in the answer
   the server builds rather than in the markup, because a name the response still carries
-  is not withheld). `CollectionSyntax.Kinds` parses them and
+  is not withheld). `SharedListSyntax.Kinds` parses them and
   `ListVocabulary` says what each calls things; adding a question is a row in each, and
   there is no third place. The catalog is a page with a `:::collection`
   fence; a tally is a page per person whose fence names that catalog, under its owner's
@@ -141,7 +141,7 @@ fresh DI scope via `Services/AppOperations`.
   its *page* (its URL, the tree, search), which is why answering never publishes one. Answers
   are content, so they are a file: no `NodeAnswers` table, ever. Ordinary `- [ ]` outside a
   fence still means shared state, and reinterpreting it would break the commoner kind of
-  checklist silently. See COLLECTIONS.md.
+  checklist silently. See LISTS.md.
 - One tree for placement, one graph for subject, and nothing else names a subject. A node
   has one place in the node tree. A category is a *page* — a node with `IsCategory` set —
   and `NodeCategory` is the taxonomy's only relation: an edge to a category is a
@@ -248,7 +248,7 @@ second icon set, and don't hand-draw a path when the pack has one.
    slopedit widget in `NodeReader` and render a component — the reading view's business
    alone. The canvas keeps painting the blocks, which is what stops a control from ever
    registering as an edit of an open document; `DocumentChrome` still declares the card
-   it wears there. `CollectionWidget` is the one today.
+   it wears there. `SharedListWidget` is the one today.
 6. Round-trip test in `GatherumMarkdownTests`: parse, write, parse, write, compare.
 7. Write it into `src/Gatherum.Web/Docs/markdown.md`. The manual ships with the app and
    is what a model gets pointed at, so a construct it never mentions may as well not
@@ -312,7 +312,7 @@ second icon set, and don't hand-draw a path when the pack has one.
 Deviations and judgment calls go in [DECISIONS.md](DECISIONS.md) when they happen —
 commit messages alone don't count.
 
-[COLLECTIONS.md](COLLECTIONS.md) is the design behind shared lists — why a tally is a
+[LISTS.md](LISTS.md) is the design behind shared lists — why a tally is a
 file and not a table, why an item's page is optional, and why signing out means reading
 rather than answering. Read it before changing anything under `:::collection`.
 

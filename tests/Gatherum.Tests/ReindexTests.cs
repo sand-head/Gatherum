@@ -28,6 +28,57 @@ public class ReindexTests(PostgresFixture postgres) : IAsyncLifetime
         [new Gatherum.Infrastructure.Extraction.PlainTextExtractor()],
         host.Clock, NullLogger<Reindexer>.Instance);
 
+    /// <summary>Links are derived from bodies, so a rebuild has to derive them again.
+    /// Before this pass existed a restored deployment had no backlinks at all until
+    /// somebody re-saved every page — and a shared list, which finds everyone's answers by
+    /// exactly these rows, came back empty.</summary>
+    [Fact]
+    public async Task Backlinks_are_derived_again_from_the_bodies_that_made_them()
+    {
+        var homelab = await harness.Files.CreateTextNodeAsync(jess, null, "Homelab", "the rack");
+        var podman = await harness.Files.CreateTextNodeAsync(jess, null, "Podman",
+            $"Runs on [[Homelab]], see [the rack](node://{homelab.Id}).");
+        Assert.Equal([podman.Id],
+            (await harness.Nodes.GetBacklinksAsync(jess, homelab.Id)).Select(n => n.Id));
+
+        await using var rebuilt = harness.Fork(await postgres.CreateDatabaseAsync());
+        await rebuilt.AddUserAsync("jess");
+        var report = await NewReindexer(rebuilt).RunAsync();
+
+        var back = rebuilt.Db.Nodes.Single(n => n.Title == "Homelab");
+        var source = rebuilt.Db.Nodes.Single(n => n.Title == "Podman");
+        Assert.Equal([source.Id],
+            (await rebuilt.Nodes.GetBacklinksAsync(source.OwnerId, back.Id)).Select(n => n.Id));
+        // Both spellings, and only one row: a page that names a node twice links it once.
+        Assert.Equal(1, report.Links);
+    }
+
+    /// <summary>The whole feature, through the eye of the needle: a shared list is two
+    /// files and a link row, and the link row is the only part the database was holding.</summary>
+    [Fact]
+    public async Task A_shared_lists_answers_survive_losing_the_database()
+    {
+        var catalog = await harness.Files.CreateTextNodeAsync(jess, null, "Override sprites", """
+            :::collection Override sprites
+            - Sonic
+            - Tails
+            :::
+            """);
+        await harness.Access.SetAccessAsync(jess, catalog.Id, AccessMode.Authenticated);
+        var rows = await harness.SharedLists.GetAsync(jess, catalog.Id);
+        await harness.SharedLists.SetAsync(jess, catalog.Id,
+            rows.Rows.Single(r => r.Text == "Tails").Key, answered: true);
+
+        await using var rebuilt = harness.Fork(await postgres.CreateDatabaseAsync());
+        var jessAgain = await rebuilt.AddUserAsync("jess");
+        await NewReindexer(rebuilt).RunAsync();
+
+        var back = rebuilt.Db.Nodes.Single(n => n.Title == "Override sprites" && n.ParentId == null);
+        var view = await rebuilt.SharedLists.GetAsync(jessAgain, back.Id);
+        Assert.Equal(1, Assert.Single(view.Columns).Count);
+        Assert.Equal(1, view.Rows.Single(r => r.Text == "Tails").Answers);
+    }
+
     [Fact]
     public async Task Losing_the_database_costs_nothing_but_recomputation()
     {

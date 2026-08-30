@@ -8,10 +8,10 @@ namespace Gatherum.Tests;
 /// <summary>The two documents meeting: a catalog somebody wrote, a tally per person,
 /// and the grid that is nothing but the tallies a reader may enumerate.</summary>
 [Collection("postgres")]
-public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
+public class SharedListServiceTests(PostgresFixture postgres) : IAsyncLifetime
 {
     private ServiceHarness harness = null!;
-    private CollectionService collections = null!;
+    private SharedListService lists = null!;
     private FileService files = null!;
     private AccessService access = null!;
     private Guid alice;
@@ -32,7 +32,7 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
     public async Task InitializeAsync()
     {
         harness = new ServiceHarness(await postgres.CreateDatabaseAsync());
-        collections = harness.Collections;
+        lists = harness.SharedLists;
         files = harness.Files;
         access = harness.Access;
         alice = await harness.AddUserAsync("alice");
@@ -48,7 +48,7 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
         return page;
     }
 
-    private static string KeyOf(CollectionView view, string item, string? variant = null)
+    private static string KeyOf(SharedListView view, string item, string? variant = null)
     {
         var row = view.Rows.Single(r => r.Text == item);
         return variant is null ? row.Key : row.Variants.Single(v => v.Text == variant).Key;
@@ -59,7 +59,7 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
     {
         var page = await CatalogAsync();
 
-        var view = await collections.GetAsync(alice, page.Id);
+        var view = await lists.GetAsync(alice, page.Id);
 
         Assert.Equal("Override sprites", view.List);
         Assert.Equal(["Sonic", "Tails", "Storm Scout"], view.Rows.Select(r => r.Text));
@@ -67,7 +67,7 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
         Assert.Empty(view.Columns);
         // Four collectibles across three lines: two of Sonic's variants, and the two
         // items that have none.
-        Assert.Equal(4, view.Collectibles);
+        Assert.Equal(4, view.Answerable);
     }
 
     [Fact]
@@ -75,8 +75,8 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
     {
         var page = await CatalogAsync();
 
-        var view = await collections.SetAsync(alice, page.Id, KeyOf(await Empty(page), "Tails"),
-            collected: true);
+        var view = await lists.SetAsync(alice, page.Id, KeyOf(await Empty(page), "Tails"),
+            answered: true);
 
         var mine = Assert.Single(view.Columns);
         Assert.True(mine.IsViewer);
@@ -87,7 +87,7 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
         var tally = await harness.ReloadAsync(alice, mine.TallyId);
         Assert.Equal("Override sprites", tally.Title);
         var folder = await harness.ReloadAsync(alice, tally.ParentId!.Value);
-        Assert.Equal(CollectionService.TallyFolder, folder.Title);
+        Assert.Equal(SharedListService.TallyFolder, folder.Title);
     }
 
     /// <summary>A tally is a file under its owner's root, not a row in a table: it is
@@ -97,11 +97,11 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
     public async Task A_tally_is_a_page_that_says_what_it_is()
     {
         var page = await CatalogAsync();
-        var view = await collections.SetAsync(alice, page.Id, KeyOf(await Empty(page), "Tails"),
-            collected: true);
+        var view = await lists.SetAsync(alice, page.Id, KeyOf(await Empty(page), "Tails"),
+            answered: true);
 
         var body = await files.GetTextAsync(alice, view.TallyId!.Value);
-        var block = Assert.Single(CollectionSyntax.Read(body));
+        var block = Assert.Single(SharedListSyntax.Read(body));
 
         Assert.False(block.Declares);
         Assert.Equal(page.Id, block.Tracks!.NodeId);
@@ -114,11 +114,11 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
     {
         var page = await CatalogAsync();
         var rows = await Empty(page);
-        await collections.SetAsync(alice, page.Id, KeyOf(rows, "Tails"), collected: true);
-        await collections.SetAsync(bob, page.Id, KeyOf(rows, "Storm Scout"), collected: true);
-        await collections.SetAsync(bob, page.Id, KeyOf(rows, "Sonic", "Gold"), collected: true);
+        await lists.SetAsync(alice, page.Id, KeyOf(rows, "Tails"), answered: true);
+        await lists.SetAsync(bob, page.Id, KeyOf(rows, "Storm Scout"), answered: true);
+        await lists.SetAsync(bob, page.Id, KeyOf(rows, "Sonic", "Gold"), answered: true);
 
-        var view = await collections.GetAsync(bob, page.Id);
+        var view = await lists.GetAsync(bob, page.Id);
 
         Assert.Equal(2, view.Columns.Count);
         // The reader's own column leads, whoever has more.
@@ -134,9 +134,9 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
     {
         var page = await CatalogAsync();
         var key = KeyOf(await Empty(page), "Tails");
-        await collections.SetAsync(alice, page.Id, key, collected: true);
+        await lists.SetAsync(alice, page.Id, key, answered: true);
 
-        var view = await collections.SetAsync(alice, page.Id, key, collected: false);
+        var view = await lists.SetAsync(alice, page.Id, key, answered: false);
 
         Assert.Equal(0, Assert.Single(view.Columns).Count);
     }
@@ -151,7 +151,7 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
         var sonic = (await Empty(page)).Rows.Single(r => r.Text == "Sonic").Key;
 
         await Assert.ThrowsAsync<NotFoundException>(
-            () => collections.SetAsync(alice, page.Id, sonic, collected: true));
+            () => lists.SetAsync(alice, page.Id, sonic, answered: true));
     }
 
     [Fact]
@@ -159,14 +159,14 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
     {
         var page = await CatalogAsync();
         var rows = await Empty(page);
-        var view = await collections.SetAsync(alice, page.Id, KeyOf(rows, "Tails"), collected: true);
+        var view = await lists.SetAsync(alice, page.Id, KeyOf(rows, "Tails"), answered: true);
         var body = await files.GetTextAsync(alice, view.TallyId!.Value);
         await files.SaveTextAsync(alice, view.TallyId.Value,
             body.Replace("- [x] Tails", "- [x] Tails — traded for it"));
 
-        await collections.SetAsync(alice, page.Id, KeyOf(rows, "Storm Scout"), collected: true);
+        await lists.SetAsync(alice, page.Id, KeyOf(rows, "Storm Scout"), answered: true);
 
-        var again = CollectionSyntax.Read(
+        var again = SharedListSyntax.Read(
             await files.GetTextAsync(alice, view.TallyId.Value))[0];
         Assert.Equal("traded for it", again.Items.Single(i => i.Text == "Tails").Note);
     }
@@ -179,10 +179,10 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
     public async Task Everyone_who_can_read_the_list_sees_everyone_s_answers()
     {
         var page = await CatalogAsync();
-        var mine = await collections.SetAsync(alice, page.Id,
-            KeyOf(await Empty(page), "Tails"), collected: true);
+        var mine = await lists.SetAsync(alice, page.Id,
+            KeyOf(await Empty(page), "Tails"), answered: true);
 
-        var hers = Assert.Single((await collections.GetAsync(bob, page.Id)).Columns);
+        var hers = Assert.Single((await lists.GetAsync(bob, page.Id)).Columns);
         Assert.Equal(alice, hers.OwnerId);
         Assert.False(hers.IsViewer);
         Assert.Equal(1, hers.Count);
@@ -198,10 +198,10 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
     public async Task A_column_in_the_grid_does_not_open_the_page_behind_it()
     {
         var page = await CatalogAsync();
-        var mine = await collections.SetAsync(alice, page.Id,
-            KeyOf(await Empty(page), "Tails"), collected: true);
+        var mine = await lists.SetAsync(alice, page.Id,
+            KeyOf(await Empty(page), "Tails"), answered: true);
 
-        Assert.Single((await collections.GetAsync(bob, page.Id)).Columns);
+        Assert.Single((await lists.GetAsync(bob, page.Id)).Columns);
 
         await Assert.ThrowsAnyAsync<Exception>(
             () => harness.Nodes.GetVisibleAsync(bob, mine.TallyId!.Value));
@@ -215,12 +215,12 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
     public async Task A_list_the_reader_cannot_see_has_no_columns_to_show()
     {
         var page = await CatalogAsync();
-        await collections.SetAsync(alice, page.Id, KeyOf(await Empty(page), "Tails"),
-            collected: true);
+        await lists.SetAsync(alice, page.Id, KeyOf(await Empty(page), "Tails"),
+            answered: true);
         await access.SetAccessAsync(alice, page.Id, AccessMode.Private);
 
-        await Assert.ThrowsAsync<NotFoundException>(() => collections.GetAsync(bob, page.Id));
-        await Assert.ThrowsAsync<NotFoundException>(() => collections.GetAsync(null, page.Id));
+        await Assert.ThrowsAsync<NotFoundException>(() => lists.GetAsync(bob, page.Id));
+        await Assert.ThrowsAsync<NotFoundException>(() => lists.GetAsync(null, page.Id));
     }
 
     /// <summary>An orphan is only actionable by whoever owns the file it is in, and the
@@ -229,23 +229,23 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
     public async Task Orphaned_answers_are_reported_to_their_owner_and_nobody_else()
     {
         var page = await CatalogAsync();
-        await collections.SetAsync(alice, page.Id, KeyOf(await Empty(page), "Tails"),
-            collected: true);
+        await lists.SetAsync(alice, page.Id, KeyOf(await Empty(page), "Tails"),
+            answered: true);
         await files.SaveTextAsync(alice, page.Id, Roster.Replace("- Tails", "- Tails the Fox"));
 
-        Assert.NotEmpty(Assert.Single((await collections.GetAsync(alice, page.Id)).Columns)
+        Assert.NotEmpty(Assert.Single((await lists.GetAsync(alice, page.Id)).Columns)
             .Orphans);
-        Assert.Empty(Assert.Single((await collections.GetAsync(bob, page.Id)).Columns).Orphans);
+        Assert.Empty(Assert.Single((await lists.GetAsync(bob, page.Id)).Columns).Orphans);
     }
 
     [Fact]
     public async Task Signed_out_reads_a_public_list_and_writes_nothing()
     {
         var page = await CatalogAsync(AccessMode.Public);
-        await collections.SetAsync(alice, page.Id,
-            KeyOf(await Empty(page), "Tails"), collected: true);
+        await lists.SetAsync(alice, page.Id,
+            KeyOf(await Empty(page), "Tails"), answered: true);
 
-        var view = await collections.GetAsync(null, page.Id);
+        var view = await lists.GetAsync(null, page.Id);
 
         Assert.False(view.CanAnswer);
         Assert.Null(view.TallyId);
@@ -259,14 +259,14 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
     public async Task Answers_keep_counting_when_an_item_gains_a_page()
     {
         var page = await CatalogAsync();
-        await collections.SetAsync(alice, page.Id, KeyOf(await Empty(page), "Tails"),
-            collected: true);
+        await lists.SetAsync(alice, page.Id, KeyOf(await Empty(page), "Tails"),
+            answered: true);
         var sprite = await files.CreateTextNodeAsync(alice, null, "Tails", "A fox.");
 
         await files.SaveTextAsync(alice, page.Id,
             Roster.Replace("- Tails", $"- [Tails](node://{sprite.Id})"));
 
-        var view = await collections.GetAsync(alice, page.Id);
+        var view = await lists.GetAsync(alice, page.Id);
         Assert.Equal(sprite.Id, view.Rows.Single(r => r.Text == "Tails").NodeId);
         Assert.Equal(1, Assert.Single(view.Columns).Count);
     }
@@ -278,15 +278,15 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
     public async Task A_rename_orphans_the_answers_it_stranded_and_says_so()
     {
         var page = await CatalogAsync();
-        await collections.SetAsync(alice, page.Id, KeyOf(await Empty(page), "Sonic", "Gold"),
-            collected: true);
-        await collections.SetAsync(alice, page.Id, KeyOf(await Empty(page), "Tails"),
-            collected: true);
+        await lists.SetAsync(alice, page.Id, KeyOf(await Empty(page), "Sonic", "Gold"),
+            answered: true);
+        await lists.SetAsync(alice, page.Id, KeyOf(await Empty(page), "Tails"),
+            answered: true);
 
         await files.SaveTextAsync(alice, page.Id,
             Roster.Replace("- Tails", "- Tails the Fox").Replace("  - Gold", "  - Cheat Master"));
 
-        var mine = Assert.Single((await collections.GetAsync(alice, page.Id)).Columns);
+        var mine = Assert.Single((await lists.GetAsync(alice, page.Id)).Columns);
         Assert.Equal(0, mine.Count);
         Assert.Equal(["Sonic — Gold", "Tails"], mine.Orphans.Select(o => o.Text).Order());
     }
@@ -297,16 +297,16 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
     public async Task An_orphaned_answer_comes_back_when_its_item_does()
     {
         var page = await CatalogAsync();
-        await collections.SetAsync(alice, page.Id, KeyOf(await Empty(page), "Tails"),
-            collected: true);
+        await lists.SetAsync(alice, page.Id, KeyOf(await Empty(page), "Tails"),
+            answered: true);
         await files.SaveTextAsync(alice, page.Id, Roster.Replace("- Tails", "- Tails the Fox"));
         // Another answer, so the tally is rewritten while the orphan is stranded.
-        await collections.SetAsync(alice, page.Id,
-            KeyOf(await collections.GetAsync(alice, page.Id), "Storm Scout"), collected: true);
+        await lists.SetAsync(alice, page.Id,
+            KeyOf(await lists.GetAsync(alice, page.Id), "Storm Scout"), answered: true);
 
         await files.SaveTextAsync(alice, page.Id, Roster);
 
-        var mine = Assert.Single((await collections.GetAsync(alice, page.Id)).Columns);
+        var mine = Assert.Single((await lists.GetAsync(alice, page.Id)).Columns);
         Assert.Empty(mine.Orphans);
         Assert.Equal(2, mine.Count);
     }
@@ -322,7 +322,7 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
             """);
         await access.SetAccessAsync(bob, notes.Id, AccessMode.Authenticated);
 
-        Assert.Empty((await collections.GetAsync(alice, page.Id)).Columns);
+        Assert.Empty((await lists.GetAsync(alice, page.Id)).Columns);
     }
 
     [Fact]
@@ -339,17 +339,17 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
             :::
             """);
 
-        var sprites = await collections.GetAsync(alice, page.Id, "Sprites");
-        var emotes = await collections.GetAsync(alice, page.Id, "Emotes");
+        var sprites = await lists.GetAsync(alice, page.Id, "Sprites");
+        var emotes = await lists.GetAsync(alice, page.Id, "Emotes");
         Assert.Equal(["Sonic", "Tails"], sprites.Rows.Select(r => r.Text));
         Assert.Equal(["Floss"], emotes.Rows.Select(r => r.Text));
 
-        await collections.SetAsync(alice, page.Id, KeyOf(sprites, "Sonic"), collected: true,
-            list: "Sprites");
+        await lists.SetAsync(alice, page.Id, KeyOf(sprites, "Sonic"), answered: true,
+            name: "Sprites");
 
         Assert.Equal(1, Assert.Single(
-            (await collections.GetAsync(alice, page.Id, "Sprites")).Columns).Count);
-        Assert.Empty((await collections.GetAsync(alice, page.Id, "Emotes")).Columns);
+            (await lists.GetAsync(alice, page.Id, "Sprites")).Columns).Count);
+        Assert.Empty((await lists.GetAsync(alice, page.Id, "Emotes")).Columns);
     }
 
     /// <summary>A tally page is a place to read the grid from too — it aggregates the
@@ -358,10 +358,10 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
     public async Task A_tally_page_shows_the_same_grid_the_catalog_does()
     {
         var page = await CatalogAsync();
-        var mine = await collections.SetAsync(alice, page.Id,
-            KeyOf(await Empty(page), "Tails"), collected: true);
+        var mine = await lists.SetAsync(alice, page.Id,
+            KeyOf(await Empty(page), "Tails"), answered: true);
 
-        var view = await collections.GetAsync(alice, mine.TallyId!.Value);
+        var view = await lists.GetAsync(alice, mine.TallyId!.Value);
 
         Assert.Equal(page.Id, view.CatalogId);
         Assert.Equal(["Sonic", "Tails", "Storm Scout"], view.Rows.Select(r => r.Text));
@@ -380,7 +380,7 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
             :::
             """);
 
-        var column = Assert.Single((await collections.GetAsync(bob, page.Id)).Columns);
+        var column = Assert.Single((await lists.GetAsync(bob, page.Id)).Columns);
         Assert.Equal(bob, column.OwnerId);
         Assert.Equal(1, column.Count);
     }
@@ -390,7 +390,7 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
     {
         var page = await files.CreateTextNodeAsync(alice, null, "Plain", "Nothing here.");
 
-        await Assert.ThrowsAsync<NotFoundException>(() => collections.GetAsync(alice, page.Id));
+        await Assert.ThrowsAsync<NotFoundException>(() => lists.GetAsync(alice, page.Id));
     }
 
     [Fact]
@@ -398,8 +398,8 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
     {
         var page = await CatalogAsync(AccessMode.Private);
 
-        await Assert.ThrowsAsync<NotFoundException>(() => collections.GetAsync(bob, page.Id));
-        await Assert.ThrowsAsync<NotFoundException>(() => collections.GetAsync(null, page.Id));
+        await Assert.ThrowsAsync<NotFoundException>(() => lists.GetAsync(bob, page.Id));
+        await Assert.ThrowsAsync<NotFoundException>(() => lists.GetAsync(null, page.Id));
     }
 
     /// <summary>The mechanism knows nothing about collectibles: "who has which sprite"
@@ -417,15 +417,15 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
             """);
         await access.SetAccessAsync(alice, page.Id, AccessMode.Authenticated);
 
-        var view = await collections.GetAsync(alice, page.Id);
+        var view = await lists.GetAsync(alice, page.Id);
         Assert.Equal("availability", view.Kind);
-        Assert.Equal(3, view.Collectibles);
+        Assert.Equal(3, view.Answerable);
 
-        await collections.SetAsync(alice, page.Id, KeyOf(view, "Fri 3 Oct"), collected: true);
-        await collections.SetAsync(bob, page.Id, KeyOf(view, "Fri 3 Oct"), collected: true);
-        await collections.SetAsync(bob, page.Id, KeyOf(view, "Fri 17 Oct"), collected: true);
+        await lists.SetAsync(alice, page.Id, KeyOf(view, "Fri 3 Oct"), answered: true);
+        await lists.SetAsync(bob, page.Id, KeyOf(view, "Fri 3 Oct"), answered: true);
+        await lists.SetAsync(bob, page.Id, KeyOf(view, "Fri 17 Oct"), answered: true);
 
-        var everyone = await collections.GetAsync(bob, page.Id);
+        var everyone = await lists.GetAsync(bob, page.Id);
         Assert.Equal(2, everyone.Columns.Count);
         Assert.Equal([2, 1], everyone.Columns.Select(c => c.Count));
         // And the tally it wrote opens with the catalog's word, not the default one.
@@ -447,18 +447,18 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
             :::
             """);
         await access.SetAccessAsync(alice, page.Id, AccessMode.Authenticated);
-        var rows = await collections.GetAsync(alice, page.Id);
+        var rows = await lists.GetAsync(alice, page.Id);
 
-        await collections.SetAsync(alice, page.Id, KeyOf(rows, "Thai"), collected: true);
-        var moved = await collections.SetAsync(alice, page.Id, KeyOf(rows, "Sushi"),
-            collected: true);
+        await lists.SetAsync(alice, page.Id, KeyOf(rows, "Thai"), answered: true);
+        var moved = await lists.SetAsync(alice, page.Id, KeyOf(rows, "Sushi"),
+            answered: true);
 
         var mine = Assert.Single(moved.Columns);
         Assert.Equal(1, mine.Count);
         Assert.Equal([KeyOf(rows, "Sushi")], mine.Held);
         // And the file says one answer, not two.
         var tally = await files.GetTextAsync(alice, moved.TallyId!.Value);
-        Assert.Single(CollectionSyntax.Read(tally)[0].Items, i => i.Checked);
+        Assert.Single(SharedListSyntax.Read(tally)[0].Items, i => i.Checked);
     }
 
     /// <summary>Taking an answer back is still taking it back: a poll is one answer at
@@ -472,10 +472,10 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
             - Pizza
             :::
             """);
-        var thai = KeyOf(await collections.GetAsync(alice, page.Id), "Thai");
-        await collections.SetAsync(alice, page.Id, thai, collected: true);
+        var thai = KeyOf(await lists.GetAsync(alice, page.Id), "Thai");
+        await lists.SetAsync(alice, page.Id, thai, answered: true);
 
-        var view = await collections.SetAsync(alice, page.Id, thai, collected: false);
+        var view = await lists.SetAsync(alice, page.Id, thai, answered: false);
 
         Assert.Equal(0, Assert.Single(view.Columns).Count);
     }
@@ -488,9 +488,9 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
         var page = await CatalogAsync();
         var rows = await Empty(page);
 
-        await collections.SetAsync(alice, page.Id, KeyOf(rows, "Tails"), collected: true);
-        var both = await collections.SetAsync(alice, page.Id, KeyOf(rows, "Storm Scout"),
-            collected: true);
+        await lists.SetAsync(alice, page.Id, KeyOf(rows, "Tails"), answered: true);
+        var both = await lists.SetAsync(alice, page.Id, KeyOf(rows, "Storm Scout"),
+            answered: true);
 
         Assert.Equal(2, Assert.Single(both.Columns).Count);
     }
@@ -508,11 +508,11 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
             :::
             """);
         await access.SetAccessAsync(alice, page.Id, AccessMode.Authenticated);
-        var rows = await collections.GetAsync(alice, page.Id);
-        await collections.SetAsync(alice, page.Id, KeyOf(rows, "Thai"), collected: true);
-        await collections.SetAsync(bob, page.Id, KeyOf(rows, "Thai"), collected: true);
+        var rows = await lists.GetAsync(alice, page.Id);
+        await lists.SetAsync(alice, page.Id, KeyOf(rows, "Thai"), answered: true);
+        await lists.SetAsync(bob, page.Id, KeyOf(rows, "Thai"), answered: true);
 
-        var seen = await collections.GetAsync(bob, page.Id);
+        var seen = await lists.GetAsync(bob, page.Id);
 
         // Bob's own column, and nobody else's — not even a name.
         var mine = Assert.Single(seen.Columns);
@@ -536,11 +536,11 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
             :::
             """);
         await access.SetAccessAsync(alice, page.Id, AccessMode.Authenticated);
-        var rows = await collections.GetAsync(alice, page.Id);
-        await collections.SetAsync(alice, page.Id, KeyOf(rows, "Fri Oct 3"), collected: true);
-        await collections.SetAsync(bob, page.Id, KeyOf(rows, "Fri Oct 3"), collected: true);
+        var rows = await lists.GetAsync(alice, page.Id);
+        await lists.SetAsync(alice, page.Id, KeyOf(rows, "Fri Oct 3"), answered: true);
+        await lists.SetAsync(bob, page.Id, KeyOf(rows, "Fri Oct 3"), answered: true);
 
-        var seen = await collections.GetAsync(bob, page.Id);
+        var seen = await lists.GetAsync(bob, page.Id);
 
         Assert.Equal(2, seen.Columns.Count);
         Assert.Contains(seen.Columns, c => c.OwnerId == alice);
@@ -554,11 +554,11 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
     {
         var page = await CatalogAsync();
         var rows = await Empty(page);
-        await collections.SetAsync(alice, page.Id, KeyOf(rows, "Tails"), collected: true);
-        await collections.SetAsync(bob, page.Id, KeyOf(rows, "Tails"), collected: true);
-        await collections.SetAsync(bob, page.Id, KeyOf(rows, "Sonic", "Gold"), collected: true);
+        await lists.SetAsync(alice, page.Id, KeyOf(rows, "Tails"), answered: true);
+        await lists.SetAsync(bob, page.Id, KeyOf(rows, "Tails"), answered: true);
+        await lists.SetAsync(bob, page.Id, KeyOf(rows, "Sonic", "Gold"), answered: true);
 
-        var seen = await collections.GetAsync(alice, page.Id);
+        var seen = await lists.GetAsync(alice, page.Id);
 
         Assert.Equal(2, seen.Rows.Single(r => r.Text == "Tails").Answers);
         Assert.Equal(1, seen.Rows.Single(r => r.Text == "Sonic")
@@ -566,5 +566,5 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
         Assert.Equal(2, seen.Participants);
     }
 
-    private Task<CollectionView> Empty(Node page) => collections.GetAsync(alice, page.Id);
+    private Task<SharedListView> Empty(Node page) => lists.GetAsync(alice, page.Id);
 }

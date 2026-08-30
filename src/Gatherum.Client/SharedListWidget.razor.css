@@ -1,4 +1,4 @@
-/* A collection list on the reading surface.
+/* A shared list on the reading surface.
 
    The grid is a table because that is what it is — a row per collectible, a column per
    person — and a table gets a screen reader, find-in-page and native selection for
@@ -9,7 +9,7 @@
    It scrolls inside its own box rather than pushing the article sideways: a roster with
    a dozen participants is wide, and a page that scrolls horizontally is broken. */
 
-.collection {
+.shared-list {
     margin: 22px 0;
     background: var(--surface);
     border: 1px solid var(--outline);
@@ -18,7 +18,7 @@
     font-family: var(--font-ui);
 }
 
-.collection-head {
+.list-head {
     display: flex;
     align-items: center;
     gap: 12px;
@@ -27,7 +27,7 @@
     border-bottom: 1px solid var(--outline-dim);
 }
 
-.collection-name {
+.list-name {
     flex: 1;
     margin: 0;
     font-size: 0.95rem;
@@ -35,7 +35,7 @@
     line-height: 1.2;
 }
 
-.collection-count {
+.list-count {
     color: var(--on-surface-dim);
     font-size: 0.78rem;
     font-variant-numeric: tabular-nums;
@@ -309,7 +309,7 @@ td.mark.you, th.col-you { background: color-mix(in srgb, var(--primary) 6%, tran
     & .orphans { color: var(--on-surface); }
 }
 
-.collection-foot {
+.list-foot {
     display: flex;
     align-items: center;
     gap: 14px;
@@ -321,25 +321,25 @@ td.mark.you, th.col-you { background: color-mix(in srgb, var(--primary) 6%, tran
     font-size: 0.78rem;
 }
 
-.collection-foot.error { color: var(--danger); }
+.list-foot.error { color: var(--danger); }
 
 /* A list that reports totals without naming anybody says so, rather than looking like a
    grid nobody joined. Sized here because an inline SVG with no width fills whatever it is
    given, and this one is given a whole panel. */
-.collection-foot.secret {
+.list-foot.secret {
     align-items: flex-start;
     gap: 9px;
     border-top: 1px solid var(--outline-dim);
 }
 
-.collection-foot.secret svg {
+.list-foot.secret svg {
     flex-shrink: 0;
     width: 14px;
     height: 14px;
     margin-top: 1px;
 }
 
-.collection-foot.secret span { flex: 1; min-width: 0; }
+.list-foot.secret span { flex: 1; min-width: 0; }
 
 /* How many people answered yes to a row — the question an availability list is read for
    and the one a poll is. A list read down its rows is a bar chart wearing a table, so the

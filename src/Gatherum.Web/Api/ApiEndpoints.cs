@@ -359,22 +359,22 @@ public static class ApiEndpoints
             return Results.NoContent();
         });
 
-        // A collection list, whichever page it is asked from: a catalog aggregates
-        // itself, a tally aggregates the catalog it tracks. Anonymous, because reading
-        // a published list is reading a published page — and the columns that come back
-        // are the tallies this visitor may enumerate and no others.
-        api.MapGet("/nodes/{id:guid}/collection", async (CollectionService collections,
-            HttpContext http, Guid id, string? list) =>
-            Results.Ok(CollectionDto.From(
-                await collections.GetAsync(http.User.GetUserIdOrNull(), id, list))))
+        // A shared list, whichever page it is asked from: a catalog aggregates itself, a
+        // tally aggregates the catalog it tracks. Anonymous, because reading a published
+        // list is reading a published page — and what comes back is what that visitor may
+        // see, which on a poll is the totals and nobody's name.
+        api.MapGet("/nodes/{id:guid}/list", async (SharedListService lists,
+            HttpContext http, Guid id, string? name) =>
+            Results.Ok(SharedListDto.From(
+                await lists.GetAsync(http.User.GetUserIdOrNull(), id, name))))
             .AllowAnonymous().RequireRateLimiting(AnonymousRateLimits.Read);
 
         // Answering writes the caller's own tally and nobody else's, so there is no
         // anonymous door here — a column in a shared grid is somebody's file.
-        api.MapPost("/nodes/{id:guid}/collection", async (CollectionService collections,
-            HttpContext http, Guid id, CollectAnswerRequest request) =>
-            Results.Ok(CollectionDto.From(await collections.SetAsync(http.User.GetUserId(), id,
-                request.Key, request.Collected, request.List))));
+        api.MapPost("/nodes/{id:guid}/list", async (SharedListService lists,
+            HttpContext http, Guid id, AnswerRequest request) =>
+            Results.Ok(SharedListDto.From(await lists.SetAsync(http.User.GetUserId(), id,
+                request.Key, request.Answered, request.Name))));
 
         api.MapGet("/keys", async (ApiKeyService keys, HttpContext http) =>
         {

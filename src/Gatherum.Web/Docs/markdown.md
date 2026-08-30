@@ -252,7 +252,7 @@ Each renders as a tinted card in its kind's accent, with the title line inked to
 ## Shared lists — `:::collection`, `:::availability`
 
 A list people answer against, each keeping their own answer. Everything about it is in
-[shared lists](/docs/collections); the syntax is one fence with two spellings.
+[shared lists](/docs/lists); the syntax is one fence with two spellings.
 
 A fence whose argument is a **name** declares the list — the catalog, the rows
 everyone answers:
@@ -311,7 +311,7 @@ rules, different nouns:
 
 A **poll is one answer each**: picking a row takes back the last one. It also reports how
 many picked each option without naming anybody, where the other words name everyone — see
-[shared lists](/docs/collections) for what that does and does not promise.
+[shared lists](/docs/lists) for what that does and does not promise.
 
 - **An item is a line of text, and a page for it is optional.** A plain item is matched
   by its text; one that links a node is matched by that id, and so survives a rename.

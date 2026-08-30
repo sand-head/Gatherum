@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Gatherum.Core.Services;
 
 /// <summary>
-/// Collaborative collectible lists: what exists to collect, and what each person has.
+/// Shared lists: the rows a page puts to a group, and how each person answered them.
 ///
 /// The two are separate documents on purpose. The catalog is a page with a
 /// <c>:::collection</c> fence on it — one author, occasionally edited, shared once. A
@@ -30,27 +30,27 @@ namespace Gatherum.Core.Services;
 /// against. The exposure is exactly the row keys somebody answered and the name they answer
 /// under; the notes and orphans in their file are their own.
 /// </summary>
-public class CollectionService(
+public class SharedListService(
     GatherumDbContext db,
     NodeService nodes,
     FileService files)
 {
     /// <summary>Where a tally lands when somebody answers their first item. A page, like
     /// everything else — the tree has one kind of thing in it.</summary>
-    public const string TallyFolder = "Collections";
+    public const string TallyFolder = "Lists";
 
     /// <summary>A catalog's rows with every visible tally's answers against them.
     /// <paramref name="nodeId"/> is whichever page the reader is looking at: a catalog
     /// aggregates itself, a tally aggregates the catalog it tracks, and both answer
     /// with the same grid.</summary>
-    public async Task<CollectionView> GetAsync(Guid? userId, Guid nodeId, string? list = null,
+    public async Task<SharedListView> GetAsync(Guid? userId, Guid nodeId, string? name = null,
         CancellationToken ct = default)
     {
-        var (catalog, declared) = await ResolveAsync(userId, nodeId, list, ct);
+        var (catalog, declared) = await ResolveAsync(userId, nodeId, name, ct);
         var rows = Rows(declared.Items, parent: null);
         var leaves = rows.SelectMany(Leaves).Select(r => r.Key).ToHashSet(StringComparer.Ordinal);
 
-        var columns = new List<CollectionColumn>();
+        var columns = new List<SharedListColumn>();
         var answers = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var tally in await TalliesAsync(catalog, declared, ct))
         {
@@ -60,7 +60,7 @@ public class CollectionService(
                 answers[key] = answers.GetValueOrDefault(key) + 1;
             // Orphans are their owner's business — only they can act on one, and the
             // catalog's readers were shown answers, not the state of somebody's file.
-            columns.Add(new CollectionColumn(tally.Id, tally.OwnerId, tally.DisplayName,
+            columns.Add(new SharedListColumn(tally.Id, tally.OwnerId, tally.DisplayName,
                 isViewer, read.Held, isViewer ? Orphans(read.Orphans, "") : [],
                 read.Held.Count(leaves.Contains)));
         }
@@ -71,7 +71,7 @@ public class CollectionService(
         // whoever this reader is allowed to see.
         rows = WithAnswers(rows, answers);
 
-        if (!CollectionSyntax.NamesAnswers(declared.Word))
+        if (!SharedListSyntax.NamesAnswers(declared.Word))
         {
             // A poll reports how many, never who — and it withholds them here rather than
             // in the markup, because a name the response still carries is a name anybody
@@ -88,19 +88,19 @@ public class CollectionService(
                 ? b.Count - a.Count
                 : string.Compare(a.DisplayName, b.DisplayName, StringComparison.OrdinalIgnoreCase));
 
-        return new CollectionView(catalog.Id, catalog.Title, declared.Word,
+        return new SharedListView(catalog.Id, catalog.Title, declared.Word,
             declared.Argument, rows, columns, participants,
             columns.FirstOrDefault(c => c.IsViewer)?.TallyId, userId is not null,
             leaves.Count);
     }
 
-    /// <summary>Records one collectible against the caller's own tally, writing their
+    /// <summary>Records one answer against the caller's own tally, writing their
     /// file into being the first time they answer anything. Never anybody else's: a tally
     /// is a node, and a node is written by its owner.</summary>
-    public async Task<CollectionView> SetAsync(Guid userId, Guid nodeId, string rowKey,
-        bool collected, string? list = null, CancellationToken ct = default)
+    public async Task<SharedListView> SetAsync(Guid userId, Guid nodeId, string rowKey,
+        bool answered, string? name = null, CancellationToken ct = default)
     {
-        var (catalog, declared) = await ResolveAsync(userId, nodeId, list, ct);
+        var (catalog, declared) = await ResolveAsync(userId, nodeId, name, ct);
         var rows = Rows(declared.Items, parent: null);
         if (!rows.SelectMany(Leaves).Any(r => r.Key == rowKey))
             throw new NotFoundException($"Nothing in this list is keyed '{rowKey}'.");
@@ -120,11 +120,11 @@ public class CollectionService(
             ? new TallyReading(new HashSet<string>(StringComparer.Ordinal), [],
                 new Dictionary<string, string>(StringComparer.Ordinal))
             : Reconcile(declared.Items, mine.Tracking.Items, parent: null);
-        if (!collected)
+        if (!answered)
         {
             read.Held.Remove(rowKey);
         }
-        else if (CollectionSyntax.PicksOne(declared.Word))
+        else if (SharedListSyntax.PicksOne(declared.Word))
         {
             // One answer each: picking is moving, not adding. Enforced here rather than
             // in a component because the file is what anybody else reads, and a tally
@@ -139,7 +139,7 @@ public class CollectionService(
 
         // The tally opens with the catalog's own word, so a list of nights reads as
         // nights on both pages rather than as a collection of them.
-        var fence = CollectionSyntax.Write(mine?.Tracking.Word ?? declared.Word, argument,
+        var fence = SharedListSyntax.Write(mine?.Tracking.Word ?? declared.Word, argument,
             [.. Mirror(declared.Items, parent: null, read.Held, read.Notes), .. read.Orphans],
             answered: true);
 
@@ -151,21 +151,21 @@ public class CollectionService(
         else
         {
             await files.SaveTextAsync(userId, mine.Id,
-                CollectionSyntax.Replace(mine.Body, mine.Tracking, fence), ct);
+                SharedListSyntax.Replace(mine.Body, mine.Tracking, fence), ct);
         }
         db.ChangeTracker.Clear();
-        return await GetAsync(userId, nodeId, list, ct);
+        return await GetAsync(userId, nodeId, name, ct);
     }
 
     /// <summary>Which catalog a page means, and the fence on it that declares the list.
     /// A page that declares one is its own catalog; a page that tracks one names
     /// another node — by id, which is permission, or by title, which is a search.</summary>
-    private async Task<(Node Catalog, CollectionBlock Declared)> ResolveAsync(Guid? userId,
-        Guid nodeId, string? list, CancellationToken ct)
+    private async Task<(Node Catalog, SharedListBlock Declared)> ResolveAsync(Guid? userId,
+        Guid nodeId, string? name, CancellationToken ct)
     {
         var node = await nodes.GetWithBodyAsync(userId, nodeId, ct);
-        var block = CollectionSyntax.Find(Body(node), list)
-            ?? throw new NotFoundException($"Node {nodeId} has no collection list.");
+        var block = SharedListSyntax.Find(Body(node), name)
+            ?? throw new NotFoundException($"Node {nodeId} has no shared list.");
         if (block.Declares)
             return (node, block);
 
@@ -181,7 +181,7 @@ public class CollectionService(
 
         var catalog = await nodes.GetWithBodyAsync(userId, id, ct);
         var declared = Declared(catalog, target.List)
-            ?? throw new NotFoundException($"Node {id} declares no such collection list.");
+            ?? throw new NotFoundException($"Node {id} declares no such shared list.");
         return (catalog, declared);
     }
 
@@ -190,7 +190,7 @@ public class CollectionService(
     /// is found by the link its fence already made, since naming a node is what put the
     /// row in <c>NodeLinks</c>, and confirmed by reading the fence, so a page that merely
     /// mentions the catalog is not somebody's column.</summary>
-    private async Task<List<Tally>> TalliesAsync(Node catalog, CollectionBlock declared,
+    private async Task<List<Tally>> TalliesAsync(Node catalog, SharedListBlock declared,
         CancellationToken ct)
     {
         // The head version's text and nothing else: a tally is rewritten on every answer, so
@@ -212,7 +212,7 @@ public class CollectionService(
         var tallies = new List<Tally>();
         foreach (var node in candidates)
         {
-            foreach (var block in CollectionSyntax.Read(node.Body))
+            foreach (var block in SharedListSyntax.Read(node.Body))
             {
                 if (block.Tracks is not { } target || !Names(target, catalog)
                     || !SameList(target.List, declared.Argument))
@@ -230,7 +230,7 @@ public class CollectionService(
     /// because its author's <c>[[title]]</c> found this node when they saved. Asking again
     /// here would answer with the <em>reader's</em> search instead of the writer's, which
     /// is a different question and the wrong one.</summary>
-    private static bool Names(CollectionTarget target, Node catalog) =>
+    private static bool Names(SharedListTarget target, Node catalog) =>
         target.NodeId is { } id
             ? id == catalog.Id
             : string.Equals(target.Title, catalog.Title, StringComparison.OrdinalIgnoreCase);
@@ -239,19 +239,19 @@ public class CollectionService(
     /// only one most pages have.</summary>
     private static bool SameList(string tracked, string declared) =>
         tracked.Length == 0
-        || string.Equals(CollectionSyntax.Words(tracked), CollectionSyntax.Words(declared),
+        || string.Equals(SharedListSyntax.Words(tracked), SharedListSyntax.Words(declared),
             StringComparison.OrdinalIgnoreCase);
 
-    private static CollectionBlock? Declared(Node catalog, string list)
+    private static SharedListBlock? Declared(Node catalog, string list)
     {
-        var blocks = CollectionSyntax.Read(Body(catalog)).Where(b => b.Declares);
+        var blocks = SharedListSyntax.Read(Body(catalog)).Where(b => b.Declares);
         return list.Length == 0
             ? blocks.FirstOrDefault()
             : blocks.FirstOrDefault(b => SameList(list, b.Argument));
     }
 
     private static bool MoreThanOneList(Node catalog) =>
-        CollectionSyntax.Read(Body(catalog)).Count(b => b.Declares) > 1;
+        SharedListSyntax.Read(Body(catalog)).Count(b => b.Declares) > 1;
 
     private static string Body(Node node) =>
         node.File is { Versions.Count: > 0 } file ? file.Current.ExtractedText : "";
@@ -259,18 +259,18 @@ public class CollectionService(
     /// <summary>The catalog's lines as the grid's rows. A row's key is the id it links
     /// or the text it says, and a variant's is its parent's and its own — which is what
     /// makes "Sonic's Gold" nameable without "Gold" colliding with every other item's.</summary>
-    private static List<CollectionRow> Rows(IReadOnlyList<CollectionEntry> items, string? parent) =>
+    private static List<SharedListRow> Rows(IReadOnlyList<SharedListEntry> items, string? parent) =>
         [.. items.Select(item =>
         {
             var key = KeyOf(item, parent);
-            return new CollectionRow(key, item.Text, item.NodeId, item.Note,
+            return new SharedListRow(key, item.Text, item.NodeId, item.Note,
                 Rows(item.Variants, key));
         })];
 
     /// <summary>The rows again, each carrying how many people answered yes to it. Counted
     /// on the server because it is the one number a reader cannot check by looking at the
     /// columns — on a poll there are no columns to check it against.</summary>
-    private static List<CollectionRow> WithAnswers(IReadOnlyList<CollectionRow> rows,
+    private static List<SharedListRow> WithAnswers(IReadOnlyList<SharedListRow> rows,
         IReadOnlyDictionary<string, int> answers) =>
         [.. rows.Select(row => row with
         {
@@ -278,30 +278,30 @@ public class CollectionService(
             Variants = WithAnswers(row.Variants, answers),
         })];
 
-    private static string KeyOf(CollectionEntry item, string? parent)
+    private static string KeyOf(SharedListEntry item, string? parent)
     {
-        var own = item.NodeId is { } id ? $"node:{id:N}" : $"text:{CollectionSyntax.Normalize(item.Label)}";
+        var own = item.NodeId is { } id ? $"node:{id:N}" : $"text:{SharedListSyntax.Normalize(item.Label)}";
         return parent is null ? own : $"{parent}/{own}";
     }
 
     /// <summary>The rows an answer can actually be made against: an item with variants is
     /// a group, and "give me all three" is a different statement from the three answers it
     /// would stand in for.</summary>
-    private static IEnumerable<CollectionRow> Leaves(CollectionRow row) =>
+    private static IEnumerable<SharedListRow> Leaves(SharedListRow row) =>
         row.Variants.Count == 0 ? [row] : row.Variants.SelectMany(Leaves);
 
     /// <summary>Reads one tally against the catalog: which rows it holds, what it
     /// noted about each, and the answers that no longer match anything. An orphan is kept
     /// whole rather than dropped — Alice cannot rewrite Bob's file to follow her rename,
     /// so the answers simply stop matching, and silence is the one unacceptable answer.</summary>
-    private static TallyReading Reconcile(IReadOnlyList<CollectionEntry> catalog,
-        IReadOnlyList<CollectionEntry> tally, string? parent)
+    private static TallyReading Reconcile(IReadOnlyList<SharedListEntry> catalog,
+        IReadOnlyList<SharedListEntry> tally, string? parent)
     {
         var reading = new TallyReading(new HashSet<string>(StringComparer.Ordinal), [],
             new Dictionary<string, string>(StringComparer.Ordinal));
         foreach (var mine in tally)
         {
-            var match = catalog.FirstOrDefault(c => CollectionSyntax.Matches(c, mine));
+            var match = catalog.FirstOrDefault(c => SharedListSyntax.Matches(c, mine));
             if (match is null)
             {
                 if (mine.Checked || mine.Variants.Any(v => v.Checked))
@@ -331,10 +331,10 @@ public class CollectionService(
 
     /// <summary>Orphaned answers flattened for reporting, each said the way its file says
     /// it — a variant under the item it hangs from.</summary>
-    private static List<CollectionOrphan> Orphans(IReadOnlyList<CollectionEntry> entries,
+    private static List<SharedListOrphan> Orphans(IReadOnlyList<SharedListEntry> entries,
         string parent)
     {
-        var flat = new List<CollectionOrphan>();
+        var flat = new List<SharedListOrphan>();
         foreach (var entry in entries)
         {
             var text = parent.Length > 0 ? $"{parent} — {entry.Text}" : entry.Text;
@@ -342,7 +342,7 @@ public class CollectionService(
             if (nested.Count > 0)
                 flat.AddRange(nested);
             else if (entry.Checked)
-                flat.Add(new CollectionOrphan(text, entry.Note));
+                flat.Add(new SharedListOrphan(text, entry.Note));
         }
         return flat;
     }
@@ -351,15 +351,15 @@ public class CollectionService(
     /// current wording and links, this person's answers and notes. Adopting the catalog's
     /// labels is what carries a promotion — an item that gained a page — into a tally
     /// without anybody having to edit it.</summary>
-    private static List<CollectionEntry> Mirror(IReadOnlyList<CollectionEntry> catalog,
+    private static List<SharedListEntry> Mirror(IReadOnlyList<SharedListEntry> catalog,
         string? parent, IReadOnlySet<string> held, IReadOnlyDictionary<string, string> notes)
     {
-        var mirrored = new List<CollectionEntry>();
+        var mirrored = new List<SharedListEntry>();
         foreach (var item in catalog)
         {
             var key = KeyOf(item, parent);
             var variants = Mirror(item.Variants, key, held, notes);
-            mirrored.Add(new CollectionEntry(item.Label, item.NodeId, item.Text,
+            mirrored.Add(new SharedListEntry(item.Label, item.NodeId, item.Text,
                 notes.GetValueOrDefault(key, ""),
                 item.Variants.Count == 0 ? held.Contains(key) : variants.All(v => v.Checked),
                 variants));
@@ -370,10 +370,10 @@ public class CollectionService(
     /// <summary>One person's column: their page as the grid needs it, and the fence on
     /// it that does the tracking.</summary>
     private sealed record Tally(Guid Id, Guid OwnerId, string DisplayName, string Body,
-        CollectionBlock Tracking);
+        SharedListBlock Tracking);
 
     /// <summary>What one tally says once it has been read against the catalog.</summary>
-    private sealed record TallyReading(HashSet<string> Held, List<CollectionEntry> Orphans,
+    private sealed record TallyReading(HashSet<string> Held, List<SharedListEntry> Orphans,
         Dictionary<string, string> Notes);
 
     private async Task<Node> FolderAsync(Guid userId, CancellationToken ct)
@@ -388,7 +388,7 @@ public class CollectionService(
 
 /// <summary>A catalog and everybody's answers against it — the whole of what a grid
 /// draws, decided on the server so no two surfaces can disagree about who has what.</summary>
-public sealed record CollectionView(
+public sealed record SharedListView(
     Guid CatalogId,
     string CatalogTitle,
     /// <summary>The word the catalog's fence opened with — which question this list
@@ -396,34 +396,34 @@ public sealed record CollectionView(
     /// tally's: a grid read from either page says the same thing.</summary>
     string Kind,
     string List,
-    IReadOnlyList<CollectionRow> Rows,
-    IReadOnlyList<CollectionColumn> Columns,
+    IReadOnlyList<SharedListRow> Rows,
+    IReadOnlyList<SharedListColumn> Columns,
     /// <summary>How many people have answered this list at all — which is not
     /// <c>Columns.Count</c> on a list that reports totals without naming anybody.</summary>
     int Participants,
     Guid? TallyId,
     bool CanAnswer,
-    int Collectibles);
+    int Answerable);
 
 /// <summary>One line of the catalog, with the variants nested under it, and how many
 /// people said yes to it. <c>Answers</c> counts everybody who did, whether or not this
 /// reader is shown which of them.</summary>
-public sealed record CollectionRow(string Key, string Text, Guid? NodeId, string Note,
-    IReadOnlyList<CollectionRow> Variants, int Answers = 0);
+public sealed record SharedListRow(string Key, string Text, Guid? NodeId, string Note,
+    IReadOnlyList<SharedListRow> Variants, int Answers = 0);
 
 /// <summary>One participant's column: their tally, and what it holds. <c>Orphans</c> —
 /// answers the catalog no longer has an item for — is filled in for the reader's own
 /// column and empty for everybody else's, because only its owner can do anything about
 /// one.</summary>
-public sealed record CollectionColumn(
+public sealed record SharedListColumn(
     Guid TallyId,
     Guid OwnerId,
     string DisplayName,
     bool IsViewer,
     IReadOnlySet<string> Held,
-    IReadOnlyList<CollectionOrphan> Orphans,
+    IReadOnlyList<SharedListOrphan> Orphans,
     int Count);
 
 /// <summary>An answer that no longer matches an item — kept in the file, shown in the
 /// grid, and never quietly dropped.</summary>
-public sealed record CollectionOrphan(string Text, string Note);
+public sealed record SharedListOrphan(string Text, string Note);

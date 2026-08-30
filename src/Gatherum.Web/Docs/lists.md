@@ -31,7 +31,7 @@ different tempos, authors, and privacy needs.
 One shared set of checkboxes cannot answer both: if you check "Sonic", has anyone else got
 it? The checkbox has nowhere to put the answer.
 
-So a collection is two kinds of page. The **catalog** is a page with a
+So a shared list is two kinds of page. The **catalog** is a page with a
 `:::collection` fence on it, naming the list. A **tally** is a page per person with a
 fence tracking that catalog. Both are ordinary nodes, so both already have versions,
 search, categories, backlinks and their own sharing — nothing here is a new kind of
@@ -66,13 +66,13 @@ a sprite held back for a later event has only its base form, and a fence-wide de
 of "every item has three variants" would be a lie about the list from the first week. So
 Storm Scout lists the one variant it has, and Klombo lists none.
 
-**Counts are of collectibles, not lines.** The list above is six things across four
+**Counts are of answerable things, not lines.** The list above is six things across four
 lines, and every number in the interface says six.
 
 ## Answering
 
 Anyone signed in who can see the catalog can answer against it. The first answer writes
-their tally into being — a page called after the catalog, under a `Collections` folder
+their tally into being — a page called after the catalog, under a `Lists` folder
 in their own root — and every later answer rewrites it.
 
 That page is a file like any other. You can open it, read it, edit it by hand, and find
@@ -197,7 +197,7 @@ It hides who from the people reading the list, which is the ordinary courtesy a 
 wants, and nothing stronger.
 
 **Availability and polls show a row's own total**, because "how many can make Friday" and
-"how many picked Thai" are what those grids are read for. A collection spends that width
+"how many picked Thai" are what those grids are read for. A collection list spends that width
 on rows instead: how many people have Sonic is a curiosity beside how many you still need.
 
 ## For agents
@@ -206,10 +206,10 @@ Two MCP tools, and the same over REST:
 
 | | |
 | --- | --- |
-| `collection_status` | the list's rows, and every tally's answers against them |
-| `mark_collected` | record or take back one collectible on your own tally |
-| `GET /api/nodes/{id}/collection` | the same, unauthenticated for a public list |
-| `POST /api/nodes/{id}/collection` | `{ key, collected, list? }` |
+| `get_list` | the list's rows, and every tally's answers against them |
+| `answer_list` | record or take back one answer on your own tally |
+| `GET /api/nodes/{id}/list` | the same, unauthenticated for a public list |
+| `POST /api/nodes/{id}/list` | `{ key, answered, name? }` |
 
 Ask either of the catalog or of any tally that tracks it — both answer with the same
 grid. Every row carries the `key` an answer names it by, so read the list before writing to

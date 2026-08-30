@@ -196,34 +196,34 @@ public record PresenceDto(IReadOnlyList<string> Editors, int HeadVersion);
 /// <summary>A shared list as everyone's answers make it: the catalog's rows in the
 /// author's order, one column per participant, and which of them — if any — is the
 /// caller's own. <c>Kind</c> is the word the catalog's fence opened with, which says
-/// what an answer on this list means. <c>Collectibles</c> counts variants rather than lines,
+/// what an answer on this list means. <c>Answerable</c> counts variants rather than lines,
 /// which is the only number a progress report may be made of.</summary>
-public record CollectionDto(
+public record SharedListDto(
     Guid CatalogId,
     string CatalogTitle,
     string Kind,
     string List,
-    IReadOnlyList<CollectionRowDto> Rows,
-    IReadOnlyList<CollectionColumnDto> Columns,
+    IReadOnlyList<SharedListRowDto> Rows,
+    IReadOnlyList<SharedListColumnDto> Columns,
     int Participants,
     Guid? TallyId,
     bool CanAnswer,
-    int Collectibles)
+    int Answerable)
 {
-    public static CollectionDto From(CollectionView view) => new(
+    public static SharedListDto From(SharedListView view) => new(
         view.CatalogId, view.CatalogTitle, view.Kind, view.List,
-        [.. view.Rows.Select(CollectionRowDto.From)],
-        [.. view.Columns.Select(CollectionColumnDto.From)],
-        view.Participants, view.TallyId, view.CanAnswer, view.Collectibles);
+        [.. view.Rows.Select(SharedListRowDto.From)],
+        [.. view.Columns.Select(SharedListColumnDto.From)],
+        view.Participants, view.TallyId, view.CanAnswer, view.Answerable);
 }
 
 /// <summary>One line of the catalog. <c>Key</c> is what an answer names — an id where the
 /// item links a page, its text where it does not — and a variant's carries its parent's,
 /// so "Gold" is nameable without every item's Gold colliding.</summary>
-public record CollectionRowDto(string Key, string Text, Guid? NodeId, string Note,
-    IReadOnlyList<CollectionRowDto> Variants, int Answers)
+public record SharedListRowDto(string Key, string Text, Guid? NodeId, string Note,
+    IReadOnlyList<SharedListRowDto> Variants, int Answers)
 {
-    public static CollectionRowDto From(CollectionRow row) => new(row.Key, row.Text, row.NodeId,
+    public static SharedListRowDto From(SharedListRow row) => new(row.Key, row.Text, row.NodeId,
         row.Note, [.. row.Variants.Select(From)], row.Answers);
 }
 
@@ -232,15 +232,15 @@ public record CollectionRowDto(string Key, string Text, Guid? NodeId, string Not
 /// totals without naming anybody, where the only column is the caller's own. <c>Orphans</c> — answers the
 /// catalog no longer has an item for — comes back for the caller's own column and
 /// empty for everybody else's.</summary>
-public record CollectionColumnDto(Guid TallyId, Guid OwnerId, string DisplayName, bool IsViewer,
-    IReadOnlyList<string> Held, IReadOnlyList<CollectionOrphanDto> Orphans, int Count)
+public record SharedListColumnDto(Guid TallyId, Guid OwnerId, string DisplayName, bool IsViewer,
+    IReadOnlyList<string> Held, IReadOnlyList<SharedListOrphanDto> Orphans, int Count)
 {
-    public static CollectionColumnDto From(CollectionColumn column) => new(column.TallyId,
+    public static SharedListColumnDto From(SharedListColumn column) => new(column.TallyId,
         column.OwnerId, column.DisplayName, column.IsViewer,
-        [.. column.Held], [.. column.Orphans.Select(o => new CollectionOrphanDto(o.Text, o.Note))],
+        [.. column.Held], [.. column.Orphans.Select(o => new SharedListOrphanDto(o.Text, o.Note))],
         column.Count);
 }
 
-public record CollectionOrphanDto(string Text, string Note);
+public record SharedListOrphanDto(string Text, string Note);
 
-public record CollectAnswerRequest(string Key, bool Collected, string? List);
+public record AnswerRequest(string Key, bool Answered, string? Name);

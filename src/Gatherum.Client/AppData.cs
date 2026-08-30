@@ -64,15 +64,15 @@ public interface IAppData
     Task ShareAsync(Guid nodeId, Guid userId, string role);
     Task UnshareAsync(Guid nodeId, Guid userId);
 
-    /// <summary>A collectible list as everyone's answers make it, asked of whichever page
+    /// <summary>A shared list as everyone's answers make it, asked of whichever page
     /// the reader is on — a catalog aggregates itself, a tally aggregates the catalog
     /// it tracks. <paramref name="list"/> is the fence's own argument, which is what
     /// tells two lists on one page apart.</summary>
-    Task<CollectionInfo> GetCollectionAsync(Guid nodeId, string? list);
+    Task<SharedListInfo> GetSharedListAsync(Guid nodeId, string? name);
 
-    /// <summary>Records one collectible against the reader's own tally — written into
+    /// <summary>Records one answer against the reader's own tally — written into
     /// being the first time they answer anything — and answers with the list again.</summary>
-    Task<CollectionInfo> SetCollectedAsync(Guid nodeId, string key, bool collected, string? list);
+    Task<SharedListInfo> AnswerAsync(Guid nodeId, string key, bool answered, string? name);
 
     // A node's chrome: categories, file facts, history.
     Task<NodeInfo> GetNodeAsync(Guid nodeId);
@@ -152,26 +152,26 @@ public record RelatedInfo(Guid Id, string Kind, string Title);
 /// <summary>A shared list: the catalog's rows in the author's order, one column per
 /// participant, and which of them is theirs. <c>Kind</c> is the word its fence opened
 /// with — which question this list asks, and so what the chrome around it says.</summary>
-public record CollectionInfo(Guid CatalogId, string CatalogTitle, string Kind, string List,
-    IReadOnlyList<CollectionRowInfo> Rows, IReadOnlyList<CollectionColumnInfo> Columns,
-    int Participants, Guid? TallyId, bool CanAnswer, int Collectibles);
+public record SharedListInfo(Guid CatalogId, string CatalogTitle, string Kind, string List,
+    IReadOnlyList<SharedListRowInfo> Rows, IReadOnlyList<SharedListColumnInfo> Columns,
+    int Participants, Guid? TallyId, bool CanAnswer, int Answerable);
 
 /// <summary>One line of the catalog. A row with variants is a group and is not itself
 /// answerable: "give me all three" is a different statement from the three answers.</summary>
-public record CollectionRowInfo(string Key, string Text, Guid? NodeId, string Note,
-    IReadOnlyList<CollectionRowInfo> Variants, int Answers);
+public record SharedListRowInfo(string Key, string Text, Guid? NodeId, string Note,
+    IReadOnlyList<SharedListRowInfo> Variants, int Answers);
 
 /// <summary>One participant's column. Whoever may read the list sees every column on it
 /// — except on a list that reports totals without naming anybody, where the only column
 /// is the reader's own. There is no access to report here: a tally's own sharing governs
 /// its page, not its answers.</summary>
-public record CollectionColumnInfo(Guid TallyId, Guid OwnerId, string DisplayName,
+public record SharedListColumnInfo(Guid TallyId, Guid OwnerId, string DisplayName,
     bool IsViewer, IReadOnlyList<string> Held,
-    IReadOnlyList<CollectionOrphanInfo> Orphans, int Count);
+    IReadOnlyList<SharedListOrphanInfo> Orphans, int Count);
 
 /// <summary>An answer that no longer matches an item, because the catalog was edited
 /// under it. Shown rather than swallowed.</summary>
-public record CollectionOrphanInfo(string Text, string Note);
+public record SharedListOrphanInfo(string Text, string Note);
 public record KeyInfo(Guid Id, string Name, string Prefix, DateTimeOffset CreatedAt,
     DateTimeOffset? LastUsedAt, bool IsActive);
 public record CreatedKey(Guid Id, string Name, string Token);
@@ -306,21 +306,21 @@ public sealed class HttpAppData(HttpClient http) : IAppData
     public async Task UnshareAsync(Guid nodeId, Guid userId) =>
         Ensure(await http.DeleteAsync($"/api/nodes/{nodeId}/grants/{userId}"));
 
-    public async Task<CollectionInfo> GetCollectionAsync(Guid nodeId, string? list) =>
-        (await http.GetFromJsonAsync<CollectionInfo>(
-            $"/api/nodes/{nodeId}/collection{ListQuery(list)}"))!;
+    public async Task<SharedListInfo> GetSharedListAsync(Guid nodeId, string? name) =>
+        (await http.GetFromJsonAsync<SharedListInfo>(
+            $"/api/nodes/{nodeId}/list{NameQuery(name)}"))!;
 
-    public async Task<CollectionInfo> SetCollectedAsync(Guid nodeId, string key, bool collected,
-        string? list)
+    public async Task<SharedListInfo> AnswerAsync(Guid nodeId, string key, bool answered,
+        string? name)
     {
-        var response = await http.PostAsJsonAsync($"/api/nodes/{nodeId}/collection",
-            new { key, collected, list });
+        var response = await http.PostAsJsonAsync($"/api/nodes/{nodeId}/list",
+            new { key, answered, name });
         await EnsureAsync(response);
-        return (await response.Content.ReadFromJsonAsync<CollectionInfo>())!;
+        return (await response.Content.ReadFromJsonAsync<SharedListInfo>())!;
     }
 
-    private static string ListQuery(string? list) =>
-        list is { Length: > 0 } ? $"?list={Uri.EscapeDataString(list)}" : "";
+    private static string NameQuery(string? name) =>
+        name is { Length: > 0 } ? $"?name={Uri.EscapeDataString(name)}" : "";
 
     public async Task<NodeInfo> GetNodeAsync(Guid nodeId) =>
         (await http.GetFromJsonAsync<NodeInfo>($"/api/nodes/{nodeId}"))!;

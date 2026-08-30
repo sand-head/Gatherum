@@ -33,7 +33,7 @@ public class ReadOnlyHtmlTests
 
             More prose after it.
             """, isDark: false);
-        var tag = doc.Blocks.Select(b => b.Tag).First(BlockTags.IsCollection)!;
+        var tag = doc.Blocks.Select(b => b.Tag).First(BlockTags.IsSharedList)!;
 
         var segments = RichHtmlWriter.WriteSegments(doc,
             new RichHtmlOptions { WidgetTags = [tag] });

@@ -238,28 +238,28 @@ public sealed class ServerAppData(
             file);
     }
 
-    public async Task<CollectionInfo> GetCollectionAsync(Guid nodeId, string? list)
+    public async Task<SharedListInfo> GetSharedListAsync(Guid nodeId, string? name)
     {
         var userId = await ViewerIdAsync();
-        return Collection(await ops.Collections(s => s.GetAsync(userId, nodeId, list)));
+        return SharedList(await ops.SharedLists(s => s.GetAsync(userId, nodeId, name)));
     }
 
-    public async Task<CollectionInfo> SetCollectedAsync(Guid nodeId, string key, bool collected,
-        string? list)
+    public async Task<SharedListInfo> AnswerAsync(Guid nodeId, string key, bool answered,
+        string? name)
     {
         var userId = await UserIdAsync();
-        return Collection(
-            await ops.Collections(s => s.SetAsync(userId, nodeId, key, collected, list)));
+        return SharedList(
+            await ops.SharedLists(s => s.SetAsync(userId, nodeId, key, answered, name)));
     }
 
-    private static CollectionInfo Collection(CollectionView view) => new(view.CatalogId,
+    private static SharedListInfo SharedList(SharedListView view) => new(view.CatalogId,
         view.CatalogTitle, view.Kind, view.List, [.. view.Rows.Select(Row)],
-        [.. view.Columns.Select(c => new CollectionColumnInfo(c.TallyId, c.OwnerId, c.DisplayName,
+        [.. view.Columns.Select(c => new SharedListColumnInfo(c.TallyId, c.OwnerId, c.DisplayName,
             c.IsViewer, [.. c.Held],
-            [.. c.Orphans.Select(o => new CollectionOrphanInfo(o.Text, o.Note))], c.Count))],
-        view.Participants, view.TallyId, view.CanAnswer, view.Collectibles);
+            [.. c.Orphans.Select(o => new SharedListOrphanInfo(o.Text, o.Note))], c.Count))],
+        view.Participants, view.TallyId, view.CanAnswer, view.Answerable);
 
-    private static CollectionRowInfo Row(CollectionRow row) =>
+    private static SharedListRowInfo Row(SharedListRow row) =>
         new(row.Key, row.Text, row.NodeId, row.Note, [.. row.Variants.Select(Row)], row.Answers);
 
     public async Task<IReadOnlyList<RelatedInfo>> GetSimilarAsync(Guid nodeId, int limit)

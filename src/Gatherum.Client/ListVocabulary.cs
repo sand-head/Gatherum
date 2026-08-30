@@ -8,8 +8,8 @@ namespace Gatherum.Client;
 ///
 /// The shape <see cref="CalloutExtension.Kinds"/> already established: one implementation,
 /// a small vocabulary, a new entry costs a line rather than a component. The set here has
-/// to match <see cref="Gatherum.Core.Markdown.CollectionSyntax.Kinds"/>, which is the half
-/// that parses — <c>CollectionSyntaxTests</c> keeps the two honest.
+/// to match <see cref="Gatherum.Core.Markdown.SharedListSyntax.Kinds"/>, which is the half
+/// that parses — <c>SharedListSyntaxTests</c> keeps the two honest.
 /// </summary>
 /// <param name="Rows">What the first column is called: the noun a row is.</param>
 /// <param name="Total">How big the list is, said in the header — <c>{0}</c> is the
@@ -25,10 +25,10 @@ namespace Gatherum.Client;
 /// collection spends the width on rows instead.</param>
 /// <param name="PicksOne">Whether a person has one answer rather than many. Presentation
 /// only — radio buttons rather than checkboxes; the rule itself is
-/// <see cref="Gatherum.Core.Markdown.CollectionSyntax.PicksOne"/>, enforced where the
+/// <see cref="Gatherum.Core.Markdown.SharedListSyntax.PicksOne"/>, enforced where the
 /// file is written.</param>
 /// <param name="NamesAnswers">Whether the grid says who answered what. Presentation only
-/// again: <see cref="Gatherum.Core.Markdown.CollectionSyntax.NamesAnswers"/> is what
+/// again: <see cref="Gatherum.Core.Markdown.SharedListSyntax.NamesAnswers"/> is what
 /// actually withholds the columns, and this decides whether to tell the reader so.</param>
 public sealed record ListVocabulary(
     string Rows,

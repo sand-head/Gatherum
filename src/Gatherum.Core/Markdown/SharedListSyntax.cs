@@ -7,7 +7,7 @@ namespace Gatherum.Core.Markdown;
 /// Reads and writes the <c>:::collection</c> fence — the one construct a collaborative
 /// list needs, restated on the server for the same reason
 /// <see cref="WikiLinkSyntax"/> is: the aggregate has to find what a body says without
-/// loading an editor. The client's <c>CollectionExtension</c> is the other half, and the
+/// loading an editor. The client's <c>SharedListExtension</c> is the other half, and the
 /// two have to agree about every line here.
 ///
 /// A fence whose argument is a name <em>declares</em> a list — the catalog, the rows
@@ -23,7 +23,7 @@ namespace Gatherum.Core.Markdown;
 /// with is carried through the parse and the write and read back out again, and the only
 /// thing it decides is the words the reading view puts around the grid.
 /// </summary>
-public static class CollectionSyntax
+public static class SharedListSyntax
 {
     public const string Fence = ":::";
 
@@ -69,9 +69,9 @@ public static class CollectionSyntax
         @"^(?<indent>\s*)[-*+][ \t]+(\[(?<answer>[ xX])\][ \t]+)?(?<body>.*)$", RegexOptions.Compiled);
 
     /// <summary>Every collection fence in a body, in the order they appear.</summary>
-    public static IReadOnlyList<CollectionBlock> Read(string? markdown)
+    public static IReadOnlyList<SharedListBlock> Read(string? markdown)
     {
-        var blocks = new List<CollectionBlock>();
+        var blocks = new List<SharedListBlock>();
         if (markdown is null)
             return blocks;
 
@@ -85,7 +85,7 @@ public static class CollectionSyntax
                 end++;
             if (end >= lines.Length)
                 break;                          // unterminated: not a construct after all
-            blocks.Add(new CollectionBlock(word!, argument, Tracked(argument),
+            blocks.Add(new SharedListBlock(word!, argument, Tracked(argument),
                 ReadItems(lines[(i + 1)..end]), i, end - i + 1));
             i = end;
         }
@@ -95,7 +95,7 @@ public static class CollectionSyntax
     /// <summary>The one fence a caller means, matched on its argument — or the first
     /// collection on the page when nothing is named, which is what a link to the page
     /// rather than to a list on it can mean.</summary>
-    public static CollectionBlock? Find(string? markdown, string? argument)
+    public static SharedListBlock? Find(string? markdown, string? argument)
     {
         var blocks = Read(markdown);
         if (string.IsNullOrWhiteSpace(argument))
@@ -111,7 +111,7 @@ public static class CollectionSyntax
     /// answer state — a catalog's — are written as plain bullets, so declaring a list
     /// never puts an empty checkbox in front of every line of it.</summary>
     public static string Write(string word, string argument,
-        IReadOnlyList<CollectionEntry> items, bool answered)
+        IReadOnlyList<SharedListEntry> items, bool answered)
     {
         var source = new StringBuilder();
         source.Append(Fence).Append(Known(word) ? word : Word);
@@ -127,7 +127,7 @@ public static class CollectionSyntax
     /// <summary>A body with one fence's source swapped for another's, and every line
     /// around it left exactly as it was. Rewriting a tally is the whole write path, and
     /// it must never touch the prose somebody wrote above their list.</summary>
-    public static string Replace(string markdown, CollectionBlock block, string replacement)
+    public static string Replace(string markdown, SharedListBlock block, string replacement)
     {
         var lines = markdown.Replace("\r\n", "\n").Split('\n');
         var rebuilt = new List<string>(lines[..block.FirstLine]);
@@ -136,19 +136,19 @@ public static class CollectionSyntax
         return string.Join('\n', rebuilt);
     }
 
-    /// <summary>Whether a catalog's item and a tally's are the same collectible.
+    /// <summary>Whether a catalog's row and a tally's are the same row.
     /// Two linked items are the ids they carry, which is what makes a rename survivable;
     /// anything else is its text, which is what makes linking optional. The asymmetry is
     /// deliberate — it is the rule that lets an item gain a page later without the answers
     /// already made against it stopping counting.</summary>
-    public static bool Matches(CollectionEntry catalogItem, CollectionEntry tallyItem) =>
+    public static bool Matches(SharedListEntry catalogItem, SharedListEntry tallyItem) =>
         catalogItem.NodeId is { } mine && tallyItem.NodeId is { } theirs
             ? mine == theirs
             : Normalize(catalogItem.Label) == Normalize(tallyItem.Label);
 
     /// <summary>An item's text as a match sees it: link spellings shed, whitespace
     /// collapsed, case forgotten. <c>[[Klombo]]</c>, <c>[Klombo](node://…)</c> and
-    /// <c>Klombo</c> are one collectible written three ways.</summary>
+    /// <c>Klombo</c> are one row written three ways.</summary>
     public static string Normalize(string label)
     {
         var text = PlainText(label);
@@ -215,7 +215,7 @@ public static class CollectionSyntax
     /// title and a mention is an id — the difference matters, because a title is a search
     /// and an id is permission, so only the second spelling can name an unlisted
     /// catalog. Whatever follows names the list on that node.</summary>
-    private static CollectionTarget? Tracked(string argument)
+    private static SharedListTarget? Tracked(string argument)
     {
         if (argument.StartsWith("[[", StringComparison.Ordinal))
         {
@@ -227,22 +227,22 @@ public static class CollectionSyntax
             var title = (pipe >= 0 ? inner[..pipe] : inner).Trim();
             return title.Length == 0
                 ? null
-                : new CollectionTarget(null, title, argument[(close + 2)..].Trim());
+                : new SharedListTarget(null, title, argument[(close + 2)..].Trim());
         }
         if (!argument.StartsWith('['))
             return null;
         var match = Regex.Match(argument,
             @"^\[[^\]]*\]\(node://(?<id>[0-9a-fA-F-]{36})\)");
         return match.Success && Guid.TryParse(match.Groups["id"].Value, out var id)
-            ? new CollectionTarget(id, null, argument[match.Length..].Trim())
+            ? new SharedListTarget(id, null, argument[match.Length..].Trim())
             : null;
     }
 
-    private static IReadOnlyList<CollectionEntry> ReadItems(IReadOnlyList<string> lines)
+    private static IReadOnlyList<SharedListEntry> ReadItems(IReadOnlyList<string> lines)
     {
-        var items = new List<CollectionEntry>();
-        var variants = new List<CollectionEntry>();
-        CollectionEntry? open = null;
+        var items = new List<SharedListEntry>();
+        var variants = new List<SharedListEntry>();
+        SharedListEntry? open = null;
 
         void Close()
         {
@@ -273,7 +273,7 @@ public static class CollectionSyntax
         return items;
     }
 
-    private static CollectionEntry Entry(Match match)
+    private static SharedListEntry Entry(Match match)
     {
         var body = match.Groups["body"].Value.Trim();
         var note = "";
@@ -290,11 +290,11 @@ public static class CollectionSyntax
         var id = mention.Success && Guid.TryParse(mention.Groups["id"].Value, out var parsed)
             ? parsed
             : (Guid?)null;
-        return new CollectionEntry(body, id, PlainText(body), note,
+        return new SharedListEntry(body, id, PlainText(body), note,
             match.Groups["answer"].Value is "x" or "X", []);
     }
 
-    private static void WriteItem(StringBuilder source, CollectionEntry item, bool answered,
+    private static void WriteItem(StringBuilder source, SharedListEntry item, bool answered,
         int depth)
     {
         source.Append(new string(' ', depth * 2)).Append("- ");
@@ -311,11 +311,11 @@ public static class CollectionSyntax
 
 /// <summary>One <c>:::collection</c> fence as it stands in a file: what it said, what it
 /// holds, and where it is, so a write can put another one exactly there.</summary>
-public sealed record CollectionBlock(
+public sealed record SharedListBlock(
     string Word,
     string Argument,
-    CollectionTarget? Tracks,
-    IReadOnlyList<CollectionEntry> Items,
+    SharedListTarget? Tracks,
+    IReadOnlyList<SharedListEntry> Items,
     int FirstLine,
     int LineCount)
 {
@@ -330,20 +330,20 @@ public sealed record CollectionBlock(
 
 /// <summary>The catalog a tally follows: named by title (a search, so it cannot reach
 /// an unlisted page) or by id (permission, so it can), and optionally which list on it.</summary>
-public sealed record CollectionTarget(Guid? NodeId, string? Title, string List);
+public sealed record SharedListTarget(Guid? NodeId, string? Title, string List);
 
 /// <summary>One line of a collection: what it says, the page it links if it has one, the
 /// note after it, whether this file answers it, and the variants nested under it.</summary>
-public sealed record CollectionEntry(
+public sealed record SharedListEntry(
     string Label,
     Guid? NodeId,
     string Text,
     string Note,
     bool Checked,
-    IReadOnlyList<CollectionEntry> Variants)
+    IReadOnlyList<SharedListEntry> Variants)
 {
-    /// <summary>How many collectibles this line stands for — itself, or its variants
+    /// <summary>How many answerable things this line stands for — itself, or its variants
     /// where it has any. Every count in an interface has to be of these rather than of
     /// lines, or the progress it reports is fiction.</summary>
-    public int Collectibles => Variants.Count > 0 ? Variants.Count : 1;
+    public int Answerable => Variants.Count > 0 ? Variants.Count : 1;
 }

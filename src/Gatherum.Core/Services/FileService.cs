@@ -527,21 +527,10 @@ public class FileService(
     /// <summary>The link rows a body claims. <paramref name="userId"/> is whose eyes
     /// resolve a <c>[[wiki link]]</c>: it names a page rather than pointing at one, so
     /// it can only mean a node the person writing it can see.</summary>
-    private async Task RefreshLinksAsync(Node node, Guid userId, CancellationToken ct)
-    {
-        var targets = new HashSet<Guid>(MarkdownContent.MentionedNodeIds(node.File!.Description));
-        // A docx body's extracted text is its canonical Markdown rendering, so mentions
-        // inserted in the document editor link — and backlink — the same way pages do.
-        if (node.MediaType is MediaTypes.Markdown or MediaTypes.Docx)
-        {
-            var body = node.File.Current.ExtractedText;
-            targets.UnionWith(MarkdownContent.LinkedNodeIds(body));
-            var wikiTargets = WikiLinkSyntax.Targets(body);
-            if (wikiTargets.Count > 0)
-                targets.UnionWith((await nodes.ResolveTitlesAsync(userId, wikiTargets, ct)).Values);
-        }
-        await nodes.ReplaceLinksAsync(node, targets, ct);
-    }
+    /// <summary>What this body links, decided by <see cref="NodeService.RefreshLinksAsync"/>
+    /// so a save and a cold rebuild derive the same rows from the same bytes.</summary>
+    private Task RefreshLinksAsync(Node node, Guid userId, CancellationToken ct) =>
+        nodes.RefreshLinksAsync(node, userId, ct);
 
     private async Task<string> ExtractTextAsync(Node node, string mediaType, string fileName,
         CancellationToken ct)
