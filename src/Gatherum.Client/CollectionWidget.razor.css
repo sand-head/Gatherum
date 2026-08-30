@@ -173,7 +173,7 @@ td.mark.you, th.col-you { background: color-mix(in srgb, var(--primary) 6%, tran
 
 .has-page svg { width: 12px; height: 12px; }
 
-/* Whatever the catalogue said after the item's name. It qualifies the row rather than
+/* Whatever the catalog said after the item's name. It qualifies the row rather than
    continuing it, so it is set apart instead of run on. */
 .note {
     flex-shrink: 0;
@@ -322,3 +322,48 @@ td.mark.you, th.col-you { background: color-mix(in srgb, var(--primary) 6%, tran
 }
 
 .collection-foot.error { color: var(--danger); }
+
+/* How many people answered yes to a row — the question an availability list is read for
+   and the one a poll is. Number over bar, so the shape reads before the digits do. */
+.col-tally { min-width: 56px; }
+
+.rows-for {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.rows-for .n {
+    font-variant-numeric: tabular-nums;
+    font-size: 0.75rem;
+    color: var(--on-surface);
+}
+
+.rows-for .bar {
+    width: 38px;
+    height: 3px;
+    border-radius: 2px;
+    background: var(--outline-dim);
+    overflow: hidden;
+}
+
+.rows-for .bar i {
+    display: block;
+    height: 100%;
+    border-radius: 2px;
+    background: var(--on-surface-dim);
+}
+
+/* A one-answer list gets a radio, which is a promise that picking this un-picks the last
+   — and the write keeps it. Same box, round, with a dot instead of a check. */
+.box.round { border-radius: var(--radius-full); }
+
+.box.round:checked::after {
+    width: 7px;
+    height: 7px;
+    border: 0;
+    border-radius: var(--radius-full);
+    background: var(--on-primary);
+    transform: none;
+}

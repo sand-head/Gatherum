@@ -7,7 +7,7 @@ namespace Gatherum.Tests;
 /// survives being written back out, and which two lines are the same row.</summary>
 public class CollectionSyntaxTests
 {
-    private const string Catalogue = """
+    private const string Catalog = """
         Sprites arrive on Thursdays.
 
         :::collection Override sprites
@@ -25,7 +25,7 @@ public class CollectionSyntaxTests
     [Fact]
     public void A_named_fence_declares_a_list()
     {
-        var block = Assert.Single(CollectionSyntax.Read(Catalogue));
+        var block = Assert.Single(CollectionSyntax.Read(Catalog));
 
         Assert.True(block.Declares);
         Assert.Equal("Override sprites", block.Name);
@@ -35,7 +35,7 @@ public class CollectionSyntaxTests
     [Fact]
     public void Variants_are_the_items_nested_under_one()
     {
-        var items = CollectionSyntax.Read(Catalogue)[0].Items;
+        var items = CollectionSyntax.Read(Catalog)[0].Items;
 
         Assert.Equal(["Base", "Gold"], items[0].Variants.Select(v => v.Text));
         Assert.Empty(items[1].Variants);
@@ -48,7 +48,7 @@ public class CollectionSyntaxTests
     [Fact]
     public void A_ragged_roster_counts_collectibles_rather_than_lines()
     {
-        var items = CollectionSyntax.Read(Catalogue)[0].Items;
+        var items = CollectionSyntax.Read(Catalog)[0].Items;
 
         Assert.Equal(4, items.Sum(i => i.Collectibles));
     }
@@ -56,7 +56,7 @@ public class CollectionSyntaxTests
     [Fact]
     public void An_item_that_links_a_page_carries_its_id_and_reads_as_its_title()
     {
-        var klombo = CollectionSyntax.Read(Catalogue)[0].Items[1];
+        var klombo = CollectionSyntax.Read(Catalog)[0].Items[1];
 
         Assert.Equal(Guid.Parse("0193aaaa-bbbb-cccc-dddd-eeeeeeeeeeee"), klombo.NodeId);
         Assert.Equal("Klombo", klombo.Text);
@@ -79,9 +79,9 @@ public class CollectionSyntaxTests
     }
 
     /// <summary>A title is a search and an id is permission, so the mention spelling is
-    /// the one that can name an unlisted catalogue.</summary>
+    /// the one that can name an unlisted catalog.</summary>
     [Fact]
-    public void A_tally_can_name_its_catalogue_by_id()
+    public void A_tally_can_name_its_catalog_by_id()
     {
         var id = Guid.NewGuid();
 
@@ -200,6 +200,21 @@ public class CollectionSyntaxTests
             CollectionSyntax.Write(block.Word, block.Argument, block.Items, ticked: true));
     }
 
+    /// <summary>One answer each is a rule about the file, so it is stated where the file
+    /// is parsed rather than where a grid is drawn.</summary>
+    [Fact]
+    public void Only_a_poll_is_one_answer_each()
+    {
+        Assert.True(CollectionSyntax.PicksOne("poll"));
+        Assert.True(CollectionSyntax.PicksOne("POLL"));
+        Assert.False(CollectionSyntax.PicksOne("collection"));
+        Assert.False(CollectionSyntax.PicksOne("availability"));
+        Assert.False(CollectionSyntax.PicksOne(null));
+        // And the reading view agrees, since it is what draws a radio instead of a box.
+        Assert.All(ListVocabulary.All,
+            words => Assert.Equal(CollectionSyntax.PicksOne(words.Key), words.Value.PicksOne));
+    }
+
     /// <summary>Two lists in two places, and no third: Core parses the words, the client
     /// says what each one calls things, and a word in one and not the other would render
     /// a grid that reads as the wrong question.</summary>
@@ -210,12 +225,15 @@ public class CollectionSyntaxTests
         Assert.All(ListVocabulary.All.Values, words =>
         {
             Assert.NotEmpty(words.Rows);
-            Assert.Contains("{0}", words.Total, StringComparison.Ordinal);
-            Assert.Contains("{0}", words.Score, StringComparison.Ordinal);
-            Assert.Contains("{1}", words.Score, StringComparison.Ordinal);
             Assert.NotEmpty(words.Invite);
             Assert.NotEmpty(words.Yes);
             Assert.NotEmpty(words.No);
+            // A total is always of something, so it always states a number. A score need
+            // not — a poll's is "counted", which is the whole answer — but whatever holes
+            // either one does spell have to be ones the widget fills.
+            Assert.Contains("{0}", words.Total, StringComparison.Ordinal);
+            Assert.NotEmpty(string.Format(words.Total, 3));
+            Assert.NotEmpty(string.Format(words.Score, 1, 3, 2));
         });
         // An unknown word still draws a grid rather than nothing.
         Assert.Same(ListVocabulary.All["collection"], ListVocabulary.For("no-such-question"));
@@ -238,7 +256,7 @@ public class CollectionSyntaxTests
     [Fact]
     public void What_it_reads_it_writes_back()
     {
-        var block = CollectionSyntax.Read(Catalogue)[0];
+        var block = CollectionSyntax.Read(Catalog)[0];
 
         var source = CollectionSyntax.Write(block.Word, block.Argument, block.Items, ticked: false);
         var again = CollectionSyntax.Read(source)[0];
@@ -270,9 +288,9 @@ public class CollectionSyntaxTests
     [Fact]
     public void Rewriting_a_fence_leaves_the_page_around_it_alone()
     {
-        var block = CollectionSyntax.Read(Catalogue)[0];
+        var block = CollectionSyntax.Read(Catalog)[0];
 
-        var rewritten = CollectionSyntax.Replace(Catalogue, block,
+        var rewritten = CollectionSyntax.Replace(Catalog, block,
             CollectionSyntax.Write(block.Word, block.Argument, [block.Items[0]], ticked: false));
 
         Assert.StartsWith("Sprites arrive on Thursdays.", rewritten, StringComparison.Ordinal);

@@ -68,11 +68,11 @@ browser sessions — including against the built container).
   the edits (verified in-browser against the running app, light and dark, and by
   round-trip tests).
 - **Shared lists** — a `:::collection` fence makes a list something a group works
-  rather than reads. The page declares the catalogue; each participant's ticks live in a
-  page of their own under their own root, written by nobody else. The catalogue's audience
+  rather than reads. The page declares the catalog; each participant's ticks live in a
+  page of their own under their own root, written by nobody else. The catalog's audience
   is the grid's audience — whoever may read the list sees every column on it, so ticking
   is joining in and there is no second gesture to publish your own answers — while a
-  tally's own access still governs its *page*, so a column in the grid is not a licence to
+  tally's own access still governs its *page*, so a column in the grid is not a license to
   open the file behind it, find it in a tree, or search it up.
   Items are lines of text; linking a page for one is optional and makes it rename-proof,
   and promotion is lossless, so ticks made before it keep counting. Variants nest one
@@ -81,8 +81,9 @@ browser sessions — including against the built container).
   stranded: they stay in the file and the grid tells their owner so. Read view only, through slopedit
   2.7.0's widget blocks — the canvas keeps the source, so a tick is never an edit — and
   signed out reads rather than ticking. One mechanism, several words for it: the fence's
-  word says what a tick means and decides nothing else, so `:::availability` is who can
-  make which night on the same grid that answers who has which sprite. Over REST and MCP
+  word says what a tick means, so `:::availability` is who can make which night and
+  `:::poll` is who picked which option — one answer each, enforced where the file is
+  written — on the same grid that answers who has which sprite. Over REST and MCP
   too (`collection_status`,
   `mark_collected`). See COLLECTIONS.md.
 - **Awareness** — heartbeat presence ("Sam is editing", verified cross-user) and a
@@ -178,7 +179,7 @@ browser sessions — including against the built container).
   A page may link a node its reader may not open — a public page pointing at its
   author's private file is ordinary — so the reader asks which of the ids it links are
   reachable (the direct-link question, so an unlisted node answers yes) and draws the
-  rest locked: greyed, padlocked with Lucide's lock, and with no target at all, an
+  rest locked: grayed, padlocked with Lucide's lock, and with no target at all, an
   embedded picture becoming its own caption rather than a broken image. The page still
   says what it says; the link stops pretending it goes somewhere.
 - **Auth** — OIDC-only via discovery, defensive `offline_access`, first user becomes
@@ -212,7 +213,7 @@ browser sessions — including against the built container).
   keep counting, a rename whose orphans are kept and reported only to their owner, and the
   parent row that refuses to be ticked), the widget seam the
   read view claims a collection through (the hole, and the whole-body writer that ignores
-  it so a static export still holds the catalogue), and integration tests booting the app
+  it so a static export still holds the catalog), and integration tests booting the app
   on Testcontainers Postgres
   (create page → search → MCP `get_node`; wiki link → backlink → `resolve-titles`;
   file a page in a nested category → find it from the category above, over REST and

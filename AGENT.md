@@ -45,7 +45,7 @@ auto-login. Migrations: `dotnet ef migrations add <Name> -p src/Gatherum.Infrast
   `CategoryIndex` the one-snapshot-per-operation view of its graph,
   `FileService` = bodies/versions/text editing, `BookmarkService` = a URL captured as
   a file node and captured again on demand, `CollectionService` = a shared list's
-  catalogue fused with every tally of it, and the one write, which is always the
+  catalog fused with every tally of it, and the one write, which is always the
   caller's own tally), `Markdown/MarkdownContent`,
   `Markdown/WikiLinkSyntax` and `Markdown/CollectionSyntax` (the conventions a body
   carries, read server-side without an editor), the seam
@@ -124,14 +124,16 @@ fresh DI scope via `Services/AppOperations`.
   view's alone: it rewrites runs, and a document that can be saved has to write back the
   bytes it was read from.
 - A shared list is two documents, and one mechanism with several words for it — the
-  fence's word (`collection`, `availability`) says what a tick *means* and decides
-  nothing else, the way a callout's kind does. `CollectionSyntax.Kinds` parses them and
+  fence's word (`collection`, `availability`, `poll`) says what a tick *means*, the way a
+  callout's kind does. It decides the wording, whether a row's own total is worth a
+  column, and whether a person has one answer or many (`CollectionSyntax.PicksOne`,
+  enforced on the write because the file is what everybody else reads). `CollectionSyntax.Kinds` parses them and
   `ListVocabulary` says what each calls things; adding a question is a row in each, and
-  there is no third place. The catalogue is a page with a `:::collection`
-  fence; a tally is a page per person whose fence names that catalogue, under its owner's
-  root, and nobody writes anybody else's. **The catalogue's audience is the grid's
+  there is no third place. The catalog is a page with a `:::collection`
+  fence; a tally is a page per person whose fence names that catalog, under its owner's
+  root, and nobody writes anybody else's. **The catalog's audience is the grid's
   audience**: whoever may read the list sees every column on it, so the whole
-  authorization is the one `GetWithBodyAsync` on the catalogue already does — the
+  authorization is the one `GetWithBodyAsync` on the catalog already does — the
   aggregate re-asks nothing and spells nothing. A tally's own `AccessMode` still governs
   its *page* (its URL, the tree, search), which is why ticking never publishes one. Ticks
   are content, so they are a file: no `NodeTicks` table, ever. Ordinary `- [ ]` outside a

@@ -553,7 +553,7 @@ public class AppIntegrationTests(PostgresFixture postgres) : IAsyncLifetime
         // reverse proxy that is the proxy for everybody — one bucket for the whole
         // internet — unless X-Forwarded-For is honoured. The container turns that on with
         // ASPNETCORE_FORWARDEDHEADERS_ENABLED, which is a setting in the Dockerfile rather
-        // than a line of code here, so this pins the behaviour the limiter depends on.
+        // than a line of code here, so this pins the behavior the limiter depends on.
         var before = Environment.GetEnvironmentVariable("ASPNETCORE_FORWARDEDHEADERS_ENABLED");
         Environment.SetEnvironmentVariable("ASPNETCORE_FORWARDEDHEADERS_ENABLED", "true");
         try
@@ -632,7 +632,7 @@ public class AppIntegrationTests(PostgresFixture postgres) : IAsyncLifetime
             $"/api/nodes/{page.Id}/rename", new { title = "defaced" })).StatusCode);
     }
 
-    /// <summary>The collectible list end to end: a catalogue over REST, a tick over MCP,
+    /// <summary>The collectible list end to end: a catalog over REST, a tick over MCP,
     /// and the tally that tick wrote showing up as a page like any other.</summary>
     [Fact]
     public async Task A_collection_is_ticked_over_mcp_and_the_tally_is_a_page()
@@ -649,31 +649,31 @@ public class AppIntegrationTests(PostgresFixture postgres) : IAsyncLifetime
                 :::
                 """,
         });
-        var catalogueId = (await create.Content.ReadFromJsonAsync<JsonElement>())
+        var catalogId = (await create.Content.ReadFromJsonAsync<JsonElement>())
             .GetProperty("id").GetGuid();
 
         var before = await client.GetFromJsonAsync<JsonElement>(
-            $"/api/nodes/{catalogueId}/collection");
+            $"/api/nodes/{catalogId}/collection");
         Assert.Equal(3, before.GetProperty("collectibles").GetInt32());
         Assert.Empty(before.GetProperty("columns").EnumerateArray());
         var gold = before.GetProperty("rows")[0].GetProperty("variants")[1]
             .GetProperty("key").GetString()!;
 
         var ticked = await CallMcpToolAsync("mark_collected",
-            new { id = catalogueId, key = gold });
+            new { id = catalogId, key = gold });
         var column = Assert.Single(ticked.GetProperty("columns").EnumerateArray().ToList());
         Assert.True(column.GetProperty("isViewer").GetBoolean());
         Assert.Equal(1, column.GetProperty("count").GetInt32());
 
         var tallyId = ticked.GetProperty("tallyId").GetGuid();
         var tally = await CallMcpToolAsync("get_node", new { id = tallyId });
-        Assert.Contains($"](node://{catalogueId})", tally.GetProperty("markdown").GetString()!,
+        Assert.Contains($"](node://{catalogId})", tally.GetProperty("markdown").GetString()!,
             StringComparison.Ordinal);
         Assert.Contains("- [x] Gold", tally.GetProperty("markdown").GetString()!,
             StringComparison.Ordinal);
 
         var status = await CallMcpToolAsync("collection_status", new { id = tallyId });
-        Assert.Equal(catalogueId, status.GetProperty("catalogueId").GetGuid());
+        Assert.Equal(catalogId, status.GetProperty("catalogId").GetGuid());
     }
 
     /// <summary>The read view's half: a page's first response carries the grid itself,

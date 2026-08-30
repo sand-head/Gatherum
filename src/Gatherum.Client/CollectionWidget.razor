@@ -6,7 +6,7 @@
    of — slopedit 2.7.0's widget blocks are exactly this hole in the reading view, and the
    canvas keeps the source, so a tick can never register as an edit of an open document.
 
-   Everything on screen is decided by the server: the rows are the catalogue's, in its
+   Everything on screen is decided by the server: the rows are the catalog's, in its
    author's order, and the columns are everyone's. This component contains no rule about
    who may see what — asking twice is how two surfaces come to disagree. *@
 <div class="collection">
@@ -17,7 +17,7 @@
     else
     {
         <div class="collection-head">
-            <p class="collection-name">@(view.List.Length > 0 ? view.List : view.CatalogueTitle)</p>
+            <p class="collection-name">@(view.List.Length > 0 ? view.List : view.CatalogTitle)</p>
             <span class="collection-count">
                 @(view.Columns.Count switch
                 {
@@ -41,10 +41,25 @@
                             <th scope="col" class="@(column.IsViewer ? "col-you" : null)">
                                 <span class="person">
                                     <span class="who">@(column.IsViewer ? "You" : column.DisplayName)</span>
-                                    <span class="meter"><i style="width:@Percent(column.Count)%"></i></span>
-                                    <span class="have">@column.Count/@view.Collectibles</span>
+                                    @if (!Words.PicksOne)
+                                    {
+                                        @* How much of the list this person holds — a
+                                           question only a list you work through has. On a
+                                           poll everybody is 1 of 4 and the answer is
+                                           down the rows, not across them. *@
+                                        <span class="meter"><i style="width:@Percent(column.Count)%"></i></span>
+                                        <span class="have">@column.Count/@view.Collectibles</span>
+                                    }
                                 </span>
                             </th>
+                        }
+                        @if (Words.Tallies)
+                        {
+                            @* A row's own total, where that is the question the list is read
+                               for: "how many can make Friday" and "how many picked Thai" are
+                               what those grids are about, and counting the row by eye across a
+                               dozen columns is what a reader should never have to do. *@
+                            <th scope="col" class="col-tally">Total</th>
                         }
                         @if (!view.CanTick)
                         {
@@ -101,6 +116,10 @@
                                     }
                                 </td>
                             }
+                            @if (Words.Tallies)
+                            {
+                                <td class="col-tally">@RowTally(row)</td>
+                            }
                             @if (!view.CanTick)
                             {
                                 <td class="col-invite"></td>
@@ -115,6 +134,10 @@
                                     @foreach (var column in Columns)
                                     {
                                         <td class="@CellClass(column)">@Mark(variant, column)</td>
+                                    }
+                                    @if (Words.Tallies)
+                                    {
+                                        <td class="col-tally">@RowTally(variant)</td>
                                     }
                                     @if (!view.CanTick)
                                     {
@@ -182,7 +205,7 @@
     [Parameter, EditorRequired] public DocumentWidget Widget { get; set; } = null!;
 
     /// <summary>The page the fence is on, which is what the aggregate is asked of: a
-    /// catalogue answers for itself, a tally for the catalogue it tracks.</summary>
+    /// catalog answers for itself, a tally for the catalog it tracks.</summary>
     [Parameter, EditorRequired] public Guid NodeId { get; set; }
 
     private CollectionInfo? view;
@@ -285,6 +308,26 @@
     private static int Progress(CollectionRowInfo row, CollectionColumnInfo column) =>
         row.Variants.Count(v => column.Held.Contains(v.Key));
 
+    /// <summary>How many people answered yes to one row, as a number over a bar. Of the
+    /// columns actually on the grid, which is the honest denominator: it counts the people
+    /// this reader can see, and says so by being the same number they can count.</summary>
+    private RenderFragment RowTally(CollectionRowInfo row) =>
+        @<text>
+            @if (row.Variants.Count == 0)
+            {
+                <span class="rows-for" title="@Answered(row) of @view!.Columns.Count">
+                    <span class="n">@Answered(row)</span>
+                    <span class="bar"><i style="width:@Share(row)%"></i></span>
+                </span>
+            }
+        </text>;
+
+    private int Answered(CollectionRowInfo row) =>
+        view?.Columns.Count(c => c.Held.Contains(row.Key)) ?? 0;
+
+    private int Share(CollectionRowInfo row) =>
+        view is { Columns.Count: > 0 } ? Answered(row) * 100 / view.Columns.Count : 0;
+
     private static string CellClass(CollectionColumnInfo column) =>
         column.IsViewer ? "mark you" : "mark";
 
@@ -293,7 +336,7 @@
     /// reason to spend a node on an item. A link the reader may <em>not</em> follow is
     /// drawn as the plain text it says rather than as an offer into a 404: the same rule
     /// the prose around it obeys, said with the vocabulary a grid has. A note the
-    /// catalogue put after an item rides along as a pill — it qualifies the row rather
+    /// catalog put after an item rides along as a pill — it qualifies the row rather
     /// than continuing its name.</summary>
     private RenderFragment Named(CollectionRowInfo row) =>
         @<text>
@@ -321,11 +364,21 @@
     /// <summary>One cell: a checkbox where the column is the reader's own, and a mark
     /// where it is somebody else's. Nobody edits anybody else's tally, so the difference
     /// is not a permission this checks — it is the only control it offers. A mark rather
-    /// than a disabled checkbox, because a greyed-out box reads as "you may not" instead
+    /// than a disabled checkbox, because a grayed-out box reads as "you may not" instead
     /// of "this isn't yours".</summary>
     private RenderFragment Mark(CollectionRowInfo row, CollectionColumnInfo column) =>
         @<text>
-            @if (column.IsViewer)
+            @if (column.IsViewer && Words.PicksOne)
+            {
+                @* One answer each, so the control says so: a radio is a promise that
+                   picking this un-picks the last, which is exactly what the write does. *@
+                <input class="box round" type="radio" aria-label="@row.Text"
+                       name="@($"pick-{view!.CatalogId:N}")"
+                       checked="@column.Held.Contains(row.Key)"
+                       disabled="@(busy || !RendererInfo.IsInteractive)"
+                       @onchange="() => TickAsync(row.Key, true)" />
+            }
+            else if (column.IsViewer)
             {
                 <input class="box" type="checkbox" aria-label="@row.Text"
                        checked="@column.Held.Contains(row.Key)"

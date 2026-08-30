@@ -15,11 +15,12 @@ rest of this document is written in the narrower vocabulary.** Nothing under the
 ever knew what a row *meant*: the whole mechanism is a row per thing, a column per
 person, and a mark where that person says yes. "Who has which sprite" and "who can make
 which night" are that same question asked of different nouns. So the construct is one
-mechanism with a small vocabulary of words for it — `:::collection`, `:::availability` —
-exactly the shape `CalloutExtension` has, where five spellings share one implementation.
-The word decides what a tick means and the words the reading view puts around the grid;
-it decides nothing else, and a new question costs a row in `CollectionSyntax.Kinds` and
-a row in `ListVocabulary`. Read "collectible" below as "row" and every argument holds.
+mechanism with a small vocabulary of words for it — `:::collection`, `:::availability`,
+`:::poll` — exactly the shape `CalloutExtension` has, where five spellings share one
+implementation. The word decides what a tick means, the words the reading view puts
+around the grid, whether a row's own total is worth a column, and whether a person has
+one answer or many; a new question costs a row in `CollectionSyntax.Kinds` and a row in
+`ListVocabulary`. Read "collectible" below as "row" and every argument holds.
 
 ## First, a correction to the premise
 
@@ -45,17 +46,17 @@ something the current model is actually better at.
 The reason shared checklists are awkward everywhere is that they conflate two things with
 completely different tempos, authors, and privacy needs:
 
-| | **The catalogue** | **The tally** |
+| | **The catalog** | **The tally** |
 | --- | --- | --- |
 | What it says | what exists to collect | what *I* have |
 | Who writes it | one author, occasionally | each participant, constantly |
-| Who should see it | everybody it's shared with | everybody the catalogue is shared with |
+| Who should see it | everybody it's shared with | everybody the catalog is shared with |
 | Edited how often | weekly | daily |
 
 One shared set of checkboxes cannot answer both. If Alice ticks "Sonic", has Bob got it?
 The checkbox has nowhere to put the answer.
 
-Split them and both halves get easy. The catalogue is **a page** — and therefore already
+Split them and both halves get easy. The catalog is **a page** — and therefore already
 has versions, search, categories, backlinks, MCP tools, and a manual entry. The tally is
 **a page per person** — and therefore already has an owner, a history, and a place on
 disk, with the list it was made against deciding who reads it.
@@ -78,14 +79,14 @@ Two things about that roster matter more than the roster:
 2. **It grows on a schedule.** New sprites on Thursdays, new variant access on Mondays,
    community winners staggered through the season.
 
-So the catalogue is a *living document* that will be corrected and extended dozens of times
+So the catalog is a *living document* that will be corrected and extended dozens of times
 while people are ticking against it. That makes the interesting problem not the checkbox.
 It is:
 
 ## Item identity is the interesting problem
 
 A tick has to name an item, and what it names decides whether a season's collecting
-survives an edit to the catalogue.
+survives an edit to the catalog.
 
 - **By line number** — a Sprite Day inserts a row and every tick below it shifts. Fails on
   the most common edit there is.
@@ -123,7 +124,7 @@ simply stop matching. The grid says so: *"3 ticks no longer match an item"*, wit
 orphans listed and a click to re-point them. Silence is what would be unacceptable here,
 not the mismatch.
 
-That also settles what the catalogue *is*: **a page with a list on it**, not a category of
+That also settles what the catalog *is*: **a page with a list on it**, not a category of
 pages. It gets deliberate ordering (a category has none), prose around the list, and one
 node to share instead of fifty. Pages for individual collectibles remain exactly what they
 should be — an upgrade for the handful you care about, filed in whatever category you like.
@@ -202,7 +203,7 @@ sharing a roster with their group means "and each of you must separately publish
 answers before anyone can see them". It is permission overkill, and the cost of it lands on
 exactly the thing the feature is for.
 
-So: **the catalogue's audience is the grid's audience.** Whoever may read the list sees
+So: **the catalog's audience is the grid's audience.** Whoever may read the list sees
 every column on it. Ticking is joining in, and that is the whole of joining in.
 
 That is not the same as publishing the tally, and the distinction is the point. Its
@@ -210,9 +211,9 @@ That is not the same as publishing the tally, and the distinction is the point. 
 whether it appears in anybody's tree, whether search finds it — so a tally stays its
 owner's file, private like any other new node, while the ticks on it count in the list they
 were made against. What the grid discloses is exactly the rows somebody ticked and the name
-they tick under. Their notes, and the ticks the catalogue has since orphaned, stay theirs.
+they tick under. Their notes, and the ticks the catalog has since orphaned, stay theirs.
 
-Two consequences to state rather than discover. A **public** catalogue's grid is public,
+Two consequences to state rather than discover. A **public** catalog's grid is public,
 participants' display names included — which is what a public collectible list is, and why
 publishing one is a decision about other people as well as about the page. And there is no
 half-in: the way not to be in a grid is not to tick, or to delete the tally. A mode meaning
@@ -226,7 +227,7 @@ by the backup people are told to take, readable when Gatherum isn't running.
 
 ### The format: one construct, then no new format
 
-The tally's body is a `:::collection` fence naming the catalogue, wrapping a task list that
+The tally's body is a `:::collection` fence naming the catalog, wrapping a task list that
 mirrors its lines — the exact spelling is in *What makes a page a tally* below.
 
 Inside the fence every word is vocabulary the dialect already has: task lists, wiki links and
@@ -238,14 +239,14 @@ a tally read by a human with no Gatherum running is still obviously a checklist.
 The only genuinely new code is a reader that pulls `(item → checked)` out of a task list,
 which belongs in `Markdown/` in Core beside `WikiLinkSyntax`.
 
-## How the catalogue shows everyone's columns
+## How the catalog shows everyone's columns
 
-A tally names its catalogue on its first line, so **every tally is a backlink of the
-catalogue**. The whole read path is two calls that already exist, plus a parse:
+A tally names its catalog on its first line, so **every tally is a backlink of the
+catalog**. The whole read path is two calls that already exist, plus a parse:
 
 ```
-NodeService.GetBacklinksAsync(userId, catalogueId)   → the candidate tallies
-FileService … read the catalogue body                → the rows, in the author's order
+NodeService.GetBacklinksAsync(userId, catalogId)   → the candidate tallies
+FileService … read the catalog body                → the rows, in the author's order
 ```
 
 Parse each candidate for `- [x]` items, match them to rows by id or text, and that is the
@@ -253,7 +254,7 @@ grid.
 
 **Where the authorization is** follows from the rule above, and it is worth being exact
 because this is the one place a reader might expect a `VisibleTo` and not find one. Reading
-the catalogue is the permission: `NodeService.GetWithBodyAsync` answers it, through
+the catalog is the permission: `NodeService.GetWithBodyAsync` answers it, through
 `INodeAuthorizer`, before anything else happens — and a reader who got past it gets the
 whole grid. So the tally query asks no visibility question of its own. That is not a second
 door left unlocked; it is the same door, knocked on once. The seam rule survives intact
@@ -262,11 +263,11 @@ second way.
 
 One wrinkle worth writing down, and the change above moves it somewhere better.
 `[[Wiki link]]` resolves by *title*, which is the enumeration question — so a tally spelled
-that way finds its catalogue only if its **author** could enumerate it when they saved, and
-an unlisted catalogue cannot be named that way. That is now a fact about writing the link,
-not about who is reading the grid: matching a fence's title against the catalogue's own is
+that way finds its catalog only if its **author** could enumerate it when they saved, and
+an unlisted catalog cannot be named that way. That is now a fact about writing the link,
+not about who is reading the grid: matching a fence's title against the catalog's own is
 what the aggregate does, so the answer no longer depends on the reader. Naming the
-catalogue with a `node://` mention works regardless, because an id is permission, which is
+catalog with a `node://` mention works regardless, because an id is permission, which is
 why a tally written by ticking uses that spelling.
 
 ### A fence declares the list
@@ -374,9 +375,9 @@ Everything this design needed, it has:
   view itself emitted, so `node://` routing inside the grid is wired the way we wire
   everything else.
 - **`WriteBody` ignores the claim** and emits the blocks, so a static export holds the
-  catalogue rather than a gap where one was.
+  catalog rather than a gap where one was.
 
-Two behaviours to design around rather than discover. A tagged run **inside a float** renders
+Two behaviors to design around rather than discover. A tagged run **inside a float** renders
 as blocks, not a widget — an aside is a column, and a column with a hole in it is neither — so
 a collection inside an `:::infobox` is a plain list. And a collapsible section holding a
 widget **keeps its chevron rather than folding**, so the fold interaction stays available
@@ -389,7 +390,7 @@ careful not to take away.
 
 ### What makes a page a tally
 
-The same fence, with the catalogue named instead of a new list:
+The same fence, with the catalog named instead of a new list:
 
 ```markdown
 :::collection [[Override sprites]]
@@ -402,12 +403,12 @@ The same fence, with the catalogue named instead of a new list:
 A fence whose argument resolves to another node's collection *tracks* it; one that names
 nothing but itself *declares* one. That is the single piece of cleverness in the construct,
 and it earns its place by making recognition exact rather than inferred — an earlier draft
-recognized a tally structurally, by it linking the catalogue and carrying matching task
+recognized a tally structurally, by it linking the catalog and carrying matching task
 items, which would have counted any page that discussed the list with example checkboxes as
 somebody's column. With the fence there is no heuristic and no false positive.
 
 It also keeps the wiki-link caveat visible: `[[Wiki link]]` resolves by *title*, which is the
-enumeration question, so a tally cannot name an **unlisted** catalogue that way — a
+enumeration question, so a tally cannot name an **unlisted** catalog that way — a
 `node://` mention works there, because an id is permission and a title is a search.
 
 No new relation, no new table, no new visibility rule, no new sidecar. One new construct.
@@ -441,8 +442,8 @@ you look at rather than a thing you join.
 ### Counted anonymously
 
 The design is the guest tally: a hashed capability token scoped to one node, its file under
-the **catalogue owner's** root (ownership is the path, and a visitor has no root of their
-own), off by default per catalogue and per instance, with caps on tallies and bytes, the
+the **catalog owner's** root (ownership is the path, and a visitor has no root of their
+own), off by default per catalog and per instance, with caps on tallies and bytes, the
 existing anonymous rate limiter, untrusted display names, and a plain warning that losing
 the token loses the list. Never the node id as the secret: the aggregate works by
 enumerating exactly those links and would hand out every guest's write key with it.
@@ -459,7 +460,7 @@ already there, and nothing already written changes meaning. Going the other way 
 guest tallies and later regretting the moderation surface — is not. Ship the honest cheap
 one, and turn the other on deliberately.
 
-## Sharing a catalogue with everyone who can sign in
+## Sharing a catalog with everyone who can sign in
 
 Signing in is gated on an Authelia group, so "everyone with an account here" is already the
 set the owner means when they share a list with their people. But the access modes go from
@@ -467,7 +468,7 @@ set the owner means when they share a list with their people. But the access mod
 mean the open internet. There is no mode for *anyone who got past the front door*.
 
 With more than a handful of participants that gap is the thing that will actually hurt: a
-twenty-person catalogue means twenty grants, or publishing it to the internet.
+twenty-person catalog means twenty grants, or publishing it to the internet.
 
 The fix is a reach between the two, and it is worth flagging that it does **not** slot
 neatly into the existing ordered scale. `NodeReach` is ordered because inheritance is a
@@ -498,7 +499,7 @@ docs with "two people" as their justification, and that premise has changed:
 ## What it touched
 
 - **Core** — `Markdown/CollectionSyntax` (the fence, read and written, pure), and
-  `Services/CollectionService` (catalogue rows fused with the visible tallies, and the one
+  `Services/CollectionService` (catalog rows fused with the visible tallies, and the one
   write, which is always the caller's own file). Every rule here.
 - **Client** — `CollectionExtension` in the dialect, its card in `DocumentChrome`, and
   `CollectionWidget` — the grid, claimed out of the reading view by `Block.Tag` through
@@ -514,7 +515,7 @@ docs with "two people" as their justification, and that premise has changed:
 ## What not to do
 
 - No `NodeTicks` table. A tally is content and lives on disk.
-- No second taxonomy verb, and no taxonomy at all in the list machinery. A catalogue is a
+- No second taxonomy verb, and no taxonomy at all in the list machinery. A catalog is a
   page with a list on it; categories file it exactly as they file anything else.
 - No page required per item. Pages are the optional half, for the items worth writing about.
 - No new abstraction seam — nothing here has a second implementation.
@@ -523,24 +524,24 @@ docs with "two people" as their justification, and that premise has changed:
 
 ## The questions this raised, and how they were answered
 
-1. **Does a catalogue need an "everyone who can sign in" reach?** Yes, and it was built
+1. **Does a catalog need an "everyone who can sign in" reach?** Yes, and it was built
    first: `AccessMode.Authenticated`, carried on a second axis rather than a fourth rung of
    `NodeReach` (DECISIONS.md, "Authenticated is a second axis, not a fourth rung"). A
    group-shared list no longer has to choose between twenty grants and the open internet.
 2. **Does a tick want structure** — date acquired, variant, a note — or is trailing prose
    after the item enough? **Prose.** Anything after ` — ` on an item is a note, kept
    through every later tick, and it costs no format. Variants turned out to be structure
-   the *catalogue* declares, not the tick.
+   the *catalog* declares, not the tick.
 3. **Read-only or counted for signed-out visitors?** **Read-only**, per *Why the order is
    read-only first*: the move to counted is additive and the reverse is not.
 4. **Do guest tallies appear in the aggregate immediately, or after the owner approves
    each?** Still open, and still only matters if guest tallies are ever built.
 
 Settled since the first draft: items are text with optional node links rather than mandatory
-pages; variants are nested items rather than a set declared once; the catalogue is a page
+pages; variants are nested items rather than a set declared once; the catalog is a page
 rather than a category; a tally is declared by the fence rather than inferred; an
 "everyone who can sign in" reach exists now, so a group-shared list no longer has to choose
-between twenty grants and the open internet; and the grid follows the catalogue's audience
+between twenty grants and the open internet; and the grid follows the catalog's audience
 rather than each tally's, so ticking is one gesture and not two.
 
 ## Sources for the worked example

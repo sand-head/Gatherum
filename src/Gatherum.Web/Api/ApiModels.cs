@@ -193,14 +193,14 @@ public record DescriptionRequest(string Description);
 public record BookmarkRequest(string Url, Guid? ParentId);
 public record PresenceDto(IReadOnlyList<string> Editors, int HeadVersion);
 
-/// <summary>A shared list as everyone's ticks make it: the catalogue's rows in the
+/// <summary>A shared list as everyone's ticks make it: the catalog's rows in the
 /// author's order, one column per participant, and which of them — if any — is the
-/// caller's own. <c>Kind</c> is the word the catalogue's fence opened with, which says
+/// caller's own. <c>Kind</c> is the word the catalog's fence opened with, which says
 /// what a tick on this list means. <c>Collectibles</c> counts variants rather than lines,
 /// which is the only number a progress report may be made of.</summary>
 public record CollectionDto(
-    Guid CatalogueId,
-    string CatalogueTitle,
+    Guid CatalogId,
+    string CatalogTitle,
     string Kind,
     string List,
     IReadOnlyList<CollectionRowDto> Rows,
@@ -210,13 +210,13 @@ public record CollectionDto(
     int Collectibles)
 {
     public static CollectionDto From(CollectionView view) => new(
-        view.CatalogueId, view.CatalogueTitle, view.Kind, view.List,
+        view.CatalogId, view.CatalogTitle, view.Kind, view.List,
         [.. view.Rows.Select(CollectionRowDto.From)],
         [.. view.Columns.Select(CollectionColumnDto.From)],
         view.TallyId, view.CanTick, view.Collectibles);
 }
 
-/// <summary>One line of the catalogue. <c>Key</c> is what a tick names — an id where the
+/// <summary>One line of the catalog. <c>Key</c> is what a tick names — an id where the
 /// item links a page, its text where it does not — and a variant's carries its parent's,
 /// so "Gold" is nameable without every item's Gold colliding.</summary>
 public record CollectionRowDto(string Key, string Text, Guid? NodeId, string Note,
@@ -228,7 +228,7 @@ public record CollectionRowDto(string Key, string Text, Guid? NodeId, string Not
 
 /// <summary>One participant's column: their tally node, and the row keys it holds.
 /// Whoever may read the list sees every column on it. <c>Orphans</c> — ticks the
-/// catalogue no longer has an item for — comes back for the caller's own column and
+/// catalog no longer has an item for — comes back for the caller's own column and
 /// empty for everybody else's.</summary>
 public record CollectionColumnDto(Guid TallyId, Guid OwnerId, string DisplayName, bool IsViewer,
     IReadOnlyList<string> Held, IReadOnlyList<CollectionOrphanDto> Orphans, int Count)

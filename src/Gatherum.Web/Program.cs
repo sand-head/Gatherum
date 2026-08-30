@@ -259,7 +259,7 @@ if (!oidc.IsConfigured)
     // Auth is OIDC-only, so the development auto-login is the one local account that
     // exists — and it signs anybody in without asking them anything. Outside
     // Development that is not a warning, it is an open door, and the app refuses to be
-    // one. Loud at startup beats a line in a log nobody reads until afterwards.
+    // one. Loud at startup beats a line in a log nobody reads until afterward.
     if (!app.Environment.IsDevelopment())
     {
         throw new InvalidOperationException(

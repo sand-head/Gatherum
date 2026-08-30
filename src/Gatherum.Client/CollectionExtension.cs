@@ -18,11 +18,11 @@ namespace Gatherum.Client;
 /// - [x] Sonic — Gold, Sprite Day 2
 /// :::
 /// </code>
-/// The first spelling <em>declares</em> a list — the catalogue, the rows everyone answers.
+/// The first spelling <em>declares</em> a list — the catalog, the rows everyone answers.
 /// The second, whose argument names another node, <em>tracks</em> it: the page is one
 /// person's tally, and the task marks are their ticks. That is the whole of how a page
 /// says which of the two it is, and it is exact rather than inferred — an earlier draft
-/// recognized a tally by it linking a catalogue and carrying matching task items, which
+/// recognized a tally by it linking a catalog and carrying matching task items, which
 /// would have counted any page discussing the list with example checkboxes as somebody's
 /// column.
 ///

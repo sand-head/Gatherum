@@ -193,14 +193,14 @@ public class GatherumMcpTools(
     }
 
     [McpServerTool(Name = "collection_status")]
-    [Description("A collaborative collectible list: what the catalogue says exists, and " +
-        "which of it each participant has. Ask it of the catalogue page or of any tally " +
+    [Description("A collaborative collectible list: what the catalog says exists, and " +
+        "which of it each participant has. Ask it of the catalog page or of any tally " +
         "that tracks it — both answer with the same grid. Every row carries the key a " +
         "tick names it by; a row with variants is a group, and only its variants can be " +
         "ticked. Columns are the tallies you may enumerate, so a private tally is not " +
         "one of them.")]
     public async Task<CollectionDto> CollectionStatus(
-        [Description("The node id of the catalogue, or of a tally that tracks it.")] Guid id,
+        [Description("The node id of the catalog, or of a tally that tracks it.")] Guid id,
         [Description("Which list, where the page declares more than one. Defaults to " +
             "the first.")]
         string? list = null) =>
@@ -212,7 +212,7 @@ public class GatherumMcpTools(
         "anybody else's: a tally is a node, and a node is written by its owner. Take the " +
         "key from collection_status; only a row with no variants of its own can be ticked.")]
     public async Task<CollectionDto> MarkCollected(
-        [Description("The node id of the catalogue, or of a tally that tracks it.")] Guid id,
+        [Description("The node id of the catalog, or of a tally that tracks it.")] Guid id,
         [Description("The row key, from collection_status.")] string key,
         [Description("True to record it, false to take it back. Default true.")]
         bool? collected = null,

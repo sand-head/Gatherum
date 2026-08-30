@@ -95,7 +95,7 @@ public class OidcOptions
     public string GroupsClaim { get; set; } = "groups";
 
     /// <summary>Sign-in requires this group when set. Empty means every account the provider
-    /// authenticates may use Gatherum, which is the behaviour that predates this setting.
+    /// authenticates may use Gatherum, which is the behavior that predates this setting.
     ///
     /// Asking for it means asking for the claim: add <c>groups</c> to <see cref="Scopes"/>,
     /// or the provider sends nothing and the gate — which fails closed on purpose — turns

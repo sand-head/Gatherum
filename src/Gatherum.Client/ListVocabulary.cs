@@ -19,13 +19,23 @@ namespace Gatherum.Client;
 /// <param name="Invite">What to say to somebody who could answer and has not.</param>
 /// <param name="Yes">A mark, for a screen reader: what this person is saying.</param>
 /// <param name="No">And what an empty one says.</param>
+/// <param name="Tallies">Whether a row's own total is worth a column. "How many can make
+/// Friday" is the question an availability list is read for and a poll <em>is</em>; "how
+/// many people have Sonic" is a curiosity beside "how many do I still need", so a
+/// collection spends the width on rows instead.</param>
+/// <param name="PicksOne">Whether a person has one answer rather than many. Presentation
+/// only — radio buttons rather than checkboxes; the rule itself is
+/// <see cref="Gatherum.Core.Markdown.CollectionSyntax.PicksOne"/>, enforced where the
+/// file is written.</param>
 public sealed record ListVocabulary(
     string Rows,
     string Total,
     string Score,
     string Invite,
     string Yes,
-    string No)
+    string No,
+    bool Tallies = false,
+    bool PicksOne = false)
 {
     /// <summary>The words, by the one a fence opened with. Adding a question is adding a
     /// row here and the same word to Core's set — there is no third place.</summary>
@@ -45,7 +55,17 @@ public sealed record ListVocabulary(
                 Score: "You can make {0} of {1}.",
                 Invite: "Tick the ones you can make.",
                 Yes: "can make it",
-                No: "cannot make it"),
+                No: "cannot make it",
+                Tallies: true),
+            ["poll"] = new(
+                Rows: "Option",
+                Total: "{0} options",
+                Score: "Your answer is counted.",
+                Invite: "Pick one.",
+                Yes: "picked this",
+                No: "did not pick this",
+                Tallies: true,
+                PicksOne: true),
         };
 
     /// <summary>The words for a list, falling back to the commonest question rather than

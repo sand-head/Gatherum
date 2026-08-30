@@ -10,7 +10,7 @@ namespace Gatherum.Core.Markdown;
 /// loading an editor. The client's <c>CollectionExtension</c> is the other half, and the
 /// two have to agree about every line here.
 ///
-/// A fence whose argument is a name <em>declares</em> a list — the catalogue, the rows
+/// A fence whose argument is a name <em>declares</em> a list — the catalog, the rows
 /// everyone answers. One whose argument names another node <em>tracks</em> that node's
 /// list — a tally, one person's answers. Inside, the vocabulary is the dialect's own:
 /// bulleted items, nested one level for variants, a task marker where a tally records a
@@ -36,7 +36,15 @@ public static class CollectionSyntax
     [
         "collection",       // what everyone has
         "availability",     // when everyone can
+        "poll",             // what everyone picked — one answer each
     ];
+
+    /// <summary>The words where a person has one answer rather than many, so recording
+    /// one takes back the last. A content rule rather than a presentation one — the file
+    /// itself must never say somebody picked two — which is why it lives beside the
+    /// parser and is enforced on the write path.</summary>
+    public static bool PicksOne(string? word) =>
+        string.Equals(word, "poll", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>The word a list is written with when nothing says otherwise.</summary>
     public const string Word = "collection";
@@ -91,7 +99,7 @@ public static class CollectionSyntax
     }
 
     /// <summary>The whole fence as source, ready to stand in a file. Items that carry no
-    /// tick state — a catalogue's — are written as plain bullets, so declaring a list
+    /// tick state — a catalog's — are written as plain bullets, so declaring a list
     /// never puts an empty checkbox in front of every line of it.</summary>
     public static string Write(string word, string argument,
         IReadOnlyList<CollectionEntry> items, bool ticked)
@@ -119,15 +127,15 @@ public static class CollectionSyntax
         return string.Join('\n', rebuilt);
     }
 
-    /// <summary>Whether a catalogue's item and a tally's are the same collectible.
+    /// <summary>Whether a catalog's item and a tally's are the same collectible.
     /// Two linked items are the ids they carry, which is what makes a rename survivable;
     /// anything else is its text, which is what makes linking optional. The asymmetry is
     /// deliberate — it is the rule that lets an item gain a page later without the ticks
     /// already made against it stopping counting.</summary>
-    public static bool Matches(CollectionEntry catalogueItem, CollectionEntry tallyItem) =>
-        catalogueItem.NodeId is { } mine && tallyItem.NodeId is { } theirs
+    public static bool Matches(CollectionEntry catalogItem, CollectionEntry tallyItem) =>
+        catalogItem.NodeId is { } mine && tallyItem.NodeId is { } theirs
             ? mine == theirs
-            : Normalize(catalogueItem.Label) == Normalize(tallyItem.Label);
+            : Normalize(catalogItem.Label) == Normalize(tallyItem.Label);
 
     /// <summary>An item's text as a match sees it: link spellings shed, whitespace
     /// collapsed, case forgotten. <c>[[Klombo]]</c>, <c>[Klombo](node://…)</c> and
@@ -197,7 +205,7 @@ public static class CollectionSyntax
     /// <summary>The node a fence's argument names, when it names one. A wiki link is a
     /// title and a mention is an id — the difference matters, because a title is a search
     /// and an id is permission, so only the second spelling can name an unlisted
-    /// catalogue. Whatever follows names the list on that node.</summary>
+    /// catalog. Whatever follows names the list on that node.</summary>
     private static CollectionTarget? Tracked(string argument)
     {
         if (argument.StartsWith("[[", StringComparison.Ordinal))
@@ -311,7 +319,7 @@ public sealed record CollectionBlock(
     public string Name => Tracks?.List ?? Argument;
 }
 
-/// <summary>The catalogue a tally follows: named by title (a search, so it cannot reach
+/// <summary>The catalog a tally follows: named by title (a search, so it cannot reach
 /// an unlisted page) or by id (permission, so it can), and optionally which list on it.</summary>
 public sealed record CollectionTarget(Guid? NodeId, string? Title, string List);
 

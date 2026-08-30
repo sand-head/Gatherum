@@ -4,7 +4,7 @@ namespace Gatherum.Web.Auth;
 
 /// <summary>What the identity provider's group claim says about a sign-in, and nothing
 /// more. A group is the provider's idea: Gatherum reads the claim as each person arrives
-/// and keeps no notion of a group afterwards — there is nothing here to grant to, join,
+/// and keeps no notion of a group afterward — there is nothing here to grant to, join,
 /// leave, or administer, and sharing still names people. That is the whole point of doing
 /// it this way rather than modelling groups: take somebody out of the group in Authelia
 /// and their next sign-in has already lost whatever it conferred.

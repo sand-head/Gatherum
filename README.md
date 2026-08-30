@@ -29,14 +29,14 @@ page-turner.
   keeps their own tally as a page of their own, and the reading view draws the grid of
   who has what. Share the list and ticking it is joining in: whoever can read the list
   sees every column on it, with no second gesture to publish your own answers — while the
-  tally itself stays its owner's file, so a column is not a licence to open the page
+  tally itself stays its owner's file, so a column is not a license to open the page
   behind it. A page per collectible is optional and worth it for the few worth writing
   about, ragged rosters are expressible (variants nest, per item), and a signed-out
   visitor to a public list reads it rather than being handed a checkbox that records
   nothing. Ordinary `- [ ]` checklists are untouched — they still mean *it is done*. And the same
-  grid asks other questions: `:::availability` is who can make which night rather than
-  who has which sprite, because a row per thing and a column per person is one shape
-  whatever the noun.
+  grid asks other questions: `:::availability` is who can make which night and `:::poll`
+  is who picked which option, because a row per thing and a column per person is one
+  shape whatever the noun.
 - **Files**: drag-drop or picker upload anywhere in the tree, content-addressed
   storage (SHA-256) on disk, inline previews (images, PDF, video, audio — and EPUBs
   open in a paginated reader, chapter by chapter, links and all), descriptions,
@@ -352,5 +352,5 @@ build plan, [DECISIONS.md](DECISIONS.md) for recorded trade-offs, and
 [STATUS.md](STATUS.md) for what ships and what's stubbed.
 
 Icons are [Lucide](https://lucide.dev), ISC — mostly inline in the markup, and as files
-under `src/Gatherum.Web/wwwroot/icons/` (with the pack's licence) where a stylesheet has
+under `src/Gatherum.Web/wwwroot/icons/` (with the pack's license) where a stylesheet has
 to draw one.

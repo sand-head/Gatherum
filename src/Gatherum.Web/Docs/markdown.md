@@ -254,7 +254,7 @@ Each renders as a tinted card in its kind's accent, with the title line inked to
 A list people tick against, each keeping their own answer. Everything about it is in
 [shared lists](/docs/collections); the syntax is one fence with two spellings.
 
-A fence whose argument is a **name** declares the list — the catalogue, the rows
+A fence whose argument is a **name** declares the list — the catalog, the rows
 everyone answers:
 
 ```markdown
@@ -281,25 +281,36 @@ page a tally — one person's record of what they have:
 Inside the fence everything is vocabulary from further up this page: bulleted items,
 nested one level for variants, task marks for ticks, mentions and wiki links.
 
-**The word the fence opens with says what a tick means**, and nothing else. `collection`
-asks who *has* each row; `availability` asks who *can make* it. Same grid, same rules,
-different nouns:
+**The word the fence opens with says what a tick means.** `collection` asks who *has*
+each row, `availability` who *can make* it, `poll` who *picked* it. Same grid, same
+rules, different nouns:
 
 ```markdown
 :::availability Game nights
-- Fri 3 Oct
-- Fri 10 Oct
-- Fri 17 Oct
+- Fri Oct 3
+- Fri Oct 10
+- Fri Oct 17
 :::
 ```
 
 ```markdown
 :::availability [[Game nights]]
-- [x] Fri 3 Oct
-- [ ] Fri 10 Oct
-- [x] Fri 17 Oct
+- [x] Fri Oct 3
+- [ ] Fri Oct 10
+- [x] Fri Oct 17
 :::
 ```
+
+```markdown
+:::poll Where for dinner?
+- Thai
+- Pizza
+- Sushi
+:::
+```
+
+A **poll is one answer each**: picking a row takes back the last one. Every other word
+keeps every answer.
 
 - **An item is a line of text, and a page for it is optional.** A plain item is matched
   by its text; one that links a node is matched by that id, and so survives a rename.
@@ -310,8 +321,8 @@ different nouns:
   different statement from the three ticks it would stand in for.
 - **A trailing `—` makes the rest a note**: `- [x] Sonic — Gold, Sprite Day 2`. `--`
   works too, for a keyboard without an em dash.
-- **A tally naming its catalogue with `[[Title]]` resolves by title when it is saved**,
-  and a title is a search — so that spelling cannot find an **unlisted** catalogue. A
+- **A tally naming its catalog with `[[Title]]` resolves by title when it is saved**,
+  and a title is a search — so that spelling cannot find an **unlisted** catalog. A
   `node://` mention can, because an id is permission and a title is a search.
 - Where a page declares more than one list, a tally says which after the link:
   `:::collection [[Season 4]] Sprites`.
@@ -319,7 +330,7 @@ different nouns:
   *it is done* — shared state, one answer for everybody — which is the commoner kind in
   a wiki and the reason this construct is opt-in.
 
-Reading the page draws the fence as a grid: the catalogue's rows, a column per
+Reading the page draws the fence as a grid: the catalog's rows, a column per
 participant, checkboxes in your own. Editing it shows the list itself, on a card — the
 source is what you want while rearranging a roster.
 
@@ -450,17 +461,21 @@ systemctl --user start gatherum
 > [!NOTE] Optional title              a callout: note, tip, important, warning, caution
 > The body.
 
-:::collection Override sprites        a shared list: the catalogue everyone answers
+:::collection Override sprites        a shared list: the catalog everyone answers
 - Sonic
   - Gold                              a variant, nested one level
 :::
 
-:::collection [[Override sprites]]    a tally: one person's ticks against that catalogue
+:::collection [[Override sprites]]    a tally: one person's ticks against that catalog
 - [x] Sonic — a note after the dash
 :::
 
 :::availability Game nights           the same grid, asking who can make each row
-- Fri 3 Oct
+- Fri Oct 3
+:::
+
+:::poll Where for dinner?             the same grid again, one answer each
+- Thai
 :::
 
 x^2^  H~2~O                           superscript, subscript

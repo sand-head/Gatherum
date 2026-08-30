@@ -252,8 +252,8 @@ public sealed class ServerAppData(
             await ops.Collections(s => s.SetAsync(userId, nodeId, key, collected, list)));
     }
 
-    private static CollectionInfo Collection(CollectionView view) => new(view.CatalogueId,
-        view.CatalogueTitle, view.Kind, view.List, [.. view.Rows.Select(Row)],
+    private static CollectionInfo Collection(CollectionView view) => new(view.CatalogId,
+        view.CatalogTitle, view.Kind, view.List, [.. view.Rows.Select(Row)],
         [.. view.Columns.Select(c => new CollectionColumnInfo(c.TallyId, c.OwnerId, c.DisplayName,
             c.IsViewer, [.. c.Held],
             [.. c.Orphans.Select(o => new CollectionOrphanInfo(o.Text, o.Note))], c.Count))],

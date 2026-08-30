@@ -263,7 +263,7 @@ writes the page back out around the snippet and reads it again through
 `GatherumMarkdown.Reload` — into the same `RichDocument` instance, because the view, the
 caret and the event subscriptions are bound to it. The cost is the undo stack, which is
 why these are menu items rather than keystrokes, and why the caret is put back at the
-construct afterwards. The Source toggle has always paid the same price.
+construct afterward. The Source toggle has always paid the same price.
 
 ## Callouts are GitHub's five, not the five the docs invented
 MCP.md had been promising `> [!info]`-style callouts (info, note, tip, warning, danger)
@@ -378,7 +378,7 @@ Consequences worth stating:
   class part of the surface (`CategoryTools` on every category page, plus REST and MCP)
   rather than something only a DBA can do.
 - **The migration carries every tag over** as a root category of the same name, so
-  nothing that was filed becomes unfiled; nesting them afterwards is an ordinary move.
+  nothing that was filed becomes unfiled; nesting them afterward is an ordinary move.
 
 ## Semantic search is a second half, not a replacement
 The obvious reading of "I want semantic search" is that vectors replace the tsvector
@@ -704,7 +704,7 @@ upstream. 2.2.2 collapses a floated run back into the flow at the page's full me
 when the page cannot spare `MinBodyWidthPx` (280 by default) beside it and its gutter,
 so the infobox that crushed "Hardware" to "Hard / ware" at 390px now stacks above the
 prose and both surfaces show the same thing. Nothing in Gatherum configures it; the
-default is the behaviour we wanted, and the version bump is the whole change.
+default is the behavior we wanted, and the version bump is the whole change.
 
 The way it is implemented is the reason the CSS override had to come out rather than
 merely be tidied. The decision lives in the layout — `IsFloatCollapsed(i)`, a function
@@ -1144,7 +1144,7 @@ Things worth stating because they are not free:
   wiki for two people. It is a snapshot: load one per operation and let it go.
 - **The reindex needs two passes.** A page filed under "Podman" cannot be joined up until
   whichever root holds Podman's page has been walked, so filings are collected during the
-  walk and wired afterwards, in one pass, against one snapshot. A name nothing answers to —
+  walk and wired afterward, in one pass, against one snapshot. A name nothing answers to —
   somebody typed it into a `meta.json` by hand — gets its page written. That is the one
   place the scan creates a file outside `.gatherum`, and it is deliberate: a taxonomy half
   of which exists only in the database would not survive the next cold start, which is the
@@ -1509,7 +1509,7 @@ without naming: a ruled heading's hairline drew straight across a floated infobo
 because the float's card went down before the body's chrome. The read view never had
 the bug; the canvas agrees with it now. And `BlockDecoration` grew a real box model
 (per-side padding and borders via `BoxEdges`, plus `CornerRadiusPx`), which comes with
-a half-a-border-width shift for cards positioned against the old behaviour —
+a half-a-border-width shift for cards positioned against the old behavior —
 `DocumentChrome` draws at `BorderWidth: 1f`, so the shift is half a pixel and nothing
 here moved. The room is there if an aside ever wants a leading rule down one edge.
 
@@ -1657,16 +1657,16 @@ switched off.
 A collaborative collectible list conflates two documents with different tempos: what
 exists to collect, written once by one author, and what *I* have, written constantly by
 each participant. One set of checkboxes cannot answer both — if you tick Sonic, has anyone
-else got it, and where would the checkbox put the answer? So the catalogue is a page and a
+else got it, and where would the checkbox put the answer? So the catalog is a page and a
 tally is a page per person. No new relation, no new table, no new visibility rule.
 
-**The catalogue's audience is the grid's audience**, and this is the correction that
+**The catalog's audience is the grid's audience**, and this is the correction that
 mattered most. The first cut made each tally's own `AccessMode` decide whether its column
 appeared, which is locally impeccable — only an owner sets access — and globally absurd:
 it made joining a shared list a two-gesture act, tick and then publish a second page, or
 your column counts for nobody. Nobody who shares a roster with their group means "and each
 of you must separately publish your answers first". So authorization happens once, at the
-door the service already knocks on — `NodeService.GetWithBodyAsync` on the catalogue,
+door the service already knocks on — `NodeService.GetWithBodyAsync` on the catalog,
 which is `INodeAuthorizer`'s answer — and a reader who got past it gets the whole grid.
 The aggregate then asks no visibility question of its own, which is not a second door left
 unlocked but the same door knocked on once; `INodeAuthorizer` stays the only one, and the
@@ -1677,16 +1677,16 @@ untouched and still governs the node — its own URL, the tree, search — so a 
 private as a file while the ticks on it count in the list they were made against. The
 disclosure is exactly the rows somebody ticked and the name they tick under; notes and
 orphans stay their owner's, and orphans are reported only to the person who can act on
-one. Two consequences worth saying out loud: a public catalogue's grid is public, display
+one. Two consequences worth saying out loud: a public catalog's grid is public, display
 names included, so publishing one is a decision about other people as well as about the
 page; and there is no half-in — the way out of a grid is not to tick, or to delete the
 tally, because a mode meaning "counted but hidden" would be a checkbox lying in the other
 direction.
 
-It also moved the wiki-link caveat somewhere better. A tally naming its catalogue
-`[[by title]]` is matched by comparing that title against the catalogue's own rather than
+It also moved the wiki-link caveat somewhere better. A tally naming its catalog
+`[[by title]]` is matched by comparing that title against the catalog's own rather than
 by resolving it, so whether the match happens no longer depends on who is *reading*: an
-unlisted catalogue still cannot be named by title, but that is now a fact about the author
+unlisted catalog still cannot be named by title, but that is now a fact about the author
 writing the link, which is where it belongs.
 
 **A tally is content, not ephemera.** `NodeTicks` would have been an afternoon's work and
@@ -1699,9 +1699,9 @@ considered and rejected: `- [ ]` already means *it is done* — shared state, on
 everybody, and the commoner kind in a knowledge base — so reinterpreting it would break the
 first kind silently. A per-page setting is the wrong unit (two lists on one page cannot
 both be it) and has nowhere to live. So the list declares itself, and the same fence does
-both jobs: an argument that is a name declares a catalogue, an argument that names another
+both jobs: an argument that is a name declares a catalog, an argument that names another
 node tracks it. Recognition is exact rather than inferred — an earlier draft recognized a
-tally structurally, by it linking a catalogue and carrying matching task items, which would
+tally structurally, by it linking a catalog and carrying matching task items, which would
 have counted any page discussing the list with example checkboxes as somebody's column.
 
 **Item identity is the interesting problem, and the answer is that pages are optional.**
@@ -1728,7 +1728,7 @@ book — and it is wrong here. A reading position can be quietly local because n
 ever going to see it; in a grid where every other column is a real person's real ticks, a
 checkbox that writes to nobody looks exactly like the ones that count. So there is no
 checkbox at all, and an invitation to sign in instead. Guest tallies (a hashed capability
-token, its file under the catalogue owner's root, off by default) remain designed and
+token, its file under the catalog owner's root, off by default) remain designed and
 unbuilt: going from read-only to counted is purely additive, and the other direction is not.
 
 What this cost outside Core: one Markdown extension, one component, two endpoints and two
@@ -1737,13 +1737,13 @@ the reading view to put a component in — which slopedit 2.7.0 shipped as widge
 keyed by the `Block.Tag` an extension already stamps. The blocks stay blocks, so items
 reach search and a `[[wiki link]]` in one is still a real link; the canvas keeps painting
 the source, so a tick can never register as an edit of an open document; and `WriteBody`
-ignores the claim, so a static export holds the catalogue rather than a gap. Two behaviours
+ignores the claim, so a static export holds the catalog rather than a gap. Two behaviors
 to design around rather than discover: a tagged run inside a float renders as blocks, so a
 collection inside an `:::infobox` is a plain list, and a collapsible section holding a
 widget keeps its chevron rather than folding a component out of the page.
 
 ## One grid, several questions
-The collectible list shipped narrow: `:::collection`, a "catalogue" of "collectibles",
+The collectible list shipped narrow: `:::collection`, a "catalog" of "collectibles",
 copy about what you still have to find. Then the obvious question — what if a group wants
 to see which nights everyone can play D&D — and the answer turned out to be that the
 feature was already general and only the words were not.
@@ -1764,7 +1764,7 @@ component.
 
 The word rides in `Block.Tag` where the construct's argument already rode, survives the
 round trip because the writer gives back what the source said, and reaches the reading
-view through `CollectionView.Kind` — the *catalogue's* word, not the tally's, so a grid
+view through `CollectionView.Kind` — the *catalog's* word, not the tally's, so a grid
 read from either page says the same thing. What it decides is: what the first column is
 called, how the total and the score are phrased, what to say to somebody who has not
 answered, and what a screen reader hears at a mark. What it decides beyond that is
@@ -1777,7 +1777,23 @@ documents. An unknown word still renders a grid in the commonest vocabulary rath
 failing, because a file written by a newer build should degrade to a readable list rather
 than to nothing.
 
+A poll came next and tested the shape, which is what it was for. Two of the three things
+it needed were vocabulary — "Option" for the first column, "picked this" at a mark — and
+the third was not: a poll is **one answer each**, which is a rule about what a file may
+say rather than about how a grid looks. So it went beside the parser
+(`CollectionSyntax.PicksOne`) and is enforced on the write path, where the tally is
+actually produced; the reading view only reads it to draw a radio instead of a box, which
+is a promise the write then keeps. Withdrawing is still allowed — one answer *at most*,
+not one compulsorily.
+
+It also earned the vocabulary its first genuinely visual flag. A poll is read down its
+rows ("how many picked Thai"), and so is an availability list ("how many can make
+Friday"), while a collection is read across them ("how many do I still need"). So a row's
+own total is a column the vocabulary asks for, rather than one every grid carries and two
+thirds of them waste width on. The total counts the columns actually on the grid, which
+is the only denominator a reader can check.
+
 The type names did not follow. `CollectionService`, `CollectionSyntax`, `CollectionWidget`
 still say collection, which is now the name of the flagship question rather than of the
-mechanism. Renaming them across Core, Web and Client is churn against no behaviour, and
+mechanism. Renaming them across Core, Web and Client is churn against no behavior, and
 "a collection of everyone's answers" is a fair reading of what the service returns.

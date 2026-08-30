@@ -46,7 +46,7 @@ claude mcp add --transport http gatherum http://localhost:5140/mcp \
 | `list_categories` | `matching?` | The category tree in path order, with member counts |
 | `browse_category` | `path`, `deep?` | The category, its ancestry, its subcategories and its nodes |
 | `get_backlinks` | `id` | Nodes linking to the given node |
-| `collection_status` | `id` (catalogue or tally), `list?` | A collectible list's rows, and each participant's ticks against them |
+| `collection_status` | `id` (catalog or tally), `list?` | A collectible list's rows, and each participant's ticks against them |
 | `mark_collected` | `id`, `key`, `collected?`, `list?` | The list again, with your own tally rewritten |
 
 ### Search
@@ -65,11 +65,11 @@ still answers from full-text search: a search never fails because a model is dow
 
 ### Shared lists
 
-A `:::collection` fence on a page declares a **catalogue** — the rows everyone answers.
+A `:::collection` fence on a page declares a **catalog** — the rows everyone answers.
 A
 fence naming another node *tracks* it, which makes that page a **tally**: one person's
 record of what they have. `collection_status` fuses them, and answers the same grid
-whether it is asked of the catalogue or of any tally that tracks it.
+whether it is asked of the catalog or of any tally that tracks it.
 
 Every row carries the `key` a tick names it by, so read the list before writing to it. A
 row with variants nested under it is a group and cannot be ticked — its variants can,
@@ -81,7 +81,7 @@ report may be made of.
 first time and never touching anybody else's — a tally is a node, and a node is written
 by its owner. Ticking is joining in: whoever may read the list sees every column on it,
 including the caller's, and no separate sharing gesture is needed. What a tally's own
-access still governs is its *page* — a column in the grid is not a licence to open the
+access still governs is its *page* — a column in the grid is not a license to open the
 file behind it, nor to find it in a tree or a search.
 
 ### Bookmarks

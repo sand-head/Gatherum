@@ -9,10 +9,11 @@ that person says yes.** "Who has which sprite" and "who can make which night" di
 the noun and in nothing else, so they are one construct with a small vocabulary — the
 word the fence opens with says what a tick *means*, and decides nothing else.
 
-| Written | Asks | A tick says |
-| --- | --- | --- |
-| `:::collection` | who has each row | *has it* |
-| `:::availability` | who can make each row | *can make it* |
+| Written | Asks | A tick says | Answers each |
+| --- | --- | --- | --- |
+| `:::collection` | who has each row | *has it* | as many as you like |
+| `:::availability` | who can make each row | *can make it* | as many as you like |
+| `:::poll` | who picked each row | *picked this* | one |
 
 Everything below is written with `:::collection`; swap the word and it all still holds.
 
@@ -21,22 +22,22 @@ Everything below is written with `:::collection`; swap the word and it all still
 Shared checklists are awkward everywhere because they conflate two things with completely
 different tempos, authors, and privacy needs.
 
-| | **The catalogue** | **The tally** |
+| | **The catalog** | **The tally** |
 | --- | --- | --- |
 | What it says | what exists to collect | what *I* have |
 | Who writes it | one author, occasionally | each participant, constantly |
-| Who should see it | everybody it is shared with | everybody the catalogue is shared with |
+| Who should see it | everybody it is shared with | everybody the catalog is shared with |
 
 One shared set of checkboxes cannot answer both: if you tick "Sonic", has anyone else got
 it? The checkbox has nowhere to put the answer.
 
-So a collection is two kinds of page. The **catalogue** is a page with a
+So a collection is two kinds of page. The **catalog** is a page with a
 `:::collection` fence on it, naming the list. A **tally** is a page per person with a
-fence tracking that catalogue. Both are ordinary nodes, so both already have versions,
+fence tracking that catalog. Both are ordinary nodes, so both already have versions,
 search, categories, backlinks and their own sharing — nothing here is a new kind of
 thing.
 
-## Writing a catalogue
+## Writing a catalog
 
 ```markdown
 Sprites arrive on Thursdays.
@@ -70,8 +71,8 @@ lines, and every number in the interface says six.
 
 ## Ticking
 
-Anyone signed in who can see the catalogue can tick against it. The first tick writes
-their tally into being — a page called after the catalogue, under a `Collections` folder
+Anyone signed in who can see the catalog can tick against it. The first tick writes
+their tally into being — a page called after the catalog, under a `Collections` folder
 in their own root — and every later tick rewrites it.
 
 That page is a file like any other. You can open it, read it, edit it by hand, and find
@@ -97,9 +98,9 @@ it in a backup:
 
 ## Who sees whose column
 
-**The list's audience is the grid's audience.** Whoever may read the catalogue sees every
+**The list's audience is the grid's audience.** Whoever may read the catalog sees every
 column on it — so ticking is joining in, and there is nothing to share to make your
-column count. Share the catalogue with your group and their ticks appear in it; publish
+column count. Share the catalog with your group and their ticks appear in it; publish
 it and a public list is public, names and all.
 
 That is deliberately not the same as publishing your tally. Its own sharing is untouched
@@ -108,7 +109,7 @@ anybody's tree, whether search finds it. So a tally stays yours as a file — pr
 unless you say otherwise, like any other new node — while the ticks on it count in the
 list they were made against. What the grid shows of somebody else is exactly the rows
 they ticked and the name they tick under; the notes in their file, and any ticks of
-theirs the catalogue has since orphaned, are their own business.
+theirs the catalog has since orphaned, are their own business.
 
 If you do not want your answers seen by the list's readers, do not tick — or delete your
 tally. There is no half-in.
@@ -117,9 +118,9 @@ A signed-out visitor to a public list reads it and has no checkbox at all. In a 
 where every other column is a real person's real ticks, a control that recorded nothing
 but this browser would look exactly like the ones that count, and it would be lying.
 
-## When the catalogue changes
+## When the catalog changes
 
-Catalogues are living documents: items get added, corrected and renamed while people are
+Catalogs are living documents: items get added, corrected and renamed while people are
 ticking against them.
 
 - **An item that gains a page keeps its ticks.** Matching falls back from id to text, so
@@ -140,8 +141,8 @@ tally says which after the link:
 
 The name is what identifies the list, so renaming the page it lives on orphans nothing.
 
-A tally naming its catalogue with `[[Title]]` resolves by title when you save the page,
-and a title is a search — so that spelling cannot find an **unlisted** catalogue, and a
+A tally naming its catalog with `[[Title]]` resolves by title when you save the page,
+and a title is a search — so that spelling cannot find an **unlisted** catalog, and a
 tally written that way would track nothing. A `node://` mention can, because an id is
 permission and a title is a search. Ticking writes the mention spelling for that reason.
 
@@ -156,16 +157,36 @@ elsewhere in the wiki is collecting sprites.
 
 ```markdown
 :::availability Game nights
-- Fri 3 Oct
-- Fri 10 Oct
-- Fri 17 Oct — after the con
+- Fri Oct 3
+- Fri Oct 10
+- Fri Oct 17 — after the con
+:::
+```
+
+```markdown
+:::poll Where for dinner?
+- Thai
+- Pizza
+- Sushi
 :::
 ```
 
 Everything on this page applies unchanged: each person's answer is a page of their own,
-whoever can read the list sees every column, rows can nest (a night with an afternoon
-and an evening slot), an entry can link a page, and a renamed row orphans the ticks it
-stranded and says so.
+whoever can read the list sees every column, rows can nest, an entry can link a page, and
+a renamed row orphans the ticks it stranded and says so.
+
+Two things the word changes beyond the wording.
+
+**A poll is one answer each.** Picking a row takes back the last one, so the control is a
+radio rather than a checkbox and the file itself never says somebody picked two — that is
+enforced where a tally is written, not where a grid is drawn, because the file is what
+everybody else reads. You can still withdraw an answer and pick nothing.
+
+**Availability and polls show a row's own total**, because "how many can make Friday" and
+"how many picked Thai" are what those grids are read for. A collection spends that width
+on rows instead: how many people have Sonic is a curiosity beside how many you still need.
+The total counts the columns actually on the grid, so it is always a number the reader can
+check by counting.
 
 ## For agents
 
@@ -178,6 +199,6 @@ Two MCP tools, and the same over REST:
 | `GET /api/nodes/{id}/collection` | the same, unauthenticated for a public list |
 | `POST /api/nodes/{id}/collection` | `{ key, collected, list? }` |
 
-Ask either of the catalogue or of any tally that tracks it — both answer with the same
+Ask either of the catalog or of any tally that tracks it — both answer with the same
 grid. Every row carries the `key` a tick names it by, so read the list before writing to
 it.

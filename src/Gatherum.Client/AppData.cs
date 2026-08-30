@@ -65,7 +65,7 @@ public interface IAppData
     Task UnshareAsync(Guid nodeId, Guid userId);
 
     /// <summary>A collectible list as everyone's ticks make it, asked of whichever page
-    /// the reader is on — a catalogue aggregates itself, a tally aggregates the catalogue
+    /// the reader is on — a catalog aggregates itself, a tally aggregates the catalog
     /// it tracks. <paramref name="list"/> is the fence's own argument, which is what
     /// tells two lists on one page apart.</summary>
     Task<CollectionInfo> GetCollectionAsync(Guid nodeId, string? list);
@@ -149,14 +149,14 @@ public record CategoryInfo(Guid Id, string Name, IReadOnlyList<Guid> ParentIds, 
     int SubtreeMembers);
 public record RelatedInfo(Guid Id, string Kind, string Title);
 
-/// <summary>A shared list: the catalogue's rows in the author's order, one column per
+/// <summary>A shared list: the catalog's rows in the author's order, one column per
 /// participant, and which of them is theirs. <c>Kind</c> is the word its fence opened
 /// with — which question this list asks, and so what the chrome around it says.</summary>
-public record CollectionInfo(Guid CatalogueId, string CatalogueTitle, string Kind, string List,
+public record CollectionInfo(Guid CatalogId, string CatalogTitle, string Kind, string List,
     IReadOnlyList<CollectionRowInfo> Rows, IReadOnlyList<CollectionColumnInfo> Columns,
     Guid? TallyId, bool CanTick, int Collectibles);
 
-/// <summary>One line of the catalogue. A row with variants is a group and is not itself
+/// <summary>One line of the catalog. A row with variants is a group and is not itself
 /// tickable: "give me all three" is a different statement from the three ticks.</summary>
 public record CollectionRowInfo(string Key, string Text, Guid? NodeId, string Note,
     IReadOnlyList<CollectionRowInfo> Variants);
@@ -168,7 +168,7 @@ public record CollectionColumnInfo(Guid TallyId, Guid OwnerId, string DisplayNam
     bool IsViewer, IReadOnlyList<string> Held,
     IReadOnlyList<CollectionOrphanInfo> Orphans, int Count);
 
-/// <summary>A tick that no longer matches an item, because the catalogue was edited
+/// <summary>A tick that no longer matches an item, because the catalog was edited
 /// under it. Shown rather than swallowed.</summary>
 public record CollectionOrphanInfo(string Text, string Note);
 public record KeyInfo(Guid Id, string Name, string Prefix, DateTimeOffset CreatedAt,

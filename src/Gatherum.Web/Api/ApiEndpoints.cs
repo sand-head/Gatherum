@@ -359,8 +359,8 @@ public static class ApiEndpoints
             return Results.NoContent();
         });
 
-        // A collection list, whichever page it is asked from: a catalogue aggregates
-        // itself, a tally aggregates the catalogue it tracks. Anonymous, because reading
+        // A collection list, whichever page it is asked from: a catalog aggregates
+        // itself, a tally aggregates the catalog it tracks. Anonymous, because reading
         // a published list is reading a published page — and the columns that come back
         // are the tallies this visitor may enumerate and no others.
         api.MapGet("/nodes/{id:guid}/collection", async (CollectionService collections,

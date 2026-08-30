@@ -50,7 +50,7 @@ public class ReadOnlyHtmlTests
     }
 
     /// <summary>A string is exactly the place a component cannot go, so the whole-body
-    /// writer ignores the claim: a static export holds the catalogue rather than a gap
+    /// writer ignores the claim: a static export holds the catalog rather than a gap
     /// where one was.</summary>
     [Fact]
     public void A_static_render_of_a_collection_still_holds_its_items()

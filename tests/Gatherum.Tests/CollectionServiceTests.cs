@@ -5,7 +5,7 @@ using Gatherum.Core.Services;
 
 namespace Gatherum.Tests;
 
-/// <summary>The two documents meeting: a catalogue somebody wrote, a tally per person,
+/// <summary>The two documents meeting: a catalog somebody wrote, a tally per person,
 /// and the grid that is nothing but the tallies a reader may enumerate.</summary>
 [Collection("postgres")]
 public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
@@ -41,7 +41,7 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
 
     public async Task DisposeAsync() => await harness.DisposeAsync();
 
-    private async Task<Node> CatalogueAsync(AccessMode mode = AccessMode.Authenticated)
+    private async Task<Node> CatalogAsync(AccessMode mode = AccessMode.Authenticated)
     {
         var page = await files.CreateTextNodeAsync(alice, null, "Override sprites", Roster);
         await access.SetAccessAsync(alice, page.Id, mode);
@@ -55,9 +55,9 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_catalogue_reads_as_its_rows_before_anybody_has_ticked_anything()
+    public async Task A_catalog_reads_as_its_rows_before_anybody_has_ticked_anything()
     {
-        var page = await CatalogueAsync();
+        var page = await CatalogAsync();
 
         var view = await collections.GetAsync(alice, page.Id);
 
@@ -73,7 +73,7 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
     [Fact]
     public async Task A_first_tick_writes_the_tally_that_records_it()
     {
-        var page = await CatalogueAsync();
+        var page = await CatalogAsync();
 
         var view = await collections.SetAsync(alice, page.Id, KeyOf(await Empty(page), "Tails"),
             collected: true);
@@ -96,7 +96,7 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
     [Fact]
     public async Task A_tally_is_a_page_that_says_what_it_is()
     {
-        var page = await CatalogueAsync();
+        var page = await CatalogAsync();
         var view = await collections.SetAsync(alice, page.Id, KeyOf(await Empty(page), "Tails"),
             collected: true);
 
@@ -112,7 +112,7 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
     [Fact]
     public async Task Everybody_gets_their_own_column_and_writes_only_their_own()
     {
-        var page = await CatalogueAsync();
+        var page = await CatalogAsync();
         var rows = await Empty(page);
         await collections.SetAsync(alice, page.Id, KeyOf(rows, "Tails"), collected: true);
         await collections.SetAsync(bob, page.Id, KeyOf(rows, "Storm Scout"), collected: true);
@@ -132,7 +132,7 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
     [Fact]
     public async Task Unticking_takes_it_back_off()
     {
-        var page = await CatalogueAsync();
+        var page = await CatalogAsync();
         var key = KeyOf(await Empty(page), "Tails");
         await collections.SetAsync(alice, page.Id, key, collected: true);
 
@@ -147,7 +147,7 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
     [Fact]
     public async Task Only_a_leaf_can_be_ticked()
     {
-        var page = await CatalogueAsync();
+        var page = await CatalogAsync();
         var sonic = (await Empty(page)).Rows.Single(r => r.Text == "Sonic").Key;
 
         await Assert.ThrowsAsync<NotFoundException>(
@@ -157,7 +157,7 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
     [Fact]
     public async Task A_note_after_an_item_survives_the_next_tick()
     {
-        var page = await CatalogueAsync();
+        var page = await CatalogAsync();
         var rows = await Empty(page);
         var view = await collections.SetAsync(alice, page.Id, KeyOf(rows, "Tails"), collected: true);
         var body = await files.GetTextAsync(alice, view.TallyId!.Value);
@@ -178,7 +178,7 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
     [Fact]
     public async Task Everyone_who_can_read_the_list_sees_everyone_s_ticks()
     {
-        var page = await CatalogueAsync();
+        var page = await CatalogAsync();
         var mine = await collections.SetAsync(alice, page.Id,
             KeyOf(await Empty(page), "Tails"), collected: true);
 
@@ -192,12 +192,12 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
     }
 
     /// <summary>What a tally's own access still governs: the page. A column in the grid
-    /// is not a licence to open the file behind it, nor to find it in a tree or a
+    /// is not a license to open the file behind it, nor to find it in a tree or a
     /// search.</summary>
     [Fact]
     public async Task A_column_in_the_grid_does_not_open_the_page_behind_it()
     {
-        var page = await CatalogueAsync();
+        var page = await CatalogAsync();
         var mine = await collections.SetAsync(alice, page.Id,
             KeyOf(await Empty(page), "Tails"), collected: true);
 
@@ -209,12 +209,12 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
             n => n.Id == mine.TallyId!.Value);
     }
 
-    /// <summary>The gate is the catalogue and nothing else, so a list nobody may read has
+    /// <summary>The gate is the catalog and nothing else, so a list nobody may read has
     /// no grid to leak — not even the columns on it.</summary>
     [Fact]
     public async Task A_list_the_reader_cannot_see_has_no_columns_to_show()
     {
-        var page = await CatalogueAsync();
+        var page = await CatalogAsync();
         await collections.SetAsync(alice, page.Id, KeyOf(await Empty(page), "Tails"),
             collected: true);
         await access.SetAccessAsync(alice, page.Id, AccessMode.Private);
@@ -228,7 +228,7 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
     [Fact]
     public async Task Orphaned_ticks_are_reported_to_their_owner_and_nobody_else()
     {
-        var page = await CatalogueAsync();
+        var page = await CatalogAsync();
         await collections.SetAsync(alice, page.Id, KeyOf(await Empty(page), "Tails"),
             collected: true);
         await files.SaveTextAsync(alice, page.Id, Roster.Replace("- Tails", "- Tails the Fox"));
@@ -241,7 +241,7 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
     [Fact]
     public async Task Signed_out_reads_a_public_list_and_writes_nothing()
     {
-        var page = await CatalogueAsync(AccessMode.Public);
+        var page = await CatalogAsync(AccessMode.Public);
         await collections.SetAsync(alice, page.Id,
             KeyOf(await Empty(page), "Tails"), collected: true);
 
@@ -258,7 +258,7 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
     [Fact]
     public async Task Ticks_keep_counting_when_an_item_gains_a_page()
     {
-        var page = await CatalogueAsync();
+        var page = await CatalogAsync();
         await collections.SetAsync(alice, page.Id, KeyOf(await Empty(page), "Tails"),
             collected: true);
         var sprite = await files.CreateTextNodeAsync(alice, null, "Tails", "A fox.");
@@ -277,7 +277,7 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
     [Fact]
     public async Task A_rename_orphans_the_ticks_it_stranded_and_says_so()
     {
-        var page = await CatalogueAsync();
+        var page = await CatalogAsync();
         await collections.SetAsync(alice, page.Id, KeyOf(await Empty(page), "Sonic", "Gold"),
             collected: true);
         await collections.SetAsync(alice, page.Id, KeyOf(await Empty(page), "Tails"),
@@ -291,12 +291,12 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
         Assert.Equal(["Sonic — Gold", "Tails"], mine.Orphans.Select(o => o.Text).Order());
     }
 
-    /// <summary>An orphan is kept in the file, so a catalogue that changes its mind back
+    /// <summary>An orphan is kept in the file, so a catalog that changes its mind back
     /// finds the tick still there.</summary>
     [Fact]
     public async Task An_orphaned_tick_comes_back_when_its_item_does()
     {
-        var page = await CatalogueAsync();
+        var page = await CatalogAsync();
         await collections.SetAsync(alice, page.Id, KeyOf(await Empty(page), "Tails"),
             collected: true);
         await files.SaveTextAsync(alice, page.Id, Roster.Replace("- Tails", "- Tails the Fox"));
@@ -312,9 +312,9 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_page_that_merely_mentions_the_catalogue_is_not_somebody_s_column()
+    public async Task A_page_that_merely_mentions_the_catalog_is_not_somebody_s_column()
     {
-        var page = await CatalogueAsync();
+        var page = await CatalogAsync();
         var notes = await files.CreateTextNodeAsync(bob, null, "Notes", $"""
             I am reading [the roster](node://{page.Id}), and I have:
 
@@ -353,27 +353,27 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
     }
 
     /// <summary>A tally page is a place to read the grid from too — it aggregates the
-    /// catalogue it tracks rather than only itself.</summary>
+    /// catalog it tracks rather than only itself.</summary>
     [Fact]
-    public async Task A_tally_page_shows_the_same_grid_the_catalogue_does()
+    public async Task A_tally_page_shows_the_same_grid_the_catalog_does()
     {
-        var page = await CatalogueAsync();
+        var page = await CatalogAsync();
         var mine = await collections.SetAsync(alice, page.Id,
             KeyOf(await Empty(page), "Tails"), collected: true);
 
         var view = await collections.GetAsync(alice, mine.TallyId!.Value);
 
-        Assert.Equal(page.Id, view.CatalogueId);
+        Assert.Equal(page.Id, view.CatalogId);
         Assert.Equal(["Sonic", "Tails", "Storm Scout"], view.Rows.Select(r => r.Text));
         Assert.Equal(1, Assert.Single(view.Columns).Count);
     }
 
     /// <summary>A title is a search and an id is permission, so a tally spelled with a
-    /// wiki link follows a catalogue it can enumerate.</summary>
+    /// wiki link follows a catalog it can enumerate.</summary>
     [Fact]
-    public async Task A_tally_may_name_its_catalogue_by_title()
+    public async Task A_tally_may_name_its_catalog_by_title()
     {
-        var page = await CatalogueAsync();
+        var page = await CatalogAsync();
         await files.CreateTextNodeAsync(bob, null, "My sprites", """
             :::collection [[Override sprites]]
             - [x] Tails
@@ -394,9 +394,9 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_catalogue_nobody_shared_stays_invisible()
+    public async Task A_catalog_nobody_shared_stays_invisible()
     {
-        var page = await CatalogueAsync(AccessMode.Private);
+        var page = await CatalogAsync(AccessMode.Private);
 
         await Assert.ThrowsAsync<NotFoundException>(() => collections.GetAsync(bob, page.Id));
         await Assert.ThrowsAsync<NotFoundException>(() => collections.GetAsync(null, page.Id));
@@ -428,9 +428,71 @@ public class CollectionServiceTests(PostgresFixture postgres) : IAsyncLifetime
         var everyone = await collections.GetAsync(bob, page.Id);
         Assert.Equal(2, everyone.Columns.Count);
         Assert.Equal([2, 1], everyone.Columns.Select(c => c.Count));
-        // And the tally it wrote opens with the catalogue's word, not the default one.
+        // And the tally it wrote opens with the catalog's word, not the default one.
         var tally = await files.GetTextAsync(bob, everyone.TallyId!.Value);
         Assert.StartsWith(":::availability ", tally, StringComparison.Ordinal);
+    }
+
+    /// <summary>A poll is the same grid asked with one answer each, so picking is moving
+    /// rather than adding. Enforced on the write, because the file is what everybody else
+    /// reads and a tally claiming two answers would be wrong wherever it was opened.</summary>
+    [Fact]
+    public async Task A_poll_takes_back_the_last_answer_when_a_new_one_is_given()
+    {
+        var page = await files.CreateTextNodeAsync(alice, null, "Where for dinner?", """
+            :::poll Dinner
+            - Thai
+            - Pizza
+            - Sushi
+            :::
+            """);
+        await access.SetAccessAsync(alice, page.Id, AccessMode.Authenticated);
+        var rows = await collections.GetAsync(alice, page.Id);
+
+        await collections.SetAsync(alice, page.Id, KeyOf(rows, "Thai"), collected: true);
+        var moved = await collections.SetAsync(alice, page.Id, KeyOf(rows, "Sushi"),
+            collected: true);
+
+        var mine = Assert.Single(moved.Columns);
+        Assert.Equal(1, mine.Count);
+        Assert.Equal([KeyOf(rows, "Sushi")], mine.Held);
+        // And the file says one answer, not two.
+        var tally = await files.GetTextAsync(alice, moved.TallyId!.Value);
+        Assert.Single(CollectionSyntax.Read(tally)[0].Items, i => i.Checked);
+    }
+
+    /// <summary>Taking an answer back is still taking it back: a poll is one answer at
+    /// most, not one answer compulsorily.</summary>
+    [Fact]
+    public async Task A_poll_answer_can_be_withdrawn()
+    {
+        var page = await files.CreateTextNodeAsync(alice, null, "Where for dinner?", """
+            :::poll Dinner
+            - Thai
+            - Pizza
+            :::
+            """);
+        var thai = KeyOf(await collections.GetAsync(alice, page.Id), "Thai");
+        await collections.SetAsync(alice, page.Id, thai, collected: true);
+
+        var view = await collections.SetAsync(alice, page.Id, thai, collected: false);
+
+        Assert.Equal(0, Assert.Single(view.Columns).Count);
+    }
+
+    /// <summary>Every other word keeps every answer — the constraint is the poll's alone,
+    /// and nothing else changed underneath it.</summary>
+    [Fact]
+    public async Task Only_a_poll_takes_the_last_answer_back()
+    {
+        var page = await CatalogAsync();
+        var rows = await Empty(page);
+
+        await collections.SetAsync(alice, page.Id, KeyOf(rows, "Tails"), collected: true);
+        var both = await collections.SetAsync(alice, page.Id, KeyOf(rows, "Storm Scout"),
+            collected: true);
+
+        Assert.Equal(2, Assert.Single(both.Columns).Count);
     }
 
     private Task<CollectionView> Empty(Node page) => collections.GetAsync(alice, page.Id);
