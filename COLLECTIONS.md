@@ -179,6 +179,42 @@ enumeration question, so a tally cannot name an unlisted catalogue that way. Nam
 a `node://` mention instead works, because an id is permission. Unlisted catalogues are
 therefore fine; they just want the other spelling.
 
+### Nothing opts a page in
+
+The obvious next thought is a per-page setting — a flag saying "this list is trackable" —
+and the obvious next thought after that is that all Markdown checklists should simply work
+this way. Both are wrong, for different reasons.
+
+**All checklists cannot work this way**, because a checklist already means two things and
+the syntax does not distinguish them. A release checklist, a packing list, a runbook step:
+ticking those means *it is done*, shared state, and in a knowledge base that is the more
+common kind. A collection list means *I have this one*. Making every checklist per-person
+would quietly break the first kind.
+
+**A per-page flag has nowhere to live.** Frontmatter is designed in `FILESYSTEM.md` and not
+built; `.gatherum/meta.json` is the carrier for what a path cannot say, while that same
+document argues a page should be self-describing when it can be; and a `:::collection` fence
+is a whole construct — both directions of the extension, `DocumentChrome`, a round-trip
+test, and a manual entry `DocsTests` enforces. Real machinery for a mode bit.
+
+**So there is no setting, because being a catalogue is not a property of a page.** It is a
+relationship, and the tally end already declares it. A reader clicks *track this list* and
+gets a tally; the page grows "3 people tracking this" and otherwise says nothing. Opt-in per
+reader, as an act rather than a configuration: two people can track a list whose author
+enabled nothing, an author cannot switch off everyone's tracking by editing a flag, and
+there is no per-page state to migrate, reindex, or disagree with the disk about.
+
+Ordinary checklists keep their meaning exactly. Ticking in the **editor** edits the page —
+shared state, as today. Ticking in the **read view** records the reader in their own tally,
+which claims no existing behaviour because read-view checkboxes are inert today. It lands on
+a division the app already draws: the editor is where a document changes, the reader is
+where a person is recorded.
+
+The consequence to accept knowingly: every list on every visible page becomes trackable, not
+only deliberate collectible ones. That is mostly a gift — reading lists, restaurants,
+achievements, all with no further concept — but the affordance has to stay quiet, and a page
+nobody tracks must look precisely as it does now.
+
 ### What makes a page a tally
 
 Nothing marks one. A tally is recognized *structurally*: a page that links the catalogue and
