@@ -296,13 +296,27 @@ than "we are on our own":
   It is still not v1: the fence renders as a titled card over the plain list and is edited
   as source, exactly as an aside is.
 
-**The one thing worth asking slopedit for** is a block *range* on the render path —
-`WriteBody(doc, options, firstBlock, blockCount)`, and `FirstBlock`/`BlockCount` on
-`DocumentHtmlView`. With it, the read view stays one document with a hole in it: one
-outline, one footnote sequence, one fold state, one chrome pass. Without it we take the
-sub-document route above and pay for it four times over, in exactly the four features
-Gatherum leans on hardest. Nothing else is wanted from upstream — and specifically not a
-canvas widget API, which the editor-side card does not need.
+**The one thing worth asking slopedit for** is that a block extension be able to declare its
+tagged runs *host-rendered in read mode*, while they stay ordinary document content in edit
+mode — a `ReadRegion` fragment on `DocumentHtmlView` that `DocumentView` simply ignores.
+
+Read-versus-edit is the right axis, and not as a workaround: a live grid in the editor would
+be wrong even if it were free, because editing the catalogue means editing the shared list
+while the ticks live in each reader's separate file. Edit the source, read the widget — which
+will be true of most interactive constructs.
+
+It also beats the narrower thing first asked for (a block *range* on the render path, so the
+host could stack segments around its own island). Ranges work, but stacking whole
+`DocumentHtmlView` instances means a float cannot wrap across a seam — an infobox immediately
+before a fence stops wrapping at the boundary, which is an HTML containing-block limit
+nothing on the host side can fix. Rendering regions from inside the view has no such problem,
+because slopedit builds the render tree and can keep one containing block, interleaving
+markup and components. It also keeps the document whole: one outline, one footnote sequence,
+one fold state, one chrome pass, where segmenting fragments all four.
+
+A canvas widget is explicitly *not* wanted — hosting a DOM element over the canvas means
+height negotiation, reflow, caret and hit-testing work, to produce a thing the design does
+not want anyway.
 
 Worth noting for the "ordinary checklists keep working" promise: `RichDocument.ToggleTask(int
 row)` is already a first-class document operation, so a task item in the editor is
