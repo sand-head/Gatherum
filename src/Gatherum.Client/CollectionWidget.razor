@@ -7,39 +7,57 @@
    canvas keeps the source, so a tick can never register as an edit of an open document.
 
    Everything on screen is decided by the server: the rows are the catalogue's, in its
-   author's order, and the columns are the tallies this reader may *enumerate*. This
-   component contains no rule about who may see what — asking twice is how two surfaces
-   come to disagree. *@
+   author's order, and the columns are everyone's. This component contains no rule about
+   who may see what — asking twice is how two surfaces come to disagree. *@
 <div class="collection">
     @if (view is null)
     {
-        <p class="collection-note">@(error ?? "Loading the list…")</p>
+        <p class="collection-foot">@(error ?? "Loading the list…")</p>
     }
     else
     {
-        <header class="collection-head">
-            <h4>@(view.List.Length > 0 ? view.List : view.CatalogueTitle)</h4>
-            @if (Mine is { } mine)
-            {
-                <span class="collection-score">@mine.Count of @view.Collectibles</span>
-            }
-            else
-            {
-                <span class="collection-score">@view.Collectibles to collect</span>
-            }
-        </header>
+        <div class="collection-head">
+            <p class="collection-name">@(view.List.Length > 0 ? view.List : view.CatalogueTitle)</p>
+            <span class="collection-count">
+                @(view.Columns.Count switch
+                {
+                    0 => $"{view.Collectibles} to collect",
+                    1 => $"1 person tracking · {view.Collectibles} to collect",
+                    var n => $"{n} people tracking · {view.Collectibles} to collect",
+                })
+            </span>
+        </div>
 
-        <div class="collection-scroll">
-            <table class="collection-grid">
+        <div class="grid-scroll">
+            <table class="grid">
                 <thead>
                     <tr>
-                        <th scope="col" class="item">Item</th>
-                        @foreach (var column in view.Columns)
+                        <th scope="col" class="item-col">Item</th>
+                        @foreach (var column in Columns)
                         {
-                            <th scope="col" class="@(column.IsViewer ? "who mine" : "who")"
-                                title="@Held(column)">
-                                @(column.IsViewer ? "You" : column.DisplayName)
-                                <span class="tally">@column.Count</span>
+                            @* Name over a meter over a count: the header is where "who is
+                               ahead" gets asked, so it carries the answer rather than only
+                               a label. *@
+                            <th scope="col" class="@(column.IsViewer ? "col-you" : null)">
+                                <span class="person">
+                                    <span class="who">@(column.IsViewer ? "You" : column.DisplayName)</span>
+                                    <span class="meter"><i style="width:@Percent(column.Count)%"></i></span>
+                                    <span class="have">@column.Count/@view.Collectibles</span>
+                                </span>
+                            </th>
+                        }
+                        @if (!view.CanTick)
+                        {
+                            @* No checkbox at all rather than one that writes to this browser
+                               and nobody else: in a grid where every other column is a real
+                               person's real ticks, a control that records nothing
+                               misrepresents itself. The column the reader would have had is
+                               an invitation instead. *@
+                            <th scope="col" class="col-invite">
+                                <span class="person">
+                                    <a class="who" href="@LoginHref">Sign in</a>
+                                    <span class="why">to keep your own</span>
+                                </span>
                             </th>
                         }
                     </tr>
@@ -47,49 +65,45 @@
                 <tbody>
                     @foreach (var row in view.Rows)
                     {
-                        <tr class="@(row.Variants.Count > 0 ? "group" : "")">
+                        <tr class="group">
                             <th scope="row" class="item">
-                                @if (row.Variants.Count > 0)
-                                {
-                                    <button class="chevron @(IsOpen(row) ? "open" : "")"
-                                            @onclick="() => Toggle(row)"
-                                            title="@(IsOpen(row) ? "Collapse" : "Expand")">
-                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-                                             stroke="currentColor" stroke-width="2.5"
-                                             stroke-linecap="round" stroke-linejoin="round"
-                                             aria-hidden="true">
-                                            <path d="m9 6 6 6-6 6" />
-                                        </svg>
-                                    </button>
-                                }
-                                else
-                                {
-                                    <span class="chevron"></span>
-                                }
+                                <button class="disclose" type="button" aria-expanded="@(IsOpen(row) ? "true" : "false")"
+                                        disabled="@(row.Variants.Count == 0)"
+                                        aria-label="@(IsOpen(row) ? "Collapse" : "Expand") @row.Text"
+                                        @onclick="() => Toggle(row)">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                         stroke-width="2.5" stroke-linecap="round"
+                                         stroke-linejoin="round" aria-hidden="true">
+                                        <path d="m9 18 6-6-6-6" />
+                                    </svg>
+                                </button>
                                 @Named(row)
                             </th>
-                            @foreach (var column in view.Columns)
+                            @foreach (var column in Columns)
                             {
-                                <td class="@(column.IsViewer ? "mine" : "")">
+                                <td class="@CellClass(column)">
                                     @if (row.Variants.Count > 0)
                                     {
                                         @* A row with variants is a group, so its cell reports
                                            rather than offers: ticking a parent would stand in
                                            for three statements nobody made. *@
-                                        <span class="progress"
-                                              title="@Progress(row, column) of @row.Variants.Count">
-                                            @for (var i = 0; i < row.Variants.Count; i++)
+                                        <span class="seg" role="img"
+                                              aria-label="@Progress(row, column) of @row.Variants.Count">
+                                            @foreach (var variant in row.Variants)
                                             {
-                                                <span class="@(column.Held.Contains(row.Variants[i].Key)
-                                                    ? "seg on" : "seg")"></span>
+                                                <i class="@(column.Held.Contains(variant.Key) ? "on" : null)"></i>
                                             }
                                         </span>
                                     }
                                     else
                                     {
-                                        @Cell(row, column)
+                                        @Mark(row, column)
                                     }
                                 </td>
+                            }
+                            @if (!view.CanTick)
+                            {
+                                <td class="col-invite"></td>
                             }
                         </tr>
                         @if (IsOpen(row))
@@ -98,11 +112,13 @@
                             {
                                 <tr class="variant">
                                     <th scope="row" class="item">@Named(variant)</th>
-                                    @foreach (var column in view.Columns)
+                                    @foreach (var column in Columns)
                                     {
-                                        <td class="@(column.IsViewer ? "mine" : "")">
-                                            @Cell(variant, column)
-                                        </td>
+                                        <td class="@CellClass(column)">@Mark(variant, column)</td>
+                                    }
+                                    @if (!view.CanTick)
+                                    {
+                                        <td class="col-invite"></td>
                                     }
                                 </tr>
                             }
@@ -112,50 +128,62 @@
             </table>
         </div>
 
-        @if (!view.CanTick)
-        {
-            @* No checkbox at all rather than one that writes to this browser and nobody
-               else: in a grid where every other column is a real person's real ticks, a
-               control that records nothing misrepresents itself. *@
-            <p class="collection-note">
-                <a href="@($"/auth/login?returnUrl={Uri.EscapeDataString(ReturnUrl)}")">Sign in</a>
-                to keep your own list.
-            </p>
-        }
-        else if (Mine is null)
-        {
-            <p class="collection-note">
-                Tick anything to start your own list. Your ticks show to everyone who can
-                read this one.
-            </p>
-        }
-        else
-        {
-            @* No sharing gesture to prompt for: the catalogue's audience is the grid's,
-               so joining in is the whole of joining in. What the tally page itself is
-               shared with is a separate question and still its owner's alone. *@
-            <p class="collection-note">
-                Your ticks show to everyone who can read this list.
-                <a href="/nodes/@Mine.TallyId">Your list</a> is a page of your own.
-            </p>
-        }
-
         @if (Mine is { Orphans.Count: > 0 } orphaned)
         {
             @* Alice cannot rewrite Bob's tally to follow her rename — it is his file — so
                the ticks simply stop matching. Saying so is the requirement; silence is
                what would be unacceptable. *@
-            <p class="collection-orphans">
-                @orphaned.Orphans.Count tick@(orphaned.Orphans.Count == 1 ? "" : "s") no longer
-                match an item:
-                <span>@string.Join(", ", orphaned.Orphans.Select(o => o.Text))</span>.
-                They are still in <a href="/nodes/@orphaned.TallyId">your list</a>.
-            </p>
+            <div class="notice">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                    <path d="M12 9v4" />
+                    <path d="M12 17h.01" />
+                </svg>
+                <span>
+                    <strong>
+                        @orphaned.Orphans.Count tick@(orphaned.Orphans.Count == 1 ? "" : "s")
+                        no longer match an item
+                    </strong>
+                    <span class="orphans">@string.Join(", ", orphaned.Orphans.Select(o => o.Text))</span>
+                    — still in <a href="/nodes/@orphaned.TallyId">your list</a>, and counting
+                    again if the wording comes back.
+                </span>
+            </div>
         }
+
+        <div class="collection-foot">
+            <span>
+                @if (!view.CanTick)
+                {
+                    <text>
+                        <a href="@LoginHref">Sign in</a> to keep your own list of this one.
+                    </text>
+                }
+                else if (Mine is { } mine)
+                {
+                    <text>
+                        You have @mine.Count of @view.Collectibles — @(view.Collectibles - mine.Count)
+                        still to find. Your ticks show to everyone who can read this list.
+                    </text>
+                }
+                else
+                {
+                    <text>
+                        Tick anything to start your own list. Your ticks show to everyone who
+                        can read this one.
+                    </text>
+                }
+            </span>
+            @if (Mine is { } own)
+            {
+                <a class="btn" href="/nodes/@own.TallyId">Open my list</a>
+            }
+        </div>
 
         @if (error is not null)
         {
-            <p class="collection-note error">@error</p>
+            <p class="collection-foot error">@error</p>
         }
     }
 </div>
@@ -175,6 +203,7 @@
     /// Empty until the server has said, which draws every item as its own plain text —
     /// inert is the only safe answer to an unanswered question.</summary>
     private IReadOnlySet<Guid> reachable = new HashSet<Guid>();
+
     private bool busy;
 
     /// <summary>The fence's own argument, which is how two lists on one page stay two
@@ -182,11 +211,24 @@
     /// spelled it.</summary>
     private string List => BlockTags.ArgumentOf(Widget.Tag);
 
+    /// <summary>The reader's own tally, once they have one.</summary>
     private CollectionColumnInfo? Mine => view?.Columns.FirstOrDefault(c => c.IsViewer);
+
+    /// <summary>The columns the grid draws. A reader who may tick but has never ticked
+    /// owns no tally yet and so appears in nobody's aggregate — but the way to get one is
+    /// to tick, so the column they are <em>about</em> to have is drawn empty rather than
+    /// left out. Without it the first tick has nowhere to happen, which is the whole of
+    /// how somebody joins a list.</summary>
+    private IReadOnlyList<CollectionColumnInfo> Columns =>
+        view is null ? []
+        : !view.CanTick || Mine is not null ? view.Columns
+        : [new CollectionColumnInfo(Guid.Empty, Guid.Empty, "You", true, [], [], 0),
+           .. view.Columns];
 
     /// <summary>Where signing in should land: this page, said the way the login endpoint
     /// will accept — it refuses anything that is not a path of its own.</summary>
-    private string ReturnUrl => $"/{Navigation.ToBaseRelativePath(Navigation.Uri)}";
+    private string LoginHref =>
+        $"/auth/login?returnUrl={Uri.EscapeDataString($"/{Navigation.ToBaseRelativePath(Navigation.Uri)}")}";
 
     protected override async Task OnInitializedAsync() => await LoadAsync();
 
@@ -228,59 +270,87 @@
 
     private void Toggle(CollectionRowInfo row)
     {
+        if (row.Variants.Count == 0)
+            return;
         if (!open.Add(row.Key))
             open.Remove(row.Key);
     }
 
-    /// <summary>An item's name, linked where it has a page the reader may open. A page
-    /// per item is the optional half of this design — worth it for the few you want to
-    /// write about — and this is where it pays. A link the reader may <em>not</em> follow
-    /// is drawn as the plain text it says rather than as an offer into a 404: the same
-    /// rule the prose around it obeys, said with the vocabulary a grid has.</summary>
-    private RenderFragment Named(CollectionRowInfo row) => builder =>
-    {
-        var label = row.Note.Length > 0 ? $"{row.Text} — {row.Note}" : row.Text;
-        if (row.NodeId is { } id && reachable.Contains(id))
-        {
-            builder.OpenElement(0, "a");
-            builder.AddAttribute(1, "href", $"/nodes/{id}");
-            builder.AddContent(2, label);
-            builder.CloseElement();
-            return;
-        }
-        builder.AddContent(3, label);
-    };
+    /// <summary>How full a column's meter runs. Of collectibles, like every other number
+    /// here — a bar measured in lines would be a different claim.</summary>
+    private int Percent(int held) =>
+        view is { Collectibles: > 0 } ? held * 100 / view.Collectibles : 0;
 
     private static int Progress(CollectionRowInfo row, CollectionColumnInfo column) =>
         row.Variants.Count(v => column.Held.Contains(v.Key));
 
-    private static string Held(CollectionColumnInfo column) =>
-        column.IsViewer ? "Your list" : $"{column.DisplayName}'s list";
+    private static string CellClass(CollectionColumnInfo column) =>
+        column.IsViewer ? "mark you" : "mark";
+
+    /// <summary>An item's name, linked where it has a page the reader may open — with the
+    /// page's own glyph beside it, because "this one is worth reading about" is the whole
+    /// reason to spend a node on an item. A link the reader may <em>not</em> follow is
+    /// drawn as the plain text it says rather than as an offer into a 404: the same rule
+    /// the prose around it obeys, said with the vocabulary a grid has. A note the
+    /// catalogue put after an item rides along as a pill — it qualifies the row rather
+    /// than continuing its name.</summary>
+    private RenderFragment Named(CollectionRowInfo row) =>
+        @<text>
+            @if (row.NodeId is { } id && reachable.Contains(id))
+            {
+                <a class="item-link" href="@($"/nodes/{id}")">@row.Text</a>
+                <span class="has-page" title="This item has a page">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <path d="M14 2v6h6" />
+                    </svg>
+                </span>
+            }
+            else
+            {
+                @row.Text
+            }
+            @if (row.Note.Length > 0)
+            {
+                <span class="note">@row.Note</span>
+            }
+        </text>;
 
     /// <summary>One cell: a checkbox where the column is the reader's own, and a mark
     /// where it is somebody else's. Nobody edits anybody else's tally, so the difference
-    /// is not a permission the component checks — it is the only control it offers.</summary>
-    private RenderFragment Cell(CollectionRowInfo row, CollectionColumnInfo column) => builder =>
-    {
-        var held = column.Held.Contains(row.Key);
-        if (column.IsViewer)
-        {
-            builder.OpenElement(0, "input");
-            builder.AddAttribute(1, "type", "checkbox");
-            builder.AddAttribute(2, "checked", held);
-            builder.AddAttribute(3, "disabled", busy || !RendererInfo.IsInteractive);
-            builder.AddAttribute(4, "aria-label", row.Text);
-            builder.AddAttribute(5, "onchange",
-                EventCallback.Factory.Create<ChangeEventArgs>(this,
-                    _ => TickAsync(row.Key, !held)));
-            builder.CloseElement();
-            return;
-        }
-        builder.OpenElement(6, "span");
-        builder.AddAttribute(7, "class", held ? "mark on" : "mark");
-        builder.AddAttribute(8, "aria-label", held ? "has it" : "does not have it");
-        builder.CloseElement();
-    };
+    /// is not a permission this checks — it is the only control it offers. A mark rather
+    /// than a disabled checkbox, because a greyed-out box reads as "you may not" instead
+    /// of "this isn't yours".</summary>
+    private RenderFragment Mark(CollectionRowInfo row, CollectionColumnInfo column) =>
+        @<text>
+            @if (column.IsViewer)
+            {
+                <input class="box" type="checkbox" aria-label="@row.Text"
+                       checked="@column.Held.Contains(row.Key)"
+                       disabled="@(busy || !RendererInfo.IsInteractive)"
+                       @onchange="() => TickAsync(row.Key, !column.Held.Contains(row.Key))" />
+            }
+            else if (column.Held.Contains(row.Key))
+            {
+                <span class="tick on" role="img" aria-label="@column.DisplayName has this">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M20 6 9 17l-5-5" />
+                    </svg>
+                </span>
+            }
+            else
+            {
+                <span class="tick off" role="img"
+                      aria-label="@column.DisplayName does not have this">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                         aria-hidden="true">
+                        <circle cx="12" cy="12" r="7" />
+                    </svg>
+                </span>
+            }
+        </text>;
 
     private async Task TickAsync(string key, bool collected)
     {
@@ -302,4 +372,5 @@
             busy = false;
         }
     }
+
 }

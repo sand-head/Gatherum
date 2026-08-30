@@ -703,10 +703,12 @@ public class AppIntegrationTests(PostgresFixture postgres) : IAsyncLifetime
         using var visitor = factory.CreateClient();
         var html = await visitor.GetStringAsync($"/nodes/{id}");
 
-        Assert.Contains("collection-grid", html, StringComparison.Ordinal);
+        Assert.Contains("collection-head", html, StringComparison.Ordinal);
         Assert.Contains("Storm Scout", html, StringComparison.Ordinal);
         Assert.Contains("2 to collect", html, StringComparison.Ordinal);
-        // Signed out is read-only: no control that would record nothing.
+        // Signed out is read-only: the column a reader would have had is an invitation,
+        // and there is no control anywhere that would record nothing.
+        Assert.Contains("col-invite", html, StringComparison.Ordinal);
         Assert.Contains("/auth/login", html, StringComparison.Ordinal);
         Assert.DoesNotContain("type=\"checkbox\"", html, StringComparison.Ordinal);
     }
