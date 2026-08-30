@@ -47,6 +47,7 @@ public sealed class GameBoyPpu(GameBoyConsole console)
     private bool statLine;
 
     public int VramBank { get; private set; }
+
     public byte Line => line;
     public bool Enabled => (control & 0x80) != 0;
 
@@ -69,6 +70,66 @@ public sealed class GameBoyPpu(GameBoyConsole console)
         dots = 0;
         windowLine = 0;
         Array.Fill(Frame, Shades[0]);
+    }
+
+    internal void Save(ref StateWriter state)
+    {
+        state.Write(vram);
+        state.Write(oam);
+        state.Write(backgroundPalettes);
+        state.Write(spritePalettes);
+        state.Write(backgroundPaletteIndex);
+        state.Write(spritePaletteIndex);
+        state.Write(backgroundIndices);
+        foreach (var over in backgroundOverSprites)
+            state.Write(over);
+
+        state.Write(control);
+        state.Write(status);
+        state.Write(scrollY);
+        state.Write(scrollX);
+        state.Write(compareLine);
+        state.Write(windowY);
+        state.Write(windowX);
+        state.Write(monochromeBackground);
+        state.Write(monochromeSprite0);
+        state.Write(monochromeSprite1);
+        state.Write(line);
+        state.Write(dots);
+        state.Write(windowLine);
+        state.Write(statLine);
+        state.Write(VramBank);
+        state.Write(FrameComplete);
+    }
+
+    internal void Load(ref StateReader state)
+    {
+        state.Read(vram);
+        state.Read(oam);
+        state.Read(backgroundPalettes);
+        state.Read(spritePalettes);
+        backgroundPaletteIndex = state.ReadByte();
+        spritePaletteIndex = state.ReadByte();
+        state.Read(backgroundIndices);
+        for (var index = 0; index < backgroundOverSprites.Length; index++)
+            backgroundOverSprites[index] = state.ReadBool();
+
+        control = state.ReadByte();
+        status = state.ReadByte();
+        scrollY = state.ReadByte();
+        scrollX = state.ReadByte();
+        compareLine = state.ReadByte();
+        windowY = state.ReadByte();
+        windowX = state.ReadByte();
+        monochromeBackground = state.ReadByte();
+        monochromeSprite0 = state.ReadByte();
+        monochromeSprite1 = state.ReadByte();
+        line = state.ReadByte();
+        dots = state.ReadInt32();
+        windowLine = state.ReadInt32();
+        statLine = state.ReadBool();
+        VramBank = state.ReadInt32();
+        FrameComplete = state.ReadBool();
     }
 
     public byte ReadVram(ushort address) => vram[VramBank * 0x2000 + (address & 0x1FFF)];

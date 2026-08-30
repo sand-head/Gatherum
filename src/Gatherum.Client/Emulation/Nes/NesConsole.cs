@@ -12,8 +12,11 @@ public sealed class NesConsole : IEmulatorCore
     private readonly NesApu apu;
     private readonly byte[] ram = new byte[2 * 1024];
 
-    private GamepadButtons buttons;
-    private byte controllerShift;
+    /// <summary>Two ports, because the console has two and a game that offers a second
+    /// player polls both. Nothing plugged into port two reads as no buttons at all,
+    /// which is exactly what an empty port did.</summary>
+    private readonly GamepadButtons[] buttons = new GamepadButtons[2];
+    private readonly byte[] controllerShift = new byte[2];
     private bool controllerStrobe;
     private long cycles;
     private bool saveDirty;
@@ -40,6 +43,7 @@ public sealed class NesConsole : IEmulatorCore
     public double FramesPerSecond => 60.0988;
 
     public int SampleRate => NesApu.SampleRate;
+    public int PlayerCount => 2;
     public uint[] Frame => ppu.Frame;
     public bool BatteryBacked => Cartridge.Battery;
     public bool SaveDirty => saveDirty;
@@ -53,8 +57,10 @@ public sealed class NesConsole : IEmulatorCore
         cycles = 0;
     }
 
-    public void SetButtons(GamepadButtons pressed)
+    public void SetButtons(int player, GamepadButtons pressed)
     {
+        if (player is < 0 or > 1)
+            return;
         // Up and down at once, or left and right, is something the plastic made
         // impossible and a few games crash on. The last one pressed wins.
         if ((pressed & (GamepadButtons.Up | GamepadButtons.Down))
@@ -63,7 +69,7 @@ public sealed class NesConsole : IEmulatorCore
         if ((pressed & (GamepadButtons.Left | GamepadButtons.Right))
             == (GamepadButtons.Left | GamepadButtons.Right))
             pressed &= ~GamepadButtons.Right;
-        buttons = pressed;
+        buttons[player] = pressed;
     }
 
     public void RunFrame()
@@ -79,6 +85,70 @@ public sealed class NesConsole : IEmulatorCore
     }
 
     public int ReadAudio(short[] destination) => apu.ReadAudio(destination);
+
+    /// <summary>A four-byte tag and a version, so a state from another console — or
+    /// from a build whose fields have moved — is refused rather than misread.</summary>
+    private static ReadOnlySpan<byte> StateTag => "NES1"u8;
+
+    public int SaveStateSize
+    {
+        get
+        {
+            var measure = StateWriter.Measure();
+            Write(ref measure);
+            return measure.Length;
+        }
+    }
+
+    public bool SaveState(Span<byte> destination)
+    {
+        var state = new StateWriter(destination);
+        Write(ref state);
+        return !state.Failed;
+    }
+
+    public bool LoadState(ReadOnlySpan<byte> source)
+    {
+        if (source.Length < 4 || !source[..4].SequenceEqual(StateTag))
+            return false;
+        var state = new StateReader(source);
+        state.Skip(StateTag.Length);
+
+        Cpu.Load(ref state);
+        ppu.Load(ref state);
+        apu.Load(ref state);
+        Cartridge.Mapper.Load(ref state);
+        state.Read(ram);
+        cycles = state.ReadInt64();
+        buttons[0] = (GamepadButtons)state.ReadByte();
+        buttons[1] = (GamepadButtons)state.ReadByte();
+        controllerShift[0] = state.ReadByte();
+        controllerShift[1] = state.ReadByte();
+        controllerStrobe = state.ReadBool();
+
+        if (state.Failed)
+        {
+            Reset();
+            return false;
+        }
+        return true;
+    }
+
+    private void Write(ref StateWriter state)
+    {
+        state.Write(StateTag);
+        Cpu.Save(ref state);
+        ppu.Save(ref state);
+        apu.Save(ref state);
+        Cartridge.Mapper.Save(ref state);
+        state.Write(ram);
+        state.Write(cycles);
+        state.Write((byte)buttons[0]);
+        state.Write((byte)buttons[1]);
+        state.Write(controllerShift[0]);
+        state.Write(controllerShift[1]);
+        state.Write(controllerStrobe);
+    }
 
     public byte[] SaveRam() => Cartridge.Battery ? Cartridge.ProgramRam.ToArray() : [];
 
@@ -114,9 +184,10 @@ public sealed class NesConsole : IEmulatorCore
         return address switch
         {
             0x4015 => apu.ReadStatus(),
-            0x4016 => ReadController(),
-            // The second port, which nothing here is plugged into.
-            0x4017 => 0x40,
+            0x4016 => ReadController(0),
+            // Reading $4017 is the second pad; writing it is the sound chip's frame
+            // counter. The address does two unrelated jobs depending on the direction.
+            0x4017 => ReadController(1),
             < 0x4020 => 0,
             _ => Cartridge.Mapper.CpuRead(address),
         };
@@ -142,7 +213,7 @@ public sealed class NesConsole : IEmulatorCore
             case 0x4016:
                 controllerStrobe = (value & 1) != 0;
                 if (controllerStrobe)
-                    controllerShift = (byte)buttons;
+                    LatchControllers();
                 return;
             case < 0x4014 or 0x4015 or 0x4017:
                 apu.WriteRegister(address, value);
@@ -174,15 +245,21 @@ public sealed class NesConsole : IEmulatorCore
         }
     }
 
+    private void LatchControllers()
+    {
+        controllerShift[0] = (byte)buttons[0];
+        controllerShift[1] = (byte)buttons[1];
+    }
+
     /// <summary>The pad is a shift register: strobe it and it latches the buttons, then
     /// each read hands back one and shifts. Past the eighth, an official pad reads
-    /// high.</summary>
-    private byte ReadController()
+    /// high. Both ports share the strobe, which is why one write latches the pair.</summary>
+    private byte ReadController(int port)
     {
         if (controllerStrobe)
-            controllerShift = (byte)buttons;
-        var bit = (byte)(controllerShift & 1);
-        controllerShift = (byte)(controllerShift >> 1 | 0x80);
+            LatchControllers();
+        var bit = (byte)(controllerShift[port] & 1);
+        controllerShift[port] = (byte)(controllerShift[port] >> 1 | 0x80);
         return (byte)(0x40 | bit);
     }
 }

@@ -208,7 +208,7 @@ public class CartridgeBoardTests
         // Both halves of the pad share four lines, and a select line is active low:
         // clearing bit four is what asks for the directions.
         console.WriteByte(0xFF00, 0x20);
-        console.SetButtons(GamepadButtons.Left | GamepadButtons.Right);
+        console.SetButtons(0, GamepadButtons.Left | GamepadButtons.Right);
 
         var lines = console.ReadByte(0xFF00);
         Assert.Equal(0, lines & 0x02);      // left is held

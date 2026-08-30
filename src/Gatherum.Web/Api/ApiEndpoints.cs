@@ -14,6 +14,11 @@ public static class ApiEndpoints
         var api = app.MapGroup("/api").RequireAuthorization("Api");
         api.AddEndpointFilter(TranslateDomainErrors);
 
+        // The one socket in the app rides in the same group as everything else, so a
+        // node somebody may not see answers a would-be player exactly as it answers a
+        // would-be reader.
+        api.MapPlayEndpoint();
+
         api.MapGet("/search", async (SearchService search, HttpContext http,
             string query, string? kind, int? limit, string? mode) =>
         {

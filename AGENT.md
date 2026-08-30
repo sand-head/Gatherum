@@ -62,7 +62,9 @@ auto-login. Migrations: `dotnet ef migrations add <Name> -p src/Gatherum.Infrast
   migrations and `Data/EmbeddingSchema` (which sizes the vector
   column to the configured model at startup).
 - `src/Gatherum.Web` — the static pages and layout (`Components/`), REST API
-  (`Api/`), MCP tools (`Mcp/`), auth (`Auth/`), presence + `ServerAppData`, the
+  (`Api/`, including `PlayEndpoints` — the one WebSocket, a relay for two people playing
+  one cartridge), MCP tools (`Mcp/`), auth (`Auth/`), presence, `Services/PlaySessions`
+  (who is in which game) + `ServerAppData`, the
   server implementation of the interactive components' data seam (`Services/`), and
   `Docs/` — the manual that ships with the app: Markdown files embedded in the
   assembly, read by `Services/DocsLibrary`, served as pages by
@@ -74,7 +76,8 @@ auto-login. Migrations: `dotnet ef migrations add <Name> -p src/Gatherum.Infrast
   sidebar panels (contents/similar/recent), search box, node header, the category bar at
   the foot of a page (`NodeCategories`), version panel, file view, settings keys, and
   the ROM player (`RomPlayer` over `Emulation/` — `IEmulatorCore` with a NES and a Game
-  Boy behind it, here because a console only ever runs in the reader's own browser) —
+  Boy behind it, here because a console only ever runs in the reader's own browser, plus
+  `Emulation/Netplay/` where two of them keep in step) —
   plus Gatherum's Markdown dialect, which lives
   here because it is the editor's word: `GatherumMarkdown` (the extension set and the
   only read/write door), `AsideExtension`/`CalloutExtension`/`BlockTags`,
@@ -159,6 +162,16 @@ fresh DI scope via `Services/AppOperations`.
   (`IPageArchiver` — `BrowserPageArchiver` renders in headless Chromium where one is
   found, `HttpPageArchiver` is the plain fetch it degrades to) are the only abstraction
   seams. Don't add interfaces without a stated second implementation.
+- A core is deterministic or it is broken. Same cartridge, same buttons, same frames ⇒
+  byte-identical states — that is what lets two people play over a network by exchanging
+  nothing but buttons. So: no wall clock (a cartridge's own real-time clock counts the
+  console's cycles), no randomness, and nothing the player does *outside* the console in
+  a save state. Draining audio is the trap: how often a browser asks for samples is its
+  own business, so the sample queue is deliberately not serialized. `EmulatorStateTests`
+  holds the line, including a muted console that must still match an unmuted one.
+- The netplay server relays and understands nothing. It stamps which seat a message came
+  from — a client says what it pressed, never who pressed it — and forwards it. How many
+  seats a room has is the console's answer, not the server's. Don't teach it the game.
 - A console runs in the reader's browser or not at all. `RomPlayer` is guarded on
   `OperatingSystem.IsBrowser()`: an Interactive Auto island renders on a circuit until
   the WebAssembly runtime lands, and sixty frames a second over a websocket is not a
@@ -272,8 +285,13 @@ second icon set, and don't hand-draw a path when the pack has one.
    second — and `MediaTypes` its extension.
 3. Teach `Core/Roms/RomHeader` to read its header, so a cartridge is findable by what it
    says it is, and add the row to the extraction table in `Docs/pages-and-files.md`.
-4. Add tests beside `Nes6502Tests`/`GameBoyTests`: hand-assembled programs in
+4. Implement `SaveState`/`LoadState` over `StateWriter`/`StateReader` — positional and
+   untagged, so both sides must walk the same fields in the same order; the four-byte tag
+   at the head is what refuses somebody else's state. Leave the audio queue out.
+5. Add tests beside `Nes6502Tests`/`GameBoyTests`: hand-assembled programs in
    `RomFixtures`, never a real game — a checked-in ROM is somebody's copyrighted work.
+   A console that reports more than one player also needs the determinism tests in
+   `EmulatorStateTests` pointed at it, or netplay on it is a coin toss.
 
 **Add a text extractor**:
 1. Implement `ITextExtractor` in `src/Gatherum.Infrastructure/Extraction/` (cf.

@@ -36,6 +36,24 @@ public sealed class GameBoyApu
             Timer = Period;
         }
 
+        public void Save(ref StateWriter state)
+        {
+            state.Write(Volume);
+            state.Write(Initial);
+            state.Write(Period);
+            state.Write(Increasing);
+            state.Write(Timer);
+        }
+
+        public void Load(ref StateReader state)
+        {
+            Volume = state.ReadByte();
+            Initial = state.ReadByte();
+            Period = state.ReadByte();
+            Increasing = state.ReadBool();
+            Timer = state.ReadInt32();
+        }
+
         public void Clock()
         {
             if (Period == 0)
@@ -121,6 +139,46 @@ public sealed class GameBoyApu
         public int Output => Enabled && DacEnabled
             ? DutyPatterns[Duty][Position] * Envelope.Volume
             : 0;
+
+        public void Save(ref StateWriter state)
+        {
+            Envelope.Save(ref state);
+            state.Write(Enabled);
+            state.Write(DacEnabled);
+            state.Write(LengthEnabled);
+            state.Write(Duty);
+            state.Write(Position);
+            state.Write(Frequency);
+            state.Write(Timer);
+            state.Write(Length);
+            state.Write(SweepEnabled);
+            state.Write(SweepDecreasing);
+            state.Write(SweepPeriod);
+            state.Write(SweepShift);
+            state.Write(SweepTimer);
+            state.Write(SweepShadow);
+            state.Write(SweepActive);
+        }
+
+        public void Load(ref StateReader state)
+        {
+            Envelope.Load(ref state);
+            Enabled = state.ReadBool();
+            DacEnabled = state.ReadBool();
+            LengthEnabled = state.ReadBool();
+            Duty = state.ReadByte();
+            Position = state.ReadByte();
+            Frequency = state.ReadInt32();
+            Timer = state.ReadInt32();
+            Length = state.ReadInt32();
+            SweepEnabled = state.ReadBool();
+            SweepDecreasing = state.ReadBool();
+            SweepPeriod = state.ReadByte();
+            SweepShift = state.ReadByte();
+            SweepTimer = state.ReadInt32();
+            SweepShadow = state.ReadInt32();
+            SweepActive = state.ReadBool();
+        }
     }
 
     private readonly Square pulse1 = new();
@@ -154,6 +212,77 @@ public sealed class GameBoyApu
     {
         queueRead = queueWrite = 0;
         powered = true;
+    }
+
+    /// <summary>The chip's own state. As on the other console, the resampling
+    /// accumulators and the finished-sample queue stay out: they answer to the browser's
+    /// appetite for sound, not to the game.</summary>
+    internal void Save(ref StateWriter state)
+    {
+        pulse1.Save(ref state);
+        pulse2.Save(ref state);
+
+        state.Write(waveRam);
+        state.Write(waveEnabled);
+        state.Write(waveDacEnabled);
+        state.Write(waveLengthEnabled);
+        state.Write(waveFrequency);
+        state.Write(waveTimer);
+        state.Write(wavePosition);
+        state.Write(waveLength);
+        state.Write(waveVolume);
+
+        noiseEnvelope.Save(ref state);
+        state.Write(noiseEnabled);
+        state.Write(noiseDacEnabled);
+        state.Write(noiseLengthEnabled);
+        state.Write(noiseShortWidth);
+        state.Write(noiseTimer);
+        state.Write(noiseLength);
+        state.Write(noiseDivisorCode);
+        state.Write(noiseShiftAmount);
+        state.Write(noiseShift);
+
+        state.Write(powered);
+        state.Write(leftVolume);
+        state.Write(rightVolume);
+        state.Write(panning);
+        state.Write(sequencerCounter);
+        state.Write(sequencerStep);
+    }
+
+    internal void Load(ref StateReader state)
+    {
+        pulse1.Load(ref state);
+        pulse2.Load(ref state);
+
+        state.Read(waveRam);
+        waveEnabled = state.ReadBool();
+        waveDacEnabled = state.ReadBool();
+        waveLengthEnabled = state.ReadBool();
+        waveFrequency = state.ReadInt32();
+        waveTimer = state.ReadInt32();
+        wavePosition = state.ReadInt32();
+        waveLength = state.ReadInt32();
+        waveVolume = state.ReadByte();
+
+        noiseEnvelope.Load(ref state);
+        noiseEnabled = state.ReadBool();
+        noiseDacEnabled = state.ReadBool();
+        noiseLengthEnabled = state.ReadBool();
+        noiseShortWidth = state.ReadBool();
+        noiseTimer = state.ReadInt32();
+        noiseLength = state.ReadInt32();
+        noiseDivisorCode = state.ReadInt32();
+        noiseShiftAmount = state.ReadInt32();
+        noiseShift = state.ReadUInt16();
+
+        powered = state.ReadBool();
+        leftVolume = state.ReadByte();
+        rightVolume = state.ReadByte();
+        panning = state.ReadByte();
+        sequencerCounter = state.ReadInt32();
+        sequencerStep = state.ReadInt32();
     }
 
     public void Step(int cycles)

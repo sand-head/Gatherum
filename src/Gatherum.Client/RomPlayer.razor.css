@@ -172,3 +172,48 @@
         border-style: solid;
     }
 }
+
+/* Who else is in the game, and what it is waiting for. */
+.rom-together {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 14px;
+    padding: 8px 14px;
+    font-size: 13px;
+    color: var(--on-surface-dim);
+    background: color-mix(in srgb, var(--surface-dim) 55%, transparent);
+    border: 1px solid var(--outline-dim);
+    border-radius: var(--radius);
+
+    &.failed {
+        color: var(--danger);
+        border-color: color-mix(in srgb, var(--danger) 40%, var(--outline));
+    }
+}
+
+.rom-seats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.rom-seat {
+    padding: 1px 10px;
+    border-radius: var(--radius-full);
+    background: var(--surface-dim);
+    border: 1px solid var(--outline-dim);
+
+    /* Your own seat wears the accent the app uses for "this is you" everywhere else. */
+    &.you {
+        background: var(--chip-bg);
+        color: var(--on-chip);
+        border-color: transparent;
+    }
+}
+
+/* A stall is the honest face of a slow connection: the game stops rather than
+   guessing what the other player did and being wrong about it. */
+.rom-stall {
+    font-style: italic;
+}

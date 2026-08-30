@@ -19,7 +19,22 @@ public enum GamepadButtons
 /// <summary>A console, running. The player component owns the clock — it decides when a
 /// frame is due, because only the browser knows when the display will take one — and a
 /// core's whole job is to produce exactly one frame's worth of picture and sound when
-/// asked.</summary>
+/// asked.
+///
+/// <para><b>A core must be deterministic.</b> Two copies of the same core, given the
+/// same cartridge and fed the same buttons on the same frames, must reach byte-identical
+/// states. That is not a nicety: it is what lets two people play the same game in two
+/// browsers by exchanging nothing but their buttons. In practice it forbids three
+/// things — reading a wall clock (a cartridge's own real-time clock counts the console's
+/// cycles instead), any randomness at reset or anywhere else, and letting anything the
+/// player does *outside* the console leak into the machine's state. Draining sound is
+/// the case that matters: how often a browser asks for samples is its own business, so
+/// the queue that answers is deliberately not part of a save state.</para>
+///
+/// <para>The serialization below is shaped after libretro's
+/// <c>retro_serialize_size</c>/<c>retro_serialize</c>/<c>retro_unserialize</c>, so that
+/// a core vendored from that world can satisfy this seam by forwarding three
+/// calls.</para></summary>
 public interface IEmulatorCore
 {
     string SystemName { get; }
@@ -41,6 +56,10 @@ public interface IEmulatorCore
     /// row. Owned by the core and overwritten by the next <see cref="RunFrame"/>.</summary>
     uint[] Frame { get; }
 
+    /// <summary>How many pads the machine has ports for. One is a machine nobody can
+    /// play together on without emulating a cable, which is a different feature.</summary>
+    int PlayerCount { get; }
+
     /// <summary>Whether the cartridge has memory a battery would have kept — the only
     /// thing worth writing back out, and the reason a save exists at all.</summary>
     bool BatteryBacked { get; }
@@ -49,7 +68,10 @@ public interface IEmulatorCore
     /// The player watches this instead of writing a save every frame.</summary>
     bool SaveDirty { get; }
 
-    void SetButtons(GamepadButtons buttons);
+    /// <summary>What a save state costs, in bytes. Constant for a given cartridge.</summary>
+    int SaveStateSize { get; }
+
+    void SetButtons(int player, GamepadButtons buttons);
 
     /// <summary>Runs the console until it has finished the frame it was in the middle
     /// of, filling <see cref="Frame"/> and queueing the sound that went with it.</summary>
@@ -60,6 +82,15 @@ public interface IEmulatorCore
     int ReadAudio(short[] destination);
 
     void Reset();
+
+    /// <summary>Writes the whole machine — everything a frame's execution can read or
+    /// change — into the buffer. False when it would not fit.</summary>
+    bool SaveState(Span<byte> destination);
+
+    /// <summary>Puts the machine back where a state says it was. False when the bytes
+    /// are not a state this core wrote, or are truncated; the machine is left reset
+    /// rather than half-loaded.</summary>
+    bool LoadState(ReadOnlySpan<byte> source);
 
     /// <summary>The cartridge's battery-backed memory, or empty when it has none.</summary>
     byte[] SaveRam();

@@ -72,6 +72,40 @@ public sealed class Sm83(GameBoyConsole bus)
         enableInterruptsAfterNext = false;
     }
 
+    internal void Save(ref StateWriter state)
+    {
+        state.Write(A);
+        state.Write(B);
+        state.Write(C);
+        state.Write(D);
+        state.Write(E);
+        state.Write(H);
+        state.Write(L);
+        state.Write(Flags);
+        state.Write(SP);
+        state.Write(PC);
+        state.Write(InterruptsEnabled);
+        state.Write(Halted);
+        state.Write(enableInterruptsAfterNext);
+    }
+
+    internal void Load(ref StateReader state)
+    {
+        A = state.ReadByte();
+        B = state.ReadByte();
+        C = state.ReadByte();
+        D = state.ReadByte();
+        E = state.ReadByte();
+        H = state.ReadByte();
+        L = state.ReadByte();
+        Flags = (byte)(state.ReadByte() & 0xF0);
+        SP = state.ReadUInt16();
+        PC = state.ReadUInt16();
+        InterruptsEnabled = state.ReadBool();
+        Halted = state.ReadBool();
+        enableInterruptsAfterNext = state.ReadBool();
+    }
+
     private byte Read(ushort address)
     {
         bus.Tick();

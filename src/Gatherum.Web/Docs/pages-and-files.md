@@ -123,6 +123,32 @@ fetched once and nothing about the game leaves your machine afterwards.
   in-browser runtime downloads, and the player says so rather than pretending: reload
   once and it plays.
 
+### Playing together
+
+A Nintendo Entertainment System has two controller ports, and so does the player. Press
+**Play together** and anybody else who can see the page and opens it takes the second
+one — they appear in a strip under the screen, and you are playing the same game.
+
+- **Nothing but buttons crosses the network.** Both browsers run the same console from
+  the same cartridge, and identical machines given identical buttons stay identical, so
+  there is no video to send. Gatherum's server passes the buttons along and never learns
+  what any of them do.
+- **Joining a game already going works.** Whoever started hands their whole machine over,
+  so the second player arrives wherever the first one has got to rather than at the title
+  screen.
+- **A stall is honest.** If somebody's connection falls behind, the game waits and says
+  whose — rather than guessing what they pressed and being wrong about it a second later.
+- **Same page, same cartridge.** A room is the ROM's page: whoever may open the page may
+  join, and nobody else. The server checks that everybody is holding the same file, byte
+  for byte, before it seats them.
+- Playing together needs an account, like every other thing in Gatherum that is not
+  simply reading.
+
+> [!NOTE]
+> The Game Boy is a one-player machine here. Two people on a Game Boy meant two Game Boys
+> and a link cable between them, which is a second console to emulate rather than a second
+> port to read — it is not built.
+
 Gatherum knows the Nintendo Entertainment System's common cartridge boards (NROM, MMC1,
 UxROM, CNROM, MMC3, AxROM and a few others) and the Game Boy's (none, MBC1, MBC2, MBC3
 with its clock, and MBC5). A cartridge on a board it has not met says so by name instead

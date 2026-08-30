@@ -1,8 +1,10 @@
 # Status
 
-As of the ROM player — a `.nes`, `.gb` or `.gbc` upload has a console on its page, written
-in C# and running in the reader's own browser rather than borrowed from anybody's
-JavaScript. Before that: a `:::collection` fence makes a list something a group works rather
+As of playing together — two people open the same NES cartridge and take a controller
+each, with nothing but a byte of buttons a frame crossing the network because both
+browsers are running the same deterministic console. Before that: a `.nes`, `.gb` or
+`.gbc` upload has a console on its page, written in C# and running in the reader's own
+browser rather than borrowed from anybody's JavaScript. Before that: a `:::collection` fence makes a list something a group works rather
 than reads, with each person's answers a page of their own, and the same grid answers who
 can make which night as readily as who has which sprite. Before that:
 search runs a full-text half and a meaning half and fuses their rankings, with the
@@ -148,6 +150,22 @@ browser sessions — including against the built container).
   and a cartridge's battery memory round-trips through storage and out as a file.
   A cartridge's header is extraction text, so a ROM is findable by console, title
   and board.
+- **Playing together** — a second person opens the same NES cartridge and takes the
+  second controller. Both browsers run the same console; identical machines given
+  identical buttons stay identical, so what crosses the wire is one byte of buttons per
+  player per frame and nothing else. `PlayEndpoints` is the app's one WebSocket and
+  relays without understanding: it stamps which seat a message came from and forwards
+  it, and how many seats a room has is the console's answer rather than the server's.
+  A room is the ROM's node, so who may join is the `CanSee` that answers for the page,
+  never anonymous, and everybody must be holding the same bytes — checked against the
+  SHA-256 already on the version. Whoever started hands their whole machine over when
+  somebody joins, so the second player arrives inside the game rather than at the title
+  screen; a slow connection stalls and says whose; and the two machines fingerprint
+  themselves every second so a divergence is reported instead of played through.
+  Underneath it, `IEmulatorCore` now serializes — shaped after libretro's
+  `retro_serialize` so a vendored core could satisfy the same seam — and states
+  deliberately exclude the audio queue, because how often a browser asks for sound is
+  not part of the machine.
 - **Bookmarks** — a URL captured as a file node, on request and never on a schedule.
   `BrowserPageArchiver` (Playwright over the container's Chromium, honoring
   `HTTPS_PROXY`, `Gatherum__Bookmarks__BrowserPath` to point elsewhere) loads the page,
@@ -213,7 +231,7 @@ browser sessions — including against the built container).
   exercised against a postgres container, editor verified in-browser against the
   containerized app), compose.yaml, Podman Quadlets, `/healthz`, JSON console logs
   outside Development, migrations on startup with opt-out.
-- **Tests** — 413 passing: the Markdown dialect (infobox/figure/callout round trips,
+- **Tests** — 438 passing: the Markdown dialect (infobox/figure/callout round trips,
   wiki-link spellings, extension composition, derived chrome, red-link inking, in-app
   URL shapes) and the same dialect as read-only HTML (the aside and its card, a
   callout's tint, a wiki link's URL, a mention that keeps its look and loses its
@@ -226,7 +244,14 @@ browser sessions — including against the built container).
   instruction charged in cycles — then whole consoles drawing a tile where the
   nametable put it, scrolling by a pixel, resolving a sprite over the background,
   and handing back the pad one bit at a time; the banking boards, their scanline
-  counter, and a battery save out and back),
+  counter, and a battery save out and back; then the contract netplay stands on —
+  two consoles fed the same scripted two-player input for 240 frames reaching identical
+  states, a muted one matching an unmuted one, a state that rewinds and replays to the
+  same picture, one that carries across to a fresh console, and states from the wrong
+  console or half a file refused rather than half-loaded), the netplay wire format and
+  the room itself against a booted app over real sockets (two players seated and their
+  buttons relayed, a machine handed to a late arrival, a third turned away, a mismatched
+  cartridge refused, and a stranger who cannot see the node refused the room too),
   markdown links, docx extraction/editing/backlinks, tree ops, privacy,
   versions (collapse, restore, re-upload, cross-author), search, title resolution, API
   keys, storage/extraction, the taxonomy (nesting, counts, privacy, rename/move/delete,

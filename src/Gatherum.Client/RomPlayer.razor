@@ -1,8 +1,11 @@
 @inject IAppData Data
 @inject IJSRuntime Js
+@inject NavigationManager Navigation
 @implements IAsyncDisposable
 @using System.Runtime.InteropServices
+@using System.Security.Cryptography
 @using Gatherum.Client.Emulation
+@using Gatherum.Client.Emulation.Netplay
 @using SkiaSharp
 @using SkiaSharp.Views.Blazor
 
@@ -52,12 +55,65 @@ else
             }
         </div>
 
+        @if (togetherProblem is { } trouble)
+        {
+            <div class="rom-together failed" role="alert">@trouble</div>
+        }
+        @if (session is { } play)
+        {
+            <div class="rom-together @(play.Fault is null ? "" : "failed")" role="status">
+                @if (play.Fault is { } fault)
+                {
+                    <span>@fault</span>
+                }
+                else if (!play.Full)
+                {
+                    <span>Waiting for somebody else to open this page — you are player
+                        @(play.Slot + 1) of @play.Capacity.</span>
+                }
+                else if (!together)
+                {
+                    <span>Handing the game over…</span>
+                }
+                else
+                {
+                    <span class="rom-seats">
+                        @foreach (var seat in play.Seats.OrderBy(s => s.Slot))
+                        {
+                            <span class="rom-seat @(seat.Slot == play.Slot ? "you" : "")">
+                                P@(seat.Slot + 1) @seat.Name
+                            </span>
+                        }
+                    </span>
+                    @if (waitingOn is { } who)
+                    {
+                        <span class="rom-stall">Waiting for @who…</span>
+                    }
+                }
+            </div>
+        }
+
         <div class="rom-controls">
             <span class="rom-system">@core.SystemName</span>
             <button type="button" class="ghost" @onclick="ToggleSound" @ref="exit">
                 @(sound ? "Sound on" : "Sound off")
             </button>
             <button type="button" class="ghost" @onclick="ResetAsync">Reset</button>
+            @if (core.PlayerCount > 1)
+            {
+                @if (session is null)
+                {
+                    <button type="button" class="ghost" @onclick="PlayTogetherAsync">
+                        Play together
+                    </button>
+                }
+                else
+                {
+                    <button type="button" class="ghost" @onclick="LeaveAndRedrawAsync">
+                        Leave game
+                    </button>
+                }
+            }
             @if (core.BatteryBacked)
             {
                 <a class="button" download="@SaveFileName" href="@SaveDataUrl">Download save</a>
@@ -151,6 +207,22 @@ else
     private readonly System.Diagnostics.Stopwatch clock = new();
     private double owed;
 
+    // ---- playing together ---------------------------------------------------
+    private NetplaySession? session;
+    private string romHash = "";
+
+    /// <summary>Which frame the shared game is on. Counted whether or not anybody else
+    /// is here, so that the moment somebody arrives there is a number to hand them.</summary>
+    private int netFrame;
+
+    /// <summary>Whether the two machines are actually running in step yet — false while
+    /// a room is filling, and while a joiner is waiting for the host's machine.</summary>
+    private bool together;
+    private string? waitingOn;
+    private string? togetherProblem;
+    private readonly GamepadButtons[] slotInputs = new GamepadButtons[PlayProtocol.MaxPlayers];
+    private byte[] stateBuffer = [];
+
     private readonly short[] samples = new short[2048];
     private readonly byte[] sampleBytes = new byte[4096];
 
@@ -181,7 +253,11 @@ else
         try
         {
             var rom = await Data.ReadBytesAsync(NodeId);
+            // The same spelling the server stores, so a room can refuse two people who
+            // are not holding the same cartridge.
+            romHash = Convert.ToHexStringLower(SHA256.HashData(rom));
             core = Emulator.Load(rom, FileName);
+            stateBuffer = new byte[core.SaveStateSize];
             pinnedFrame = GCHandle.Alloc(core.Frame, GCHandleType.Pinned);
             picture = new SKBitmap();
             picture.InstallPixels(
@@ -240,7 +316,7 @@ else
     private void ReleaseAll()
     {
         pressed = GamepadButtons.None;
-        core?.SetButtons(GamepadButtons.None);
+        core?.SetButtons(0, GamepadButtons.None);
     }
 
     private async Task FocusAsync()
@@ -296,10 +372,12 @@ else
             // sprint through a cutscene on the way back.
             if (owed > frame * 4)
                 owed = frame;
+            OpenTheGate();
             var ran = 0;
             while (owed >= frame && ran < 2)
             {
-                core.RunFrame();
+                if (!Advance())
+                    break;
                 owed -= frame;
                 ran++;
             }
@@ -322,6 +400,159 @@ else
             (e.Info.Height - height) / 2, width, height);
         canvasSurface.DrawBitmap(picture, destination,
             new SKSamplingOptions(SKFilterMode.Nearest, SKMipmapMode.None));
+    }
+
+    /// <summary>One frame, alone or together.</summary>
+    private bool Advance()
+    {
+        if (core is null)
+            return false;
+        if (session is null || !together)
+        {
+            // Solo, or in a room still filling. A joiner waiting for the host's machine
+            // must not run: whatever it did would be a game the host never played.
+            if (session is { Connected: true, Full: true, IsHost: false })
+                return false;
+            core.RunFrame();
+            netFrame++;
+            return true;
+        }
+        return AdvanceTogether();
+    }
+
+    /// <summary>A frame runs only when everybody's buttons for it are in hand. That is
+    /// the whole of the synchronisation: two deterministic machines given the same input
+    /// on the same frame stay the same machine.</summary>
+    private bool AdvanceTogether()
+    {
+        var play = session!;
+        play.SendInput(netFrame + PlayProtocol.InputDelay, pressed);
+        if (!play.TryCollect(netFrame, slotInputs))
+        {
+            Stalled(play.WaitingFor(netFrame));
+            return false;
+        }
+
+        Stalled(null);
+        for (var slot = 0; slot < core!.PlayerCount; slot++)
+            core.SetButtons(slot, slot < play.Capacity ? slotInputs[slot] : GamepadButtons.None);
+        core.RunFrame();
+        netFrame++;
+
+        if (netFrame % PlayProtocol.ChecksumInterval != 0)
+            return true;
+
+        // Compare notes: this frame's fingerprint goes out, and the one from a second
+        // ago — long enough for everybody's to have arrived — is checked.
+        if (core.SaveState(stateBuffer))
+            play.SendChecksum(netFrame, PlayProtocol.Fingerprint(stateBuffer));
+        if (play.HasDiverged(netFrame - PlayProtocol.ChecksumInterval))
+        {
+            together = false;
+            return false;
+        }
+        play.Forget(netFrame - 2 * PlayProtocol.ChecksumInterval);
+        return true;
+    }
+
+    /// <summary>The painting loop runs outside the render tree, so a stall only reaches
+    /// the screen if it asks — and only when it changes, because this is called sixty
+    /// times a second.</summary>
+    private void Stalled(string? who)
+    {
+        if (waitingOn == who)
+            return;
+        waitingOn = who;
+        StateHasChanged();
+    }
+
+    /// <summary>Runs at the top of each painted frame: starts the shared game once the
+    /// room is full, which for the host means handing over its machine and for everybody
+    /// else means putting it on.</summary>
+    private void OpenTheGate()
+    {
+        // A partner who closed their tab is never going to send frame N's buttons, so
+        // the game drops back to one player rather than waiting for them all evening.
+        if (together && session is not { Connected: true, Full: true })
+        {
+            together = false;
+            waitingOn = null;
+            StateHasChanged();
+            return;
+        }
+
+        if (session is not { Connected: true, Full: true } play || together || core is null)
+            return;
+
+        if (play.IsHost)
+        {
+            if (!core.SaveState(stateBuffer))
+                return;
+            play.SendState(netFrame, stateBuffer);
+        }
+        else
+        {
+            if (play.TakeArrivingState() is not { } arriving)
+                return;
+            if (!core.LoadState(arriving.Machine))
+                return;
+            netFrame = arriving.Frame;
+        }
+
+        // Nobody has committed buttons for the frames already inside the delay window,
+        // and both machines have to agree about them — so both fill them with nothing.
+        for (var frame = netFrame; frame < netFrame + PlayProtocol.InputDelay; frame++)
+            play.SendInput(frame, GamepadButtons.None);
+        together = true;
+        StateHasChanged();
+    }
+
+    private async Task PlayTogetherAsync()
+    {
+        if (core is null || session is not null)
+            return;
+        var address = Navigation.ToAbsoluteUri($"/api/nodes/{NodeId}/play");
+        var endpoint = new UriBuilder(address)
+        {
+            Scheme = address.Scheme == Uri.UriSchemeHttps ? "wss" : "ws",
+        }.Uri;
+        try
+        {
+            session = await NetplaySession.ConnectAsync(endpoint, romHash, core.PlayerCount);
+            session.Changed += OnSessionChanged;
+        }
+        catch (Exception problem)
+        {
+            // The cartridge still plays on its own; only the invitation failed.
+            togetherProblem = $"This game could not be opened up: {problem.Message}";
+        }
+        StateHasChanged();
+    }
+
+    private async Task LeaveTogetherAsync()
+    {
+        var play = session;
+        session = null;
+        together = false;
+        waitingOn = null;
+        togetherProblem = null;
+        if (play is null)
+            return;
+        play.Changed -= OnSessionChanged;
+        await play.DisposeAsync();
+    }
+
+    private async Task LeaveAndRedrawAsync()
+    {
+        await LeaveTogetherAsync();
+        StateHasChanged();
+    }
+
+    private void OnSessionChanged()
+    {
+        if (session?.Fault is not null)
+            together = false;
+        _ = InvokeAsync(StateHasChanged);
     }
 
     private void PushSound()
@@ -394,13 +625,13 @@ else
     private void Hold(GamepadButtons button)
     {
         pressed |= button;
-        core?.SetButtons(pressed);
+        core?.SetButtons(0, pressed);
     }
 
     private void Release(GamepadButtons button)
     {
         pressed &= ~button;
-        core?.SetButtons(pressed);
+        core?.SetButtons(0, pressed);
     }
 
     /// <summary>Keys are swallowed while the game is running — the arrow keys would
@@ -455,6 +686,7 @@ else
     public async ValueTask DisposeAsync()
     {
         running = false;
+        await LeaveTogetherAsync();
         await FlushSaveAsync();
         await StopSoundAsync();
         Unload();

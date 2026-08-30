@@ -64,6 +64,26 @@ public sealed class NesApu(NesConsole console)
         public bool Loop, ConstantVolume, Start;
         public byte Period, Divider, Decay;
 
+        public void Save(ref StateWriter state)
+        {
+            state.Write(Loop);
+            state.Write(ConstantVolume);
+            state.Write(Start);
+            state.Write(Period);
+            state.Write(Divider);
+            state.Write(Decay);
+        }
+
+        public void Load(ref StateReader state)
+        {
+            Loop = state.ReadBool();
+            ConstantVolume = state.ReadBool();
+            Start = state.ReadBool();
+            Period = state.ReadByte();
+            Divider = state.ReadByte();
+            Decay = state.ReadByte();
+        }
+
         public byte Volume => ConstantVolume ? Period : Decay;
 
         public void Clock()
@@ -151,6 +171,42 @@ public sealed class NesApu(NesConsole console)
         public byte Output => !Enabled || Length == 0 || Muted
             ? (byte)0
             : (byte)(DutySequences[Duty][SequenceStep] * Envelope.Volume);
+
+        public void Save(ref StateWriter state)
+        {
+            Envelope.Save(ref state);
+            state.Write(Enabled);
+            state.Write(LengthHalt);
+            state.Write(Duty);
+            state.Write(Length);
+            state.Write(SequenceStep);
+            state.Write(Timer);
+            state.Write(TimerPeriod);
+            state.Write(SweepEnabled);
+            state.Write(SweepNegate);
+            state.Write(SweepReload);
+            state.Write(SweepPeriod);
+            state.Write(SweepShift);
+            state.Write(SweepDivider);
+        }
+
+        public void Load(ref StateReader state)
+        {
+            Envelope.Load(ref state);
+            Enabled = state.ReadBool();
+            LengthHalt = state.ReadBool();
+            Duty = state.ReadByte();
+            Length = state.ReadByte();
+            SequenceStep = state.ReadByte();
+            Timer = state.ReadInt32();
+            TimerPeriod = state.ReadInt32();
+            SweepEnabled = state.ReadBool();
+            SweepNegate = state.ReadBool();
+            SweepReload = state.ReadBool();
+            SweepPeriod = state.ReadByte();
+            SweepShift = state.ReadByte();
+            SweepDivider = state.ReadByte();
+        }
     }
 
     private readonly Pulse pulse1 = new(onesComplementSweep: true);
@@ -185,6 +241,105 @@ public sealed class NesApu(NesConsole console)
     private int queueRead, queueWrite;
 
     public bool IrqPending => frameIrqFlag || dmcIrqFlag;
+
+    /// <summary>Everything the sound chip can act on. The resampling accumulators and
+    /// the queue of finished samples are deliberately left out: how often a browser
+    /// asks for sound is the browser's business, and a machine's state must not depend
+    /// on it — two people playing the same game must agree about the console whether or
+    /// not one of them has muted it.</summary>
+    internal void Save(ref StateWriter state)
+    {
+        pulse1.Save(ref state);
+        pulse2.Save(ref state);
+
+        state.Write(triangleEnabled);
+        state.Write(triangleHalt);
+        state.Write(triangleLinearReload);
+        state.Write(triangleLength);
+        state.Write(triangleLinear);
+        state.Write(triangleLinearPeriod);
+        state.Write(triangleStep);
+        state.Write(triangleTimer);
+        state.Write(triangleTimerPeriod);
+
+        noiseEnvelope.Save(ref state);
+        state.Write(noiseEnabled);
+        state.Write(noiseHalt);
+        state.Write(noiseShortMode);
+        state.Write(noiseLength);
+        state.Write(noiseTimer);
+        state.Write(noiseTimerPeriod);
+        state.Write(noiseShift);
+
+        state.Write(dmcEnabled);
+        state.Write(dmcLoop);
+        state.Write(dmcIrqEnabled);
+        state.Write(dmcIrqFlag);
+        state.Write(dmcSilent);
+        state.Write(dmcBufferFull);
+        state.Write(dmcOutput);
+        state.Write(dmcSampleBuffer);
+        state.Write(dmcShift);
+        state.Write(dmcBitsRemaining);
+        state.Write(dmcTimer);
+        state.Write(dmcTimerPeriod);
+        state.Write(dmcSampleAddress);
+        state.Write(dmcAddress);
+        state.Write(dmcSampleLength);
+        state.Write(dmcBytesRemaining);
+
+        state.Write(frameCounter);
+        state.Write(fiveStepMode);
+        state.Write(frameIrqInhibit);
+        state.Write(frameIrqFlag);
+    }
+
+    internal void Load(ref StateReader state)
+    {
+        pulse1.Load(ref state);
+        pulse2.Load(ref state);
+
+        triangleEnabled = state.ReadBool();
+        triangleHalt = state.ReadBool();
+        triangleLinearReload = state.ReadBool();
+        triangleLength = state.ReadByte();
+        triangleLinear = state.ReadByte();
+        triangleLinearPeriod = state.ReadByte();
+        triangleStep = state.ReadByte();
+        triangleTimer = state.ReadInt32();
+        triangleTimerPeriod = state.ReadInt32();
+
+        noiseEnvelope.Load(ref state);
+        noiseEnabled = state.ReadBool();
+        noiseHalt = state.ReadBool();
+        noiseShortMode = state.ReadBool();
+        noiseLength = state.ReadByte();
+        noiseTimer = state.ReadInt32();
+        noiseTimerPeriod = state.ReadInt32();
+        noiseShift = state.ReadUInt16();
+
+        dmcEnabled = state.ReadBool();
+        dmcLoop = state.ReadBool();
+        dmcIrqEnabled = state.ReadBool();
+        dmcIrqFlag = state.ReadBool();
+        dmcSilent = state.ReadBool();
+        dmcBufferFull = state.ReadBool();
+        dmcOutput = state.ReadByte();
+        dmcSampleBuffer = state.ReadByte();
+        dmcShift = state.ReadByte();
+        dmcBitsRemaining = state.ReadByte();
+        dmcTimer = state.ReadInt32();
+        dmcTimerPeriod = state.ReadInt32();
+        dmcSampleAddress = state.ReadUInt16();
+        dmcAddress = state.ReadUInt16();
+        dmcSampleLength = state.ReadInt32();
+        dmcBytesRemaining = state.ReadInt32();
+
+        frameCounter = state.ReadInt32();
+        fiveStepMode = state.ReadBool();
+        frameIrqInhibit = state.ReadBool();
+        frameIrqFlag = state.ReadBool();
+    }
 
     public void Reset()
     {

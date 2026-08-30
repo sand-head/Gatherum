@@ -25,6 +25,7 @@ public sealed class GameBoyConsole : IEmulatorCore
     private int workBank = 1;
 
     private GamepadButtons buttons;
+
     private byte joypadSelect = 0x30;
 
     private ushort divider;
@@ -71,6 +72,10 @@ public sealed class GameBoyConsole : IEmulatorCore
     public double FramesPerSecond => 59.7275;
 
     public int SampleRate => GameBoyApu.SampleRate;
+
+    /// <summary>One. Two people on a Game Boy meant two Game Boys and a cable between
+    /// them, which is a machine to emulate rather than a second port to read.</summary>
+    public int PlayerCount => 1;
     public uint[] Frame => ppu.Frame;
     public bool BatteryBacked => cartridge.Battery;
     public bool SaveDirty => cartridge.SaveDirty;
@@ -92,8 +97,10 @@ public sealed class GameBoyConsole : IEmulatorCore
         frameCycles = 0;
     }
 
-    public void SetButtons(GamepadButtons pressed)
+    public void SetButtons(int player, GamepadButtons pressed)
     {
+        if (player != 0)
+            return;
         if ((pressed & (GamepadButtons.Up | GamepadButtons.Down))
             == (GamepadButtons.Up | GamepadButtons.Down))
             pressed &= ~GamepadButtons.Down;
@@ -119,6 +126,102 @@ public sealed class GameBoyConsole : IEmulatorCore
     }
 
     public int ReadAudio(short[] destination) => apu.ReadAudio(destination);
+
+    /// <summary>A four-byte tag and a version, so a state from another console — or
+    /// from a build whose fields have moved — is refused rather than misread.</summary>
+    private static ReadOnlySpan<byte> StateTag => "GMB1"u8;
+
+    public int SaveStateSize
+    {
+        get
+        {
+            var measure = StateWriter.Measure();
+            Write(ref measure);
+            return measure.Length;
+        }
+    }
+
+    public bool SaveState(Span<byte> destination)
+    {
+        var state = new StateWriter(destination);
+        Write(ref state);
+        return !state.Failed;
+    }
+
+    public bool LoadState(ReadOnlySpan<byte> source)
+    {
+        if (source.Length < 4 || !source[..4].SequenceEqual(StateTag))
+            return false;
+        var state = new StateReader(source);
+        state.Skip(StateTag.Length);
+
+        Cpu.Load(ref state);
+        ppu.Load(ref state);
+        apu.Load(ref state);
+        cartridge.Load(ref state);
+        state.Read(work);
+        state.Read(high);
+        workBank = state.ReadInt32();
+        buttons = (GamepadButtons)state.ReadByte();
+        joypadSelect = state.ReadByte();
+        divider = state.ReadUInt16();
+        timerCounter = state.ReadByte();
+        timerModulo = state.ReadByte();
+        timerControl = state.ReadByte();
+        timerOverflowLast = state.ReadBool();
+        serialData = state.ReadByte();
+        serialControl = state.ReadByte();
+        doubleSpeed = state.ReadBool();
+        speedSwitchArmed = state.ReadBool();
+        blockSource = state.ReadUInt16();
+        blockDestination = state.ReadUInt16();
+        blockRemaining = state.ReadInt32();
+        blockOnHorizontalBlank = state.ReadBool();
+        blockWasInHorizontalBlank = state.ReadBool();
+        InterruptEnable = state.ReadByte();
+        InterruptFlags = state.ReadByte();
+        Cycles = state.ReadInt64();
+        frameCycles = state.ReadInt32();
+
+        if (state.Failed)
+        {
+            Reset();
+            return false;
+        }
+        return true;
+    }
+
+    private void Write(ref StateWriter state)
+    {
+        state.Write(StateTag);
+        Cpu.Save(ref state);
+        ppu.Save(ref state);
+        apu.Save(ref state);
+        cartridge.Save(ref state);
+        state.Write(work);
+        state.Write(high);
+        state.Write(workBank);
+        state.Write((byte)buttons);
+        state.Write(joypadSelect);
+        state.Write(divider);
+        state.Write(timerCounter);
+        state.Write(timerModulo);
+        state.Write(timerControl);
+        state.Write(timerOverflowLast);
+        state.Write(serialData);
+        state.Write(serialControl);
+        state.Write(doubleSpeed);
+        state.Write(speedSwitchArmed);
+        state.Write(blockSource);
+        state.Write(blockDestination);
+        state.Write(blockRemaining);
+        state.Write(blockOnHorizontalBlank);
+        state.Write(blockWasInHorizontalBlank);
+        state.Write(InterruptEnable);
+        state.Write(InterruptFlags);
+        state.Write(Cycles);
+        state.Write(frameCycles);
+    }
 
     public byte[] SaveRam() => cartridge.SaveRam();
 

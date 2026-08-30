@@ -48,7 +48,10 @@ page-turner.
   it — keyboard or on-screen pad, sound, and battery saves kept by your own browser with
   a `.sav` download to take them anywhere. The emulators are C# in the app, running in
   WebAssembly in your browser; no library is vendored and nothing about the game leaves
-  your machine.
+  your machine. **Two people can play one NES cartridge**: whoever else can see the page
+  takes the second controller, and because both browsers run the same deterministic
+  console, all that crosses the network is a byte of buttons a frame — the server passes
+  them along and never learns what any of them do.
 - **Bookmarks**: paste a URL and Gatherum keeps the page the way an archive would —
   fetched once, on request, never on a schedule. A headless Chromium (in the container
   image) loads the page, its scripts run and settle, lazy-loaded images are scrolled

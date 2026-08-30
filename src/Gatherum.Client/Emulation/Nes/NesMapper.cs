@@ -41,6 +41,23 @@ public abstract class NesMapper(NesCartridge cartridge)
             Cartridge.Characters[address & 0x1FFF] = value;
     }
 
+    /// <summary>The board's own memory: what a battery would have kept, and pattern
+    /// data the game draws into when the cartridge shipped RAM instead of ROM. Every
+    /// board has these, so they live here and an override adds only its registers.</summary>
+    public virtual void Save(ref StateWriter state)
+    {
+        state.Write(Cartridge.ProgramRam);
+        if (Cartridge.CharactersAreRam)
+            state.Write(Cartridge.Characters);
+    }
+
+    public virtual void Load(ref StateReader state)
+    {
+        state.Read(Cartridge.ProgramRam);
+        if (Cartridge.CharactersAreRam)
+            state.Read(Cartridge.Characters);
+    }
+
     /// <summary>The last 16 KB of program, which most boards leave nailed to $C000 so
     /// that the reset and interrupt vectors are always reachable.</summary>
     protected int LastProgramBank16 => Cartridge.Program.Length - 16 * 1024;
@@ -80,6 +97,26 @@ public sealed class NromMapper(NesCartridge cartridge) : NesMapper(cartridge)
 /// is how a game resets it without knowing how far along it was.</summary>
 public sealed class Mmc1Mapper(NesCartridge cartridge) : NesMapper(cartridge)
 {
+    public override void Save(ref StateWriter state)
+    {
+        base.Save(ref state);
+        state.Write(shift);
+        state.Write(control);
+        state.Write(characterBank0);
+        state.Write(characterBank1);
+        state.Write(programBank);
+    }
+
+    public override void Load(ref StateReader state)
+    {
+        base.Load(ref state);
+        shift = state.ReadByte();
+        control = state.ReadByte();
+        characterBank0 = state.ReadByte();
+        characterBank1 = state.ReadByte();
+        programBank = state.ReadByte();
+    }
+
     private byte shift = 0x10;
     private byte control = 0x0C;
     private byte characterBank0, characterBank1, programBank;
@@ -163,6 +200,18 @@ public sealed class Mmc1Mapper(NesCartridge cartridge) : NesMapper(cartridge)
 /// nailed down at $C000, and pattern data in RAM the game draws into itself.</summary>
 public sealed class UxRomMapper(NesCartridge cartridge) : NesMapper(cartridge)
 {
+    public override void Save(ref StateWriter state)
+    {
+        base.Save(ref state);
+        state.Write(bank);
+    }
+
+    public override void Load(ref StateReader state)
+    {
+        base.Load(ref state);
+        bank = state.ReadInt32();
+    }
+
     private int bank;
 
     public override byte CpuRead(ushort address) => address switch
@@ -185,6 +234,18 @@ public sealed class UxRomMapper(NesCartridge cartridge) : NesMapper(cartridge)
 /// how a small game affords more art than fits in 8 KB.</summary>
 public sealed class CnRomMapper(NesCartridge cartridge) : NesMapper(cartridge)
 {
+    public override void Save(ref StateWriter state)
+    {
+        base.Save(ref state);
+        state.Write(bank);
+    }
+
+    public override void Load(ref StateReader state)
+    {
+        base.Load(ref state);
+        bank = state.ReadInt32();
+    }
+
     private int bank;
 
     public override byte CpuRead(ushort address) => address >= 0x8000
@@ -214,6 +275,20 @@ public sealed class CnRomMapper(NesCartridge cartridge) : NesMapper(cartridge)
 /// Rare's games used instead of scrolling in two directions.</summary>
 public sealed class AxRomMapper(NesCartridge cartridge) : NesMapper(cartridge)
 {
+    public override void Save(ref StateWriter state)
+    {
+        base.Save(ref state);
+        state.Write(bank);
+        state.Write(high);
+    }
+
+    public override void Load(ref StateReader state)
+    {
+        base.Load(ref state);
+        bank = state.ReadInt32();
+        high = state.ReadBool();
+    }
+
     private int bank;
     private bool high;
 
@@ -240,6 +315,20 @@ public sealed class AxRomMapper(NesCartridge cartridge) : NesMapper(cartridge)
 /// one byte, no protection, no counter.</summary>
 public sealed class ColorDreamsMapper(NesCartridge cartridge) : NesMapper(cartridge)
 {
+    public override void Save(ref StateWriter state)
+    {
+        base.Save(ref state);
+        state.Write(programBank);
+        state.Write(characterBank);
+    }
+
+    public override void Load(ref StateReader state)
+    {
+        base.Load(ref state);
+        programBank = state.ReadInt32();
+        characterBank = state.ReadInt32();
+    }
+
     private int programBank, characterBank;
 
     public override byte CpuRead(ushort address) => address >= 0x8000
@@ -265,6 +354,20 @@ public sealed class ColorDreamsMapper(NesCartridge cartridge) : NesMapper(cartri
 /// <summary>Mapper 66 — the same idea as 11 with the two halves of the byte swapped.</summary>
 public sealed class GxRomMapper(NesCartridge cartridge) : NesMapper(cartridge)
 {
+    public override void Save(ref StateWriter state)
+    {
+        base.Save(ref state);
+        state.Write(programBank);
+        state.Write(characterBank);
+    }
+
+    public override void Load(ref StateReader state)
+    {
+        base.Load(ref state);
+        programBank = state.ReadInt32();
+        characterBank = state.ReadInt32();
+    }
+
     private int programBank, characterBank;
 
     public override byte CpuRead(ushort address) => address >= 0x8000
@@ -294,6 +397,32 @@ public sealed class GxRomMapper(NesCartridge cartridge) : NesMapper(cartridge)
 /// it.</summary>
 public sealed class Mmc3Mapper(NesCartridge cartridge) : NesMapper(cartridge)
 {
+    public override void Save(ref StateWriter state)
+    {
+        base.Save(ref state);
+        state.Write(banks);
+        state.Write(select);
+        state.Write(horizontal);
+        state.Write(irqLatch);
+        state.Write(irqCounter);
+        state.Write(irqEnabled);
+        state.Write(irqReload);
+        state.Write(irqAsserted);
+    }
+
+    public override void Load(ref StateReader state)
+    {
+        base.Load(ref state);
+        state.Read(banks);
+        select = state.ReadByte();
+        horizontal = state.ReadBool();
+        irqLatch = state.ReadByte();
+        irqCounter = state.ReadByte();
+        irqEnabled = state.ReadBool();
+        irqReload = state.ReadBool();
+        irqAsserted = state.ReadBool();
+    }
+
     private readonly byte[] banks = new byte[8];
     private byte select;
     private bool horizontal = true;

@@ -35,6 +35,9 @@ public sealed class Cpu6502(NesConsole bus)
         Carry = Zero = DecimalMode = Overflow = Negative = false;
         InterruptDisable = true;
         nmiArmed = nmiLast = false;
+        // Nothing is asserting an interrupt at reset: the devices that drive this line
+        // have just been reset too, and a stale level here would fire a spurious one.
+        IrqLine = false;
         StallCycles = 0;
         PC = (ushort)(bus.CpuRead(0xFFFC) | bus.CpuRead(0xFFFD) << 8);
     }
@@ -60,6 +63,34 @@ public sealed class Cpu6502(NesConsole bus)
         DecimalMode = (value & 0x08) != 0;
         Overflow = (value & 0x40) != 0;
         Negative = (value & 0x80) != 0;
+    }
+
+    internal void Save(ref StateWriter state)
+    {
+        state.Write(A);
+        state.Write(X);
+        state.Write(Y);
+        state.Write(S);
+        state.Write(PC);
+        state.Write(StatusByte(brk: false));
+        state.Write(nmiArmed);
+        state.Write(nmiLast);
+        state.Write(IrqLine);
+        state.Write(StallCycles);
+    }
+
+    internal void Load(ref StateReader state)
+    {
+        A = state.ReadByte();
+        X = state.ReadByte();
+        Y = state.ReadByte();
+        S = state.ReadByte();
+        PC = state.ReadUInt16();
+        SetStatus(state.ReadByte());
+        nmiArmed = state.ReadBool();
+        nmiLast = state.ReadBool();
+        IrqLine = state.ReadBool();
+        StallCycles = state.ReadInt32();
     }
 
     private byte Read(ushort address)

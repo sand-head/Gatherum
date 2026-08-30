@@ -77,6 +77,108 @@ public sealed class NesPpu(NesConsole console)
         Array.Clear(Frame);
     }
 
+    internal void Save(ref StateWriter state)
+    {
+        state.Write(vram);
+        state.Write(palette);
+        state.Write(oam);
+        state.Write(scanline);
+        state.Write(cycle);
+        state.Write(oddFrame);
+        state.Write(FrameComplete);
+
+        state.Write(nmiEnabled);
+        state.Write(tallSprites);
+        state.Write(backgroundLeft);
+        state.Write(spritesLeft);
+        state.Write(showBackground);
+        state.Write(showSprites);
+        state.Write(greyscale);
+        state.Write(backgroundTable);
+        state.Write(spriteTable);
+        state.Write(addressIncrement);
+        state.Write(emphasis);
+
+        state.Write(vblank);
+        state.Write(spriteZeroHit);
+        state.Write(spriteOverflow);
+        state.Write(openBus);
+        state.Write(readBuffer);
+        state.Write(oamAddress);
+
+        state.Write(v);
+        state.Write(t);
+        state.Write(fineX);
+        state.Write(writeLatch);
+
+        state.Write(nametableByte);
+        state.Write(attributeByte);
+        state.Write(patternLow);
+        state.Write(patternHigh);
+        state.Write(patternShiftLow);
+        state.Write(patternShiftHigh);
+        state.Write(attributeShiftLow);
+        state.Write(attributeShiftHigh);
+
+        state.Write(spriteX);
+        state.Write(spriteAttributes);
+        state.Write(spritePatternLow);
+        state.Write(spritePatternHigh);
+        state.Write(spriteCount);
+        state.Write(spriteZeroOnLine);
+    }
+
+    internal void Load(ref StateReader state)
+    {
+        state.Read(vram);
+        state.Read(palette);
+        state.Read(oam);
+        scanline = state.ReadInt32();
+        cycle = state.ReadInt32();
+        oddFrame = state.ReadBool();
+        FrameComplete = state.ReadBool();
+
+        nmiEnabled = state.ReadBool();
+        tallSprites = state.ReadBool();
+        backgroundLeft = state.ReadBool();
+        spritesLeft = state.ReadBool();
+        showBackground = state.ReadBool();
+        showSprites = state.ReadBool();
+        greyscale = state.ReadBool();
+        backgroundTable = state.ReadInt32();
+        spriteTable = state.ReadInt32();
+        addressIncrement = state.ReadInt32();
+        emphasis = state.ReadInt32();
+
+        vblank = state.ReadBool();
+        spriteZeroHit = state.ReadBool();
+        spriteOverflow = state.ReadBool();
+        openBus = state.ReadByte();
+        readBuffer = state.ReadByte();
+        oamAddress = state.ReadByte();
+
+        v = state.ReadUInt16();
+        t = state.ReadUInt16();
+        fineX = state.ReadByte();
+        writeLatch = state.ReadBool();
+
+        nametableByte = state.ReadByte();
+        attributeByte = state.ReadByte();
+        patternLow = state.ReadByte();
+        patternHigh = state.ReadByte();
+        patternShiftLow = state.ReadUInt16();
+        patternShiftHigh = state.ReadUInt16();
+        attributeShiftLow = state.ReadUInt16();
+        attributeShiftHigh = state.ReadUInt16();
+
+        state.Read(spriteX);
+        state.Read(spriteAttributes);
+        state.Read(spritePatternLow);
+        state.Read(spritePatternHigh);
+        spriteCount = state.ReadInt32();
+        spriteZeroOnLine = state.ReadBool();
+    }
+
     // ---- the CPU's window on it ------------------------------------------------
 
     public byte ReadRegister(ushort address)

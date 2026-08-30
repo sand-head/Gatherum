@@ -159,7 +159,7 @@ public class NesConsoleTests
         program.AddRange([0x4C, (byte)spin, (byte)(spin >> 8)]);
 
         var console = new NesConsole(RomFixtures.Nes([.. program]));
-        console.SetButtons(GamepadButtons.A | GamepadButtons.Start | GamepadButtons.Left);
+        console.SetButtons(0, GamepadButtons.A | GamepadButtons.Start | GamepadButtons.Left);
         for (var step = 0; step < 200; step++)
             console.Cpu.Step();
 

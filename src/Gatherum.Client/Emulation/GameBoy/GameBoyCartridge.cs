@@ -84,6 +84,34 @@ public sealed class GameBoyCartridge
         ramBanks = Math.Max(1, ramSize / 0x2000);
     }
 
+    internal void Save(ref StateWriter state)
+    {
+        state.Write(ram);
+        state.Write(romBank);
+        state.Write(ramBank);
+        state.Write(ramEnabled);
+        state.Write(advancedBanking);
+        state.Write(upperBank);
+        state.Write(clock);
+        state.Write(latchedClock);
+        state.Write(lastLatchWrite);
+        state.Write(clockCycles);
+    }
+
+    internal void Load(ref StateReader state)
+    {
+        state.Read(ram);
+        romBank = state.ReadInt32();
+        ramBank = state.ReadInt32();
+        ramEnabled = state.ReadBool();
+        advancedBanking = state.ReadBool();
+        upperBank = state.ReadInt32();
+        state.Read(clock);
+        state.Read(latchedClock);
+        lastLatchWrite = state.ReadByte();
+        clockCycles = state.ReadInt64();
+    }
+
     public byte[] SaveRam() => Battery && ram.Length > 0 ? ram.ToArray() : [];
 
     public void LoadSaveRam(ReadOnlySpan<byte> data)

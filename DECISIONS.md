@@ -1881,3 +1881,73 @@ field in the emulator, which is a serialization format to keep compatible foreve
 the cartridges that save already save. There is no gamepad support: the Gamepad API is
 poll-only and would be more JavaScript than the sound is. Neither is a decision against;
 both are simply not in this change.
+
+## Playing together: the wire carries buttons, and nothing else
+
+Two people playing the same cartridge in two browsers is not a streaming problem. Both
+machines are deterministic — the same cartridge and the same buttons on the same frames
+reach byte-identical states — so what crosses the network is a byte of buttons per player
+per frame and nothing else. No video, no audio, no state, once a game is under way.
+
+That property is not free, and it is the reason the seam grew a save state before the
+netplay did. Determinism has to be *stated* and *tested* or it rots: `IEmulatorCore` now
+says a core may not read a wall clock, may not be random, and may not let anything the
+player does outside the console leak into the machine. The last one is the interesting
+case. Draining sound is a browser's business — how often it asks depends on whether the
+tab is muted, whether it is in the background, how the audio graph feels — so the queue
+of finished samples is deliberately *not* part of a save state. If it were, two people
+playing the same game would fingerprint differently the moment one of them turned the
+sound off, and the desync check would fire on nothing. There is a test that mutes one of
+two consoles and demands their states still match byte for byte.
+
+**Input-delay lockstep, not rollback.** Each player commits their buttons three frames
+ahead; a frame runs only when everybody's buttons for it are in hand. Three frames is
+about fifty milliseconds — a round trip a relay on the same continent makes comfortably,
+and short enough to be hard to feel. Rollback (predict, then rewind and replay when you
+guessed wrong) is better and needs the machine snapshotted several times a second; the
+snapshot now exists, so that door is open, but the cost is a save-state format that has
+to stay compatible with itself forever and a great deal more code to get subtly wrong.
+Lockstep is the version that is obviously correct. When it falls behind it stalls and
+says whose connection it is waiting for, which is worse than rollback and better than
+quietly desyncing.
+
+**The server relays and understands nothing.** It stamps which seat a message came from
+— a client says what it pressed, never who pressed it — and forwards it. It has never
+known which console a file is for and does not start now: how many seats a room has is
+the console's answer, sent by whoever arrives first. A server that understood the game
+would be a server that could disagree with it.
+
+**A room is a node.** That is the whole authorization: whoever may see the ROM's page may
+join its game, through the same `INodeAuthorizer.CanSee` that answers for the page itself,
+and the endpoint sits inside the `/api` group so a node you may not see refuses a player
+exactly as it refuses a reader. There is no anonymous door — sending your buttons into
+somebody else's game is not reading. And the server checks that everybody holds the same
+cartridge by the SHA-256 it already stores, because two machines running different bytes
+would drift apart on the first frame and the drift would look like a bug rather than a
+mistake.
+
+**A WebSocket through the server, not a peer connection.** WebRTC would cut the latency
+roughly in half, and would cost a signalling channel, STUN and TURN for the players
+behind NAT, and a pile of JavaScript — Web Audio has no .NET binding and neither does
+`RTCPeerConnection`. A relay through the instance both players are already signed in to
+needs none of that, and `ClientWebSocket` works in WebAssembly over the browser's own
+socket, carrying the session cookie because it is the same origin. For a wiki a group
+self-hosts, the server is already in the middle of everything else they do together.
+
+**Handing over the machine.** When the second player arrives, the first serializes its
+console and sends it; the second loads it and both start from that frame. Joining a game
+already going was the whole point of building the save state rather than starting
+everybody at the title screen. Both ends then pre-commit the frames inside the delay
+window as "nothing pressed", because those frames are already in the past by the time
+anybody could have an opinion about them, and both ends have to agree about that.
+
+**Desync is detected, not prevented.** Every sixty frames each machine fingerprints
+itself (FNV-1a over the save state) and the fingerprints are compared a second later.
+A mismatch stops the session and says so. It is not a cryptographic hash and does not
+need to be: this is two machines checking they still agree, not one defending against
+another that lies. Somebody who wants to cheat has an emulator of their own.
+
+**The Game Boy does not get this.** Its `PlayerCount` is one and the player never offers
+the button. Two people on a Game Boy meant two Game Boys and a link cable, which is a
+second console to emulate and a serial protocol to synchronise — a different feature
+wearing the same words.
