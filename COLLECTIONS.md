@@ -66,38 +66,51 @@ So the catalogue is a *living document* that will be corrected and extended doze
 while people are ticking against it. That makes the interesting problem not the checkbox.
 It is:
 
-## Item identity is the whole design problem
+## Item identity is the interesting problem
 
-A tick has to name an item. What it names decides whether a season's collecting survives an
-edit to the catalogue.
+A tick has to name an item, and what it names decides whether a season's collecting
+survives an edit to the catalogue.
 
 - **By line number** — a Sprite Day inserts a row and every tick below it shifts. Fails on
-  the most common edit.
-- **By item text** — a rename or a typo fix orphans everyone's tick. Given that sources
-  already disagree on names, renames are certain.
-- **By a stable key** — survives both, but the key has to live somewhere, and Gatherum has
-  nowhere to put per-item structured data today: frontmatter is designed in `FILESYSTEM.md`
-  and not built, and `.gatherum/meta.json` is keyed per *file*, not per line inside one.
+  the most common edit there is.
+- **By item text** — survives insertion and reordering, breaks on a rename.
+- **By node id** — survives everything, because outliving a rename is what node identity
+  is *for* (`FILESYSTEM.md`, "Identity and links").
 
-Which points at the answer the architecture already has:
+The first draft of this design concluded that only the third is sound, and therefore that
+every collectible must be its own page. That was wrong in the way that matters: it made the
+expensive option mandatory. Wanting to tick off forty sprites is not wanting to write forty
+pages about sprites, and a design that demands the second to deliver the first will not get
+used.
 
-> **Each collectible is a node, and the catalogue is a category.**
+So: **an item is a line of text, and it may optionally link a node.**
 
-A node id is stable across rename, move, and re-nesting — that is what node identity is
-*for* (`FILESYSTEM.md`, "Identity and links"). Make each sprite a page and the tick names
-an id, so correcting "Killswitch" to "Kill Switch" breaks nothing.
+```markdown
+- Sonic
+- Tails
+- [Klombo](node://0193…)      ← this one has a page: a picture, what it does, backlinks
+- Storm Scout
+```
 
-And it needs no new taxonomy: a category is already a page, `NodeCategory` is already the
-only membership relation, categories already nest (so "Override sprites" files under
-"Fortnite"), `browse_category` and `list_categories` already exist as MCP tools, and the
-whole ancestry already goes into each member's search text. A collectible page can carry
-its picture and what the sprite does, which is most of why anyone wants a collectible list
-in the first place.
+Identity follows from what the line has. A linked item is keyed by its node id and is
+immune to renaming. A plain item is keyed by its normalized text and survives everything
+except a rename. You pay for stability only where you wanted a page anyway.
 
-The cost is honest: a full season is ~17 sprites, and if each variant is its own collectible
-that's ~51 nodes rather than 51 lines. I'd still take it for v1, because the alternative is
-inventing a per-item metadata carrier that frontmatter is supposed to become, and because
-"a Gold Sonic is a different collectible from a Sonic" is simply true.
+**Promotion has to be lossless**, or nobody will ever do it: when an item gains a link,
+matching falls back from id to text, so ticks made against `Sonic` keep counting once
+`Sonic` becomes `[Sonic](node://…)`. One rule, and it makes the optional half safe to opt
+into later.
+
+**A rename orphans the plain items, and that is surfaced rather than hidden.** Alice cannot
+rewrite Bob's tally to follow her rename — it is his file, under his root — so the ticks
+simply stop matching. The grid says so: *"3 ticks no longer match an item"*, with the
+orphans listed and a click to re-point them. Silence is what would be unacceptable here,
+not the mismatch.
+
+That also settles what the catalogue *is*: **a page with a list on it**, not a category of
+pages. It gets deliberate ordering (a category has none), prose around the list, and one
+node to share instead of fifty. Pages for individual collectibles remain exactly what they
+should be — an upgrade for the handful you care about, filed in whatever category you like.
 
 ## Where a tally lives
 
@@ -122,41 +135,63 @@ by the backup people are told to take, readable when Gatherum isn't running.
 
 ### The format: no new format
 
-The tally's body is a Markdown task list of mentions:
+The tally's body is a task list, mirroring the catalogue's lines:
 
 ```markdown
-- [x] [Sonic](node://0193…) — Gold, Sprite Day 2
-- [x] [Tails](node://0194…)
-- [ ] [Storm Scout](node://0195…)
+Tracking [[Override sprites]].
+
+- [x] Sonic — Gold, Sprite Day 2
+- [ ] Tails
+- [x] [Klombo](node://0193…)
 ```
 
-Every word of that is vocabulary the dialect already has — task lists and `node://`
-mentions are both documented in `markdown.md` — which buys the feature its properties for
-free, exactly the way citations turned out to need no new construct at all (DECISIONS.md,
-"A citation is a convention, not a construct"). The tally opens in the ordinary editor.
-Its mentions make real `NodeLink` rows. A trailing note after the item is prose, so
-"Gold, Sprite Day 2" costs nothing to support. And a tally read by a human with no Gatherum
-running is still obviously a checklist.
+Every word of that is vocabulary the dialect already has — task lists, wiki links and
+`node://` mentions are all documented in `markdown.md` — which buys the feature its
+properties for free, exactly the way citations turned out to need no new construct at all
+(DECISIONS.md, "A citation is a convention, not a construct"). The tally opens in the
+ordinary editor. Its first line makes the `NodeLink` row that the aggregate finds it by. A
+trailing note after an item is prose, so "Gold, Sprite Day 2" costs nothing to support. And
+a tally read by a human with no Gatherum running is still obviously a checklist.
 
-The only genuinely new code is a reader that pulls `(node id → checked)` out of a task
-list, which belongs in `Markdown/` in Core beside `WikiLinkSyntax`.
+The only genuinely new code is a reader that pulls `(item → checked)` out of a task list,
+which belongs in `Markdown/` in Core beside `WikiLinkSyntax`.
 
 ## How the catalogue shows everyone's columns
 
-Because tally items are mentions, the tallies for a catalogue are **already** its backlinks.
-The aggregate is:
+A tally names its catalogue on its first line, so **every tally is a backlink of the
+catalogue**. The whole read path is two calls that already exist, plus a parse:
 
-1. take the catalogue's members (`NodeCategory`),
-2. take the nodes linking to them that are tallies,
-3. filter through `INodeAuthorizer.VisibleTo` — the only door for visibility, never a
-   second spelling of the rule in a query,
-4. parse each for ticks and fuse.
+```
+NodeService.GetBacklinksAsync(userId, catalogueId)   → the candidate tallies
+FileService … read the catalogue body                → the rows, in the author's order
+```
 
-Note which door: an aggregate column is *enumeration*, so it is `VisibleTo`/`Listed`, not
-`CanSee`/`WithLink`. Unlisted is precisely the case where answering one with the other
+`GetBacklinksAsync` already filters through `INodeAuthorizer.VisibleTo`, so the visibility
+rule is spelled exactly once, where it always was. Parse each candidate for `- [x]` items,
+match them to rows by id or text, and that is the grid.
+
+Note which door it is: a column in an aggregate is *enumeration*, so `VisibleTo`/`Listed`,
+never `CanSee`/`WithLink`. Unlisted is precisely the case where answering one with the other
 leaks — an unlisted tally must not appear in a column just because its id was reachable.
 
-No new relation, no new visibility rule, no new sidecar.
+One wrinkle worth writing down: `[[Wiki link]]` resolves by *title*, which is the
+enumeration question, so a tally cannot name an unlisted catalogue that way. Naming it with
+a `node://` mention instead works, because an id is permission. Unlisted catalogues are
+therefore fine; they just want the other spelling.
+
+### What makes a page a tally
+
+Nothing marks one. A tally is recognized *structurally*: a page that links the catalogue and
+carries task items matching its rows. The alternative was a flag on `Node` beside
+`IsCategory`, and a new domain concept is too much to pay to prevent the only failure this
+has — a page that discusses the list using example checkboxes gets counted as somebody's
+column.
+
+Two things make that acceptable. A column appears only because its owner deliberately made
+that page visible, which is never accidental. And the catalogue owner can see exactly whose
+columns show.
+
+No new relation, no new table, no new visibility rule, no new sidecar.
 
 ## The anonymous half of the ask
 
@@ -253,8 +288,8 @@ docs with "two people" as their justification, and that premise has changed:
 
 ## What it would touch
 
-- **Core** — a `CollectionService` (catalogue members + visible tallies, fused), and task-item
-  reading in `Markdown/`. All the business rules here, per the brief.
+- **Core** — a `CollectionService` (catalogue rows + visible tallies, matched and fused),
+  and task-item reading in `Markdown/`. All the business rules here, per the brief.
 - **Client** — one island rendering the grid, ticking through `IAppData` → `SaveTextAsync`
   on the reader's own tally; `localStorage` for the signed-out case.
 - **Web** — a REST endpoint, an MCP tool or two (`collection_status`, `mark_collected`) so
@@ -266,28 +301,29 @@ docs with "two people" as their justification, and that premise has changed:
 ## What not to do
 
 - No `NodeTicks` table. A tally is content and lives on disk.
-- No second taxonomy verb. The catalogue is a category; membership is `NodeCategory`.
+- No second taxonomy verb, and no taxonomy at all in the list machinery. A catalogue is a
+  page with a list on it; categories file it exactly as they file anything else.
+- No page required per item. Pages are the optional half, for the items worth writing about.
 - No new abstraction seam — nothing here has a second implementation.
 - No anonymous write endpoint, in any disguise.
 - No new Markdown construct. Task lists and mentions already say all of it.
 
 ## Open questions for the owner
 
-1. **Variants as nodes?** ~51 nodes a season, versus waiting for frontmatter to carry a
-   variant list per item. I lean nodes, and I'd like a second opinion.
-2. **Is the catalogue a category or a plain page with a list?** A category gets nesting,
-   browse, and search-text inheritance; a page gets deliberate ordering and prose around
-   the list. They can coexist, but v1 should pick one.
-3. **Does a tick want structure** — date acquired, variant, a note — or is trailing prose
+1. **Does a catalogue need an "everyone who can sign in" reach?** This is the one that
+   changes the order of work rather than the design. `Shared` means naming twenty people;
+   `Public` means the open internet; there is nothing in between, and once the front door
+   is an OIDC group that gap is what a group-sized instance feels first. It is also the
+   only part of this that touches `NodeReach`, the type every visibility query filters on.
+2. **Does a tick want structure** — date acquired, variant, a note — or is trailing prose
    after the item enough? Prose is free; structure is a format.
-4. **Is there an import path?** With a roster that grows weekly, "paste a list, make the
-   nodes" may matter more than the grid does.
-5. **Does a catalogue need a "everyone who can sign in" reach?** See above — it is the
-   difference between one sharing gesture and twenty, and it is the only part of this that
-   touches `NodeReach`, the type every visibility query filters on.
-6. **Do guest tallies appear in the aggregate immediately, or after the owner approves
+3. **Do guest tallies appear in the aggregate immediately, or after the owner approves
    each?** Approval is the strongest anti-spam answer and also the most work; it matters
    only if a catalogue is ever linked somewhere busy.
+
+Settled since the first draft: items are text with optional node links rather than mandatory
+pages; the catalogue is a page rather than a category; a tally is recognized structurally
+rather than flagged.
 
 ## Sources for the worked example
 
