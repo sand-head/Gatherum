@@ -296,27 +296,20 @@ than "we are on our own":
   It is still not v1: the fence renders as a titled card over the plain list and is edited
   as source, exactly as an aside is.
 
-**The one thing worth asking slopedit for** is that a block extension be able to declare its
-tagged runs *host-rendered in read mode*, while they stay ordinary document content in edit
-mode — a `ReadRegion` fragment on `DocumentHtmlView` that `DocumentView` simply ignores.
+**Upstream, slopedit is getting a Blazor widget block** — its author's decision, declared
+from a Markdown extension and rendered per surface. Gatherum's part is to say what its first
+widget will exercise: the widget must not swallow its content (the items are indexed, and
+`node://` mentions inside them must still make `NodeLink` rows, so the run stays ordinary
+parsed blocks with "widget" attached to their tag); widget interaction must not count as a
+document edit (a tick writes to the reader's *tally*, a different file, so an `OnChange` here
+would dirty the catalogue and autosave a version nobody asked for); and a widget's height
+must be a function of its width alone, or the canvas measure-then-reflow cycle oscillates —
+which this grid exercises, since expanding a sprite's row reveals its variants.
 
-Read-versus-edit is the right axis, and not as a workaround: a live grid in the editor would
-be wrong even if it were free, because editing the catalogue means editing the shared list
-while the ticks live in each reader's separate file. Edit the source, read the widget — which
-will be true of most interactive constructs.
-
-It also beats the narrower thing first asked for (a block *range* on the render path, so the
-host could stack segments around its own island). Ranges work, but stacking whole
-`DocumentHtmlView` instances means a float cannot wrap across a seam — an infobox immediately
-before a fence stops wrapping at the boundary, which is an HTML containing-block limit
-nothing on the host side can fix. Rendering regions from inside the view has no such problem,
-because slopedit builds the render tree and can keep one containing block, interleaving
-markup and components. It also keeps the document whole: one outline, one footnote sequence,
-one fold state, one chrome pass, where segmenting fragments all four.
-
-A canvas widget is explicitly *not* wanted — hosting a DOM element over the canvas means
-height negotiation, reflow, caret and hit-testing work, to produce a thing the design does
-not want anyway.
+Read-versus-edit stays part of it, for a reason of meaning rather than capability: a live grid
+in the editor would be wrong even if free, because editing the catalogue means editing the
+shared list while the ticks live in each reader's separate file. Edit the source, read the
+widget.
 
 Worth noting for the "ordinary checklists keep working" promise: `RichDocument.ToggleTask(int
 row)` is already a first-class document operation, so a task item in the editor is
