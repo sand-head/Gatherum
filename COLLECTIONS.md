@@ -297,14 +297,17 @@ than "we are on our own":
   as source, exactly as an aside is.
 
 **Upstream, slopedit is getting a Blazor widget block** — its author's decision, declared
-from a Markdown extension and rendered per surface. Gatherum's part is to say what its first
-widget will exercise: the widget must not swallow its content (the items are indexed, and
-`node://` mentions inside them must still make `NodeLink` rows, so the run stays ordinary
-parsed blocks with "widget" attached to their tag); widget interaction must not count as a
-document edit (a tick writes to the reader's *tally*, a different file, so an `OnChange` here
-would dirty the catalogue and autosave a version nobody asked for); and a widget's height
-must be a function of its width alone, or the canvas measure-then-reflow cycle oscillates —
-which this grid exercises, since expanding a sprite's row reveals its variants.
+from a Markdown extension. The shape is slopedit's to design; what Gatherum owes it is an
+honest account of the use case, and what Gatherum has to check of whatever lands:
+
+- **The content stays live.** Item text goes into search text and mentions inside items make
+  `NodeLink` rows, so a widget that treats its run as opaque payload would quietly cost us
+  indexing and backlinks for everything inside a collection.
+- **A tick is not an edit of the open document.** It writes to the reader's tally, a
+  different node — so if widget interaction registered as a document change, Gatherum would
+  dirty the catalogue, autosave a version nobody asked for, and report the reader as editing
+  it.
+- **The grid changes height in use**, since expanding a row reveals its variants.
 
 Read-versus-edit stays part of it, for a reason of meaning rather than capability: a live grid
 in the editor would be wrong even if free, because editing the catalogue means editing the
