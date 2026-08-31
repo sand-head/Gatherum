@@ -1819,3 +1819,135 @@ The type names did not follow. `SharedListService`, `SharedListSyntax`, `SharedL
 still say collection, which is now the name of the flagship question rather than of the
 mechanism. Renaming them across Core, Web and Client is churn against no behavior, and
 "a collection of everyone's answers" is a fair reading of what the service returns.
+
+## The console is C#, and it plays in the reader's own browser
+
+Playing an uploaded ROM meant a choice: wrap an existing emulator, or write one. Every
+in-browser emulator worth having is JavaScript or WebAssembly compiled from C, and both
+answers are the same answer — a vendored library, which is the one thing the standing
+brief says the app does not do. Not out of purity: the whole point of `gatherum.js` being
+a hundred and fifty lines is that a person can read all the JavaScript in the app in one
+sitting, and half a megabyte of somebody's minified emulator ends that permanently.
+
+So the consoles are C#, in `Gatherum.Client/Emulation`, and they run in WebAssembly — the
+same home the editor already runs in. `IEmulatorCore` is the seam and it has two
+implementations, which is why it is allowed to exist at all: a Nintendo Entertainment
+System (`Nes/`, a 6502 with the dot-accurate picture chip games actually depend on, the
+sound chip's five channels, and the eight cartridge boards most of the library shipped
+on) and a Game Boy that is a Game Boy Color when the cartridge asks to be one
+(`GameBoy/`, an SM83, the picture chip's mode timing, four sound channels, MBC1 through
+MBC5). Both consoles have the same eight buttons, which is why `GamepadButtons` is one
+enum and not two.
+
+Both cores tick the rest of the machine from inside every memory access rather than
+running an instruction and catching up afterwards. That is more code in the addressing
+modes and it is the difference between a status bar that stays still and one that
+shimmers: a game splits the screen by writing a scroll register partway down it, and an
+instruction executed atomically puts the seam wherever the instruction happened to end.
+The cycle counts then fall out of the accesses instead of being looked up, which is also
+how the timing tests are written — they assert what the console charged, not what a table
+claims.
+
+**Where a save lives** was the one design question that is really about Gatherum rather
+than about hardware. A battery-backed save is content, and content in Gatherum is a file
+— which argues for writing it into the tree as a node, the way a shared list writes each
+person's tally. But a ROM is a file *everybody who can see the page shares*, and a save is
+one person's afternoon: filing it in the tree would either publish it or need a
+per-reader mechanism the filesystem-is-the-record rule has no room for. It cannot go in a
+table either — nothing outside `Users`, `ApiKeys` and `ReadingPositions` may live only in
+the database. So it lives in the reader's own browser, exactly like an anonymous reader's
+place in a book, with a download and an upload beside it so the choice is never a trap:
+the save leaves as a `.sav` file, which is the format everything else in the world reads.
+
+**The player refuses to run on the server circuit.** An Interactive Auto island renders on
+a circuit until the WebAssembly runtime has downloaded, and sixty frames a second over a
+websocket is not a game — it is a denial of service with a sprite on it. So the component
+checks `OperatingSystem.IsBrowser()` and says what is happening instead of trying.
+
+The picture reaches the screen through `SKCanvasView`, which was already in the graph
+under the editor. The frame buffer is pinned once with a `GCHandle` and the bitmap is
+installed over it, so a frame costs no copy at all — the core writes where Skia reads.
+The browser's animation callback asks for frames and the wall clock decides how many are
+due, because the console's frame rate (60.0988 and 59.7275) is not the display's on any
+hardware anybody owns.
+
+Sound is the one thing that needed JavaScript, and it got about forty lines: Web Audio has
+no .NET binding, a page may not make noise before it is asked to, and each frame's samples
+become a short buffer scheduled at the end of the last one. A worklet would be a second
+script file, and there is only one.
+
+**What is not here.** There are no save states — a save state is a snapshot of every
+field in the emulator, which is a serialization format to keep compatible forever, and
+the cartridges that save already save. There is no gamepad support: the Gamepad API is
+poll-only and would be more JavaScript than the sound is. Neither is a decision against;
+both are simply not in this change.
+
+## Playing together: the wire carries buttons, and nothing else
+
+Two people playing the same cartridge in two browsers is not a streaming problem. Both
+machines are deterministic — the same cartridge and the same buttons on the same frames
+reach byte-identical states — so what crosses the network is a byte of buttons per player
+per frame and nothing else. No video, no audio, no state, once a game is under way.
+
+That property is not free, and it is the reason the seam grew a save state before the
+netplay did. Determinism has to be *stated* and *tested* or it rots: `IEmulatorCore` now
+says a core may not read a wall clock, may not be random, and may not let anything the
+player does outside the console leak into the machine. The last one is the interesting
+case. Draining sound is a browser's business — how often it asks depends on whether the
+tab is muted, whether it is in the background, how the audio graph feels — so the queue
+of finished samples is deliberately *not* part of a save state. If it were, two people
+playing the same game would fingerprint differently the moment one of them turned the
+sound off, and the desync check would fire on nothing. There is a test that mutes one of
+two consoles and demands their states still match byte for byte.
+
+**Input-delay lockstep, not rollback.** Each player commits their buttons three frames
+ahead; a frame runs only when everybody's buttons for it are in hand. Three frames is
+about fifty milliseconds — a round trip a relay on the same continent makes comfortably,
+and short enough to be hard to feel. Rollback (predict, then rewind and replay when you
+guessed wrong) is better and needs the machine snapshotted several times a second; the
+snapshot now exists, so that door is open, but the cost is a save-state format that has
+to stay compatible with itself forever and a great deal more code to get subtly wrong.
+Lockstep is the version that is obviously correct. When it falls behind it stalls and
+says whose connection it is waiting for, which is worse than rollback and better than
+quietly desyncing.
+
+**The server relays and understands nothing.** It stamps which seat a message came from
+— a client says what it pressed, never who pressed it — and forwards it. It has never
+known which console a file is for and does not start now: how many seats a room has is
+the console's answer, sent by whoever arrives first. A server that understood the game
+would be a server that could disagree with it.
+
+**A room is a node.** That is the whole authorization: whoever may see the ROM's page may
+join its game, through the same `INodeAuthorizer.CanSee` that answers for the page itself,
+and the endpoint sits inside the `/api` group so a node you may not see refuses a player
+exactly as it refuses a reader. There is no anonymous door — sending your buttons into
+somebody else's game is not reading. And the server checks that everybody holds the same
+cartridge by the SHA-256 it already stores, because two machines running different bytes
+would drift apart on the first frame and the drift would look like a bug rather than a
+mistake.
+
+**A WebSocket through the server, not a peer connection.** WebRTC would cut the latency
+roughly in half, and would cost a signalling channel, STUN and TURN for the players
+behind NAT, and a pile of JavaScript — Web Audio has no .NET binding and neither does
+`RTCPeerConnection`. A relay through the instance both players are already signed in to
+needs none of that, and `ClientWebSocket` works in WebAssembly over the browser's own
+socket, carrying the session cookie because it is the same origin. For a wiki a group
+self-hosts, the server is already in the middle of everything else they do together.
+
+**Handing over the machine.** When the second player arrives, the first serializes its
+console and sends it; the second loads it and both start from that frame. Joining a game
+already going was the whole point of building the save state rather than starting
+everybody at the title screen. Both ends then pre-commit the frames inside the delay
+window as "nothing pressed", because those frames are already in the past by the time
+anybody could have an opinion about them, and both ends have to agree about that.
+
+**Desync is detected, not prevented.** Every sixty frames each machine fingerprints
+itself (FNV-1a over the save state) and the fingerprints are compared a second later.
+A mismatch stops the session and says so. It is not a cryptographic hash and does not
+need to be: this is two machines checking they still agree, not one defending against
+another that lies. Somebody who wants to cheat has an emulator of their own.
+
+**The Game Boy does not get this.** Its `PlayerCount` is one and the player never offers
+the button. Two people on a Game Boy meant two Game Boys and a link cable, which is a
+second console to emulate and a serial protocol to synchronise — a different feature
+wearing the same words.

@@ -1,5 +1,9 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Net.WebSockets;
+using System.Security.Cryptography;
+using Gatherum.Client.Emulation;
+using Gatherum.Client.Emulation.Netplay;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Gatherum.Core.Abstractions;
@@ -756,6 +760,234 @@ public class AppIntegrationTests(PostgresFixture postgres) : IAsyncLifetime
         Assert.Contains(semantic.EnumerateArray(),
             result => result.GetProperty("id").GetGuid() == pageId);
         Assert.Empty(literal.EnumerateArray());
+    }
+
+    // ---- playing together --------------------------------------------------
+
+    /// <summary>Uploads a two-player cartridge and reports what the server will expect
+    /// anybody joining its room to be holding.</summary>
+    private async Task<(Guid Id, string Hash)> UploadCartridgeAsync(string name = "duel.nes")
+    {
+        var image = RomFixtures.Nes([0x4C, 0x00, 0x80]);
+        using var upload = new MultipartFormDataContent();
+        var part = new ByteArrayContent(image);
+        part.Headers.ContentType =
+            new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+        upload.Add(part, "file", name);
+        var created = await client.PostAsync("/api/files", upload);
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var id = (await created.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("id").GetGuid();
+        // A game everybody signed in can open — which is what a cartridge on a wiki
+        // shared by a group is, and what makes a room worth having.
+        var shared = await client.PostAsJsonAsync($"/api/nodes/{id}/access",
+            new { access = "Authenticated" });
+        Assert.Equal(HttpStatusCode.NoContent, shared.StatusCode);
+        return (id, Convert.ToHexStringLower(SHA256.HashData(image)));
+    }
+
+    private async Task<string> KeyForAsync(string username)
+    {
+        using var scope = factory.Services.CreateScope();
+        var users = scope.ServiceProvider.GetRequiredService<UserService>();
+        var user = await users.GetOrCreateAsync(username, $"{username}@example.org",
+            username, username);
+        var keys = scope.ServiceProvider.GetRequiredService<ApiKeyService>();
+        return (await keys.CreateAsync(user.Id, "netplay")).PlaintextToken;
+    }
+
+    private async Task<WebSocket> PlaySocketAsync(Guid nodeId, string token,
+        CancellationToken ct)
+    {
+        var sockets = factory.Server.CreateWebSocketClient();
+        sockets.ConfigureRequest = request =>
+            request.Headers["Authorization"] = $"Bearer {token}";
+        return await sockets.ConnectAsync(
+            new Uri($"ws://localhost/api/nodes/{nodeId}/play"), ct);
+    }
+
+    /// <summary>Messages cross a socket on their own schedule, so a test waits for what
+    /// it is about to assert rather than assuming it has already happened.</summary>
+    private static async Task Settle(Func<bool> until, string what)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(20);
+        while (DateTime.UtcNow < deadline)
+        {
+            if (until())
+                return;
+            await Task.Delay(25);
+        }
+        throw new Xunit.Sdk.XunitException($"Timed out waiting until {what}.");
+    }
+
+    [Fact]
+    public async Task Two_players_take_their_seats_and_the_server_carries_their_buttons()
+    {
+        var (id, hash) = await UploadCartridgeAsync();
+        using var cancel = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+
+        await using var first = await NetplaySession.AttachAsync(
+            await PlaySocketAsync(id, await KeyForAsync("player-one"), cancel.Token),
+            hash, playerCount: 2, cancel.Token);
+        await Settle(() => first.Seats.Count == 1, "the first player is seated");
+        Assert.Equal(0, first.Slot);
+        Assert.Equal(2, first.Capacity);
+        Assert.True(first.IsHost);
+        Assert.False(first.Full);
+
+        await using var second = await NetplaySession.AttachAsync(
+            await PlaySocketAsync(id, await KeyForAsync("player-two"), cancel.Token),
+            hash, playerCount: 2, cancel.Token);
+        await Settle(() => first.Seats.Count == 2 && second.Seats.Count == 2,
+            "both players are seated");
+        Assert.Equal(1, second.Slot);
+        Assert.False(second.IsHost);
+        Assert.True(first.Full);
+        Assert.Contains(first.Seats, seat => seat.Name == "player-two");
+
+        // Each commits its own buttons for a frame in the future; both ends end up
+        // holding the whole row, which is the one thing a frame needs before it runs.
+        first.SendInput(10, GamepadButtons.A);
+        second.SendInput(10, GamepadButtons.Start);
+
+        var seen = new GamepadButtons[2];
+        await Settle(() => second.TryCollect(10, seen), "the second player has both inputs");
+        Assert.Equal(GamepadButtons.A, seen[0]);
+        Assert.Equal(GamepadButtons.Start, seen[1]);
+
+        await Settle(() => first.TryCollect(10, seen), "the first player has both inputs");
+        Assert.Equal(GamepadButtons.A, seen[0]);
+        Assert.Equal(GamepadButtons.Start, seen[1]);
+
+        // A frame nobody has spoken for is not ready, and the page can say whose fault
+        // that is.
+        Assert.False(first.TryCollect(11, seen));
+        Assert.Equal("player-two", first.WaitingFor(11));
+    }
+
+    [Fact]
+    public async Task A_whole_machine_crosses_so_a_late_arrival_starts_inside_the_game()
+    {
+        var (id, hash) = await UploadCartridgeAsync("handover.nes");
+        using var cancel = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+
+        await using var host = await NetplaySession.AttachAsync(
+            await PlaySocketAsync(id, await KeyForAsync("host-player"), cancel.Token),
+            hash, playerCount: 2, cancel.Token);
+        await using var guest = await NetplaySession.AttachAsync(
+            await PlaySocketAsync(id, await KeyForAsync("guest-player"), cancel.Token),
+            hash, playerCount: 2, cancel.Token);
+        await Settle(() => host.Full && guest.Full, "the room fills");
+
+        var console = new Gatherum.Client.Emulation.Nes.NesConsole(
+            RomFixtures.Nes([0x4C, 0x00, 0x80]));
+        for (var frame = 0; frame < 20; frame++)
+            console.RunFrame();
+        var machine = new byte[console.SaveStateSize];
+        Assert.True(console.SaveState(machine));
+
+        host.SendState(900, machine);
+
+        await Settle(() => guest.TakeArrivingState() is not null || guest.Fault is not null,
+            "the guest is handed the machine");
+        Assert.Null(guest.Fault);
+    }
+
+    [Fact]
+    public async Task A_third_player_is_turned_away_from_a_two_player_console()
+    {
+        var (id, hash) = await UploadCartridgeAsync("crowded.nes");
+        using var cancel = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+
+        await using var first = await NetplaySession.AttachAsync(
+            await PlaySocketAsync(id, await KeyForAsync("seat-one"), cancel.Token),
+            hash, playerCount: 2, cancel.Token);
+        await using var second = await NetplaySession.AttachAsync(
+            await PlaySocketAsync(id, await KeyForAsync("seat-two"), cancel.Token),
+            hash, playerCount: 2, cancel.Token);
+        await Settle(() => first.Full, "the room fills");
+
+        await using var third = await NetplaySession.AttachAsync(
+            await PlaySocketAsync(id, await KeyForAsync("seat-three"), cancel.Token),
+            hash, playerCount: 2, cancel.Token);
+
+        await Settle(() => third.Fault is not null, "the third is refused");
+        Assert.Contains("full", third.Fault!);
+    }
+
+    [Fact]
+    public async Task Somebody_holding_a_different_cartridge_is_refused()
+    {
+        // Two machines running different bytes would drift apart on the first frame,
+        // and the drift would look like a bug rather than a mistake.
+        var (id, _) = await UploadCartridgeAsync("mismatch.nes");
+        using var cancel = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+
+        await using var wrong = await NetplaySession.AttachAsync(
+            await PlaySocketAsync(id, await KeyForAsync("wrong-copy"), cancel.Token),
+            new string('0', 64), playerCount: 2, cancel.Token);
+
+        await Settle(() => wrong.Fault is not null, "the mismatch is refused");
+        Assert.Contains("cartridge", wrong.Fault!);
+    }
+
+    [Fact]
+    public async Task A_stranger_cannot_join_a_game_on_a_node_they_cannot_see()
+    {
+        // Uploaded and left private, which is every node's default.
+        var image = RomFixtures.Nes([0x4C, 0x00, 0x80]);
+        using var upload = new MultipartFormDataContent();
+        var part = new ByteArrayContent(image);
+        part.Headers.ContentType =
+            new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+        upload.Add(part, "file", "private.nes");
+        var id = (await (await client.PostAsync("/api/files", upload)).Content
+            .ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+
+        using var cancel = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+
+        // Somebody else's key does not open its room — the same answer they would get
+        // asking for the node itself.
+        var stranger = await KeyForAsync("outsider");
+        var refused = await Assert.ThrowsAnyAsync<Exception>(async () =>
+            await PlaySocketAsync(id, stranger, cancel.Token));
+        Assert.Contains("404", refused.Message);
+    }
+
+    [Fact]
+    public async Task A_cartridge_upload_is_typed_by_its_extension_and_findable_by_its_header()
+    {
+        // A browser has no media type for a ROM and sends a generic one; the extension
+        // is what says which console it is for, and the header is all search can know.
+        using var upload = new MultipartFormDataContent();
+        var image = RomFixtures.Nes([0xEA]);
+        image[6] = 0x43;    // MMC3, battery-backed
+        var part = new ByteArrayContent(image);
+        part.Headers.ContentType =
+            new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+        upload.Add(part, "file", "cavern.nes");
+        var created = await client.PostAsync("/api/files", upload);
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var id = (await created.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("id").GetGuid();
+
+        var node = await client.GetFromJsonAsync<JsonElement>($"/api/nodes/{id}");
+        Assert.Equal("application/x-nes-rom",
+            node.GetProperty("file").GetProperty("mediaType").GetString());
+
+        var text = node.GetProperty("file").GetProperty("extractedText").GetString();
+        Assert.Contains("Nintendo Entertainment System", text);
+        Assert.Contains("MMC3", text);
+        Assert.Contains("battery-backed", text);
+
+        // And the header is real search text, not just a field on the node.
+        var hits = await client.GetFromJsonAsync<JsonElement>("/api/search?query=MMC3");
+        Assert.Contains(hits.EnumerateArray(), hit => hit.GetProperty("id").GetGuid() == id);
+
+        // The bytes come back exactly as uploaded — a cartridge that lost a byte would
+        // not boot, and content addressing is what promises it did not.
+        var content = await client.GetByteArrayAsync($"/api/files/{id}/content");
+        Assert.Equal(image, content);
     }
 
     [Fact]

@@ -27,6 +27,7 @@ builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<Gatherum.Web.Services.AppOperations>();
 builder.Services.AddSingleton<Gatherum.Web.Services.PresenceTracker>();
+builder.Services.AddSingleton<Gatherum.Web.Services.PlaySessions>();
 builder.Services.AddSingleton<Gatherum.Web.Services.DocsLibrary>();
 builder.Services.AddScoped<Gatherum.Client.IAppData, Gatherum.Web.Services.ServerAppData>();
 builder.Services.AddScoped<Gatherum.Client.TreeState>();
@@ -226,6 +227,11 @@ app.Use((context, next) =>
     }
     return next(context);
 });
+
+// The one socket in the app: two people playing the same cartridge exchange their
+// buttons over it. Before authentication, because the upgrade is a request like any
+// other and the endpoint behind it still asks who is calling.
+app.UseWebSockets();
 
 app.UseAuthentication();
 app.UseAuthorization();

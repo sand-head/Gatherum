@@ -1,0 +1,703 @@
+@inject IAppData Data
+@inject IJSRuntime Js
+@inject NavigationManager Navigation
+@implements IAsyncDisposable
+@using System.Runtime.InteropServices
+@using System.Security.Cryptography
+@using Gatherum.Client.Emulation
+@using Gatherum.Client.Emulation.Netplay
+@using SkiaSharp
+@using SkiaSharp.Views.Blazor
+
+@* A cartridge, played where it lives. The console itself is C# in this project and
+   runs in the reader's own browser — the file is fetched once and nothing about the
+   game goes back to the server, which is also why the player refuses to start on the
+   server circuit: a frame every sixteen milliseconds over a websocket is not a game.
+   The first visit downloads the WebAssembly runtime and the second one plays. *@
+
+@if (!OperatingSystem.IsBrowser())
+{
+    <div class="rom-waiting">
+        <p>The player runs in your browser rather than on the server, so it starts
+            once the app's in-browser runtime has finished downloading — which is
+            happening now. Reload the page in a moment and the cartridge boots.</p>
+    </div>
+}
+else if (failure is { Length: > 0 })
+{
+    <div class="rom-waiting failed" role="alert">@failure</div>
+}
+else if (core is null)
+{
+    <div class="rom-waiting">Loading the cartridge…</div>
+}
+else
+{
+    <div class="rom-player">
+        @* The picture keeps the console's own proportions; the box is only as tall as
+           that makes it. *@
+        <div class="rom-screen" tabindex="0" @ref="screen"
+             style="aspect-ratio: @core.Width / @core.Height"
+             @onkeydown="OnKeyDown" @onkeyup="OnKeyUp" @onkeydown:preventDefault="running"
+             @onblur="ReleaseAll" @onclick="FocusAsync">
+            <SKCanvasView OnPaintSurface="Paint" EnableRenderLoop="running"
+                          IgnorePixelScaling="true" @ref="canvas" />
+            @if (!running)
+            {
+                <button class="rom-start" type="button" @onclick="StartAsync">
+                    <svg width="34" height="34" viewBox="0 0 24 24" fill="none"
+                         stroke="currentColor" stroke-width="1.6" stroke-linecap="round"
+                         stroke-linejoin="round" aria-hidden="true">
+                        <polygon points="6 3 20 12 6 21 6 3" />
+                    </svg>
+                    @(started ? "Resume" : "Play")
+                </button>
+            }
+        </div>
+
+        @if (togetherProblem is { } trouble)
+        {
+            <div class="rom-together failed" role="alert">@trouble</div>
+        }
+        @if (session is { } play)
+        {
+            <div class="rom-together @(play.Fault is null ? "" : "failed")" role="status">
+                @if (play.Fault is { } fault)
+                {
+                    <span>@fault</span>
+                }
+                else if (!play.Full)
+                {
+                    <span>Waiting for somebody else to open this page — you are player
+                        @(play.Slot + 1) of @play.Capacity.</span>
+                }
+                else if (!together)
+                {
+                    <span>Handing the game over…</span>
+                }
+                else
+                {
+                    <span class="rom-seats">
+                        @foreach (var seat in play.Seats.OrderBy(s => s.Slot))
+                        {
+                            <span class="rom-seat @(seat.Slot == play.Slot ? "you" : "")">
+                                P@(seat.Slot + 1) @seat.Name
+                            </span>
+                        }
+                    </span>
+                    @if (waitingOn is { } who)
+                    {
+                        <span class="rom-stall">Waiting for @who…</span>
+                    }
+                }
+            </div>
+        }
+
+        <div class="rom-controls">
+            <span class="rom-system">@core.SystemName</span>
+            <button type="button" class="ghost" @onclick="ToggleSound" @ref="exit">
+                @(sound ? "Sound on" : "Sound off")
+            </button>
+            <button type="button" class="ghost" @onclick="ResetAsync">Reset</button>
+            @if (core.PlayerCount > 1)
+            {
+                @if (session is null)
+                {
+                    <button type="button" class="ghost" @onclick="PlayTogetherAsync">
+                        Play together
+                    </button>
+                }
+                else
+                {
+                    <button type="button" class="ghost" @onclick="LeaveAndRedrawAsync">
+                        Leave game
+                    </button>
+                }
+            }
+            @if (core.BatteryBacked)
+            {
+                <a class="button" download="@SaveFileName" href="@SaveDataUrl">Download save</a>
+                <label class="upload-label button">
+                    Load save
+                    <InputFile OnChange="LoadSaveAsync" accept=".sav,.srm" />
+                </label>
+            }
+        </div>
+
+        @* The buttons a touchscreen has no keys for. Hidden where there is a mouse,
+           because a pointer cannot press two of them at once and a game needs that. *@
+        <div class="rom-pad">
+            <div class="rom-dpad">
+                <button type="button" class="up" @onpointerdown="() => Hold(GamepadButtons.Up)"
+                        @onpointerup="() => Release(GamepadButtons.Up)"
+                        @onpointerleave="() => Release(GamepadButtons.Up)"
+                        @onpointercancel="() => Release(GamepadButtons.Up)"
+                        aria-label="Up"></button>
+                <button type="button" class="left" @onpointerdown="() => Hold(GamepadButtons.Left)"
+                        @onpointerup="() => Release(GamepadButtons.Left)"
+                        @onpointerleave="() => Release(GamepadButtons.Left)"
+                        @onpointercancel="() => Release(GamepadButtons.Left)"
+                        aria-label="Left"></button>
+                <button type="button" class="right" @onpointerdown="() => Hold(GamepadButtons.Right)"
+                        @onpointerup="() => Release(GamepadButtons.Right)"
+                        @onpointerleave="() => Release(GamepadButtons.Right)"
+                        @onpointercancel="() => Release(GamepadButtons.Right)"
+                        aria-label="Right"></button>
+                <button type="button" class="down" @onpointerdown="() => Hold(GamepadButtons.Down)"
+                        @onpointerup="() => Release(GamepadButtons.Down)"
+                        @onpointerleave="() => Release(GamepadButtons.Down)"
+                        @onpointercancel="() => Release(GamepadButtons.Down)"
+                        aria-label="Down"></button>
+            </div>
+            <div class="rom-face">
+                <button type="button" class="round" @onpointerdown="() => Hold(GamepadButtons.B)"
+                        @onpointerup="() => Release(GamepadButtons.B)"
+                        @onpointerleave="() => Release(GamepadButtons.B)"
+                        @onpointercancel="() => Release(GamepadButtons.B)">B</button>
+                <button type="button" class="round" @onpointerdown="() => Hold(GamepadButtons.A)"
+                        @onpointerup="() => Release(GamepadButtons.A)"
+                        @onpointerleave="() => Release(GamepadButtons.A)"
+                        @onpointercancel="() => Release(GamepadButtons.A)">A</button>
+            </div>
+            <div class="rom-menu">
+                <button type="button" @onpointerdown="() => Hold(GamepadButtons.Select)"
+                        @onpointerup="() => Release(GamepadButtons.Select)"
+                        @onpointercancel="() => Release(GamepadButtons.Select)">Select</button>
+                <button type="button" @onpointerdown="() => Hold(GamepadButtons.Start)"
+                        @onpointerup="() => Release(GamepadButtons.Start)"
+                        @onpointercancel="() => Release(GamepadButtons.Start)">Start</button>
+            </div>
+        </div>
+
+        <p class="rom-keys">Arrow keys move, <kbd>Z</kbd> and <kbd>X</kbd> are B and A,
+            <kbd>Enter</kbd> is Start and <kbd>Shift</kbd> is Select.
+            @if (core.BatteryBacked)
+            {
+                <text>This cartridge saves, and its save is kept in this browser —
+                    download it to take it anywhere else.</text>
+            }
+        </p>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public Guid NodeId { get; set; }
+    [Parameter, EditorRequired] public string FileName { get; set; } = "";
+
+    private IEmulatorCore? core;
+    private Guid loaded;
+    private string? failure;
+    private bool running, started, sound = true;
+
+    private ElementReference screen;
+    private ElementReference exit;
+    private SKCanvasView? canvas;
+    private IJSObjectReference? module;
+
+    /// <summary>The same module, when the runtime is the browser's own and a call can
+    /// be made without a task to await it. Sound is pushed once a frame, and sixty
+    /// awaited round trips a second is sixty allocations this does not need.</summary>
+    private IJSInProcessObjectReference? directModule;
+
+    private SKBitmap? picture;
+    private GCHandle pinnedFrame;
+
+    private GamepadButtons pressed;
+
+    private readonly System.Diagnostics.Stopwatch clock = new();
+    private double owed;
+
+    // ---- playing together ---------------------------------------------------
+    private NetplaySession? session;
+    private string romHash = "";
+
+    /// <summary>Which frame the shared game is on. Counted whether or not anybody else
+    /// is here, so that the moment somebody arrives there is a number to hand them.</summary>
+    private int netFrame;
+
+    /// <summary>Whether the two machines are actually running in step yet — false while
+    /// a room is filling, and while a joiner is waiting for the host's machine.</summary>
+    private bool together;
+    private string? waitingOn;
+    private string? togetherProblem;
+    private readonly GamepadButtons[] slotInputs = new GamepadButtons[PlayProtocol.MaxPlayers];
+    private byte[] stateBuffer = [];
+
+    private readonly short[] samples = new short[2048];
+    private readonly byte[] sampleBytes = new byte[4096];
+
+    /// <summary>What the cartridge's battery memory held when it was last written out,
+    /// so the download link has something to point at without re-reading it every
+    /// render.</summary>
+    private string savedData = "";
+    private DateTime saveDue = DateTime.MaxValue;
+
+    private string SaveFileName =>
+        Path.GetFileNameWithoutExtension(FileName) + ".sav";
+
+    private string SaveDataUrl => "data:application/octet-stream;base64," + savedData;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (loaded == NodeId || !OperatingSystem.IsBrowser())
+            return;
+        // Another cartridge on the same component: put the last one's save away and
+        // let go of the frame it pinned before anything else.
+        await FlushSaveAsync();
+        Unload();
+        loaded = NodeId;
+        running = false;
+        started = false;
+        failure = null;
+        savedData = "";
+        try
+        {
+            var rom = await Data.ReadBytesAsync(NodeId);
+            // The same spelling the server stores, so a room can refuse two people who
+            // are not holding the same cartridge.
+            romHash = Convert.ToHexStringLower(SHA256.HashData(rom));
+            core = Emulator.Load(rom, FileName);
+            stateBuffer = new byte[core.SaveStateSize];
+            pinnedFrame = GCHandle.Alloc(core.Frame, GCHandleType.Pinned);
+            picture = new SKBitmap();
+            picture.InstallPixels(
+                new SKImageInfo(core.Width, core.Height, SKColorType.Bgra8888,
+                    SKAlphaType.Opaque),
+                pinnedFrame.AddrOfPinnedObject());
+        }
+        catch (NotSupportedException problem)
+        {
+            failure = problem.Message;
+        }
+        catch (Exception problem)
+        {
+            failure = $"This cartridge would not load: {problem.Message}";
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (core is null || module is not null)
+            return;
+        module = await Js.InvokeAsync<IJSObjectReference>("import", "./js/gatherum.js");
+        directModule = module as IJSInProcessObjectReference;
+        if (core.BatteryBacked)
+        {
+            var stored = await module.InvokeAsync<string?>("readEmulatorSave", NodeId);
+            if (stored is { Length: > 0 })
+            {
+                core.LoadSaveRam(Convert.FromBase64String(stored));
+                savedData = stored;
+            }
+        }
+        // The first frame is painted before anything runs, so the screen shows the
+        // console's own blank rather than an empty box behind the play button.
+        canvas?.Invalidate();
+    }
+
+    private async Task StartAsync()
+    {
+        if (core is null)
+            return;
+        running = true;
+        started = true;
+        owed = 0;
+        clock.Restart();
+        if (sound && module is not null)
+            await module.InvokeVoidAsync("startEmulatorAudio", core.SampleRate);
+        // Keys only reach a focused element, and the click that started the game is
+        // the gesture that is allowed to move focus.
+        await screen.FocusAsync();
+    }
+
+    /// <summary>Focus leaving the screen means the key-up that would have released a
+    /// button will never arrive, so everything is let go at once — otherwise tabbing
+    /// away mid-jump leaves the character running into a wall.</summary>
+    private void ReleaseAll()
+    {
+        pressed = GamepadButtons.None;
+        core?.SetButtons(0, GamepadButtons.None);
+    }
+
+    private async Task FocusAsync()
+    {
+        if (running)
+            await screen.FocusAsync();
+    }
+
+    private async Task StopSoundAsync()
+    {
+        if (module is null)
+            return;
+        try
+        {
+            await module.InvokeVoidAsync("stopEmulatorAudio");
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+
+    private async Task ToggleSound()
+    {
+        sound = !sound;
+        if (module is null || core is null)
+            return;
+        if (sound && running)
+            await module.InvokeVoidAsync("startEmulatorAudio", core.SampleRate);
+        else
+            await StopSoundAsync();
+    }
+
+    private async Task ResetAsync()
+    {
+        core?.Reset();
+        await FlushSaveAsync();
+        canvas?.Invalidate();
+    }
+
+    /// <summary>Runs whatever frames the wall clock says are due and paints the last
+    /// one. The browser calls this once a display refresh, which is 60 times a second
+    /// on most screens and 120 on some — neither of which is either console's frame
+    /// rate, so the clock decides and the display only asks.</summary>
+    private void Paint(SKPaintSurfaceEventArgs e)
+    {
+        if (core is not null && running)
+        {
+            var frame = 1.0 / core.FramesPerSecond;
+            owed += clock.Elapsed.TotalSeconds;
+            clock.Restart();
+            // A tab that was in the background for a minute owes a minute of frames,
+            // which is not a debt worth paying: catching up is what makes a game
+            // sprint through a cutscene on the way back.
+            if (owed > frame * 4)
+                owed = frame;
+            OpenTheGate();
+            var ran = 0;
+            while (owed >= frame && ran < 2)
+            {
+                if (!Advance())
+                    break;
+                owed -= frame;
+                ran++;
+            }
+            if (ran > 0)
+                PushSound();
+            WatchSave();
+        }
+
+        var canvasSurface = e.Surface.Canvas;
+        canvasSurface.Clear(SKColors.Black);
+        if (picture is null || core is null)
+            return;
+
+        // Whole pixels, centred: a console's picture upscaled with any smoothing at
+        // all stops looking like the thing it is.
+        var scale = Math.Min((float)e.Info.Width / core.Width, (float)e.Info.Height / core.Height);
+        var width = core.Width * scale;
+        var height = core.Height * scale;
+        var destination = SKRect.Create((e.Info.Width - width) / 2,
+            (e.Info.Height - height) / 2, width, height);
+        canvasSurface.DrawBitmap(picture, destination,
+            new SKSamplingOptions(SKFilterMode.Nearest, SKMipmapMode.None));
+    }
+
+    /// <summary>One frame, alone or together.</summary>
+    private bool Advance()
+    {
+        if (core is null)
+            return false;
+        if (session is null || !together)
+        {
+            // Solo, or in a room still filling. A joiner waiting for the host's machine
+            // must not run: whatever it did would be a game the host never played.
+            if (session is { Connected: true, Full: true, IsHost: false })
+                return false;
+            core.RunFrame();
+            netFrame++;
+            return true;
+        }
+        return AdvanceTogether();
+    }
+
+    /// <summary>A frame runs only when everybody's buttons for it are in hand. That is
+    /// the whole of the synchronisation: two deterministic machines given the same input
+    /// on the same frame stay the same machine.</summary>
+    private bool AdvanceTogether()
+    {
+        var play = session!;
+        play.SendInput(netFrame + PlayProtocol.InputDelay, pressed);
+        if (!play.TryCollect(netFrame, slotInputs))
+        {
+            Stalled(play.WaitingFor(netFrame));
+            return false;
+        }
+
+        Stalled(null);
+        for (var slot = 0; slot < core!.PlayerCount; slot++)
+            core.SetButtons(slot, slot < play.Capacity ? slotInputs[slot] : GamepadButtons.None);
+        core.RunFrame();
+        netFrame++;
+
+        if (netFrame % PlayProtocol.ChecksumInterval != 0)
+            return true;
+
+        // Compare notes: this frame's fingerprint goes out, and the one from a second
+        // ago — long enough for everybody's to have arrived — is checked.
+        if (core.SaveState(stateBuffer))
+            play.SendChecksum(netFrame, PlayProtocol.Fingerprint(stateBuffer));
+        if (play.HasDiverged(netFrame - PlayProtocol.ChecksumInterval))
+        {
+            together = false;
+            return false;
+        }
+        play.Forget(netFrame - 2 * PlayProtocol.ChecksumInterval);
+        return true;
+    }
+
+    /// <summary>The painting loop runs outside the render tree, so a stall only reaches
+    /// the screen if it asks — and only when it changes, because this is called sixty
+    /// times a second.</summary>
+    private void Stalled(string? who)
+    {
+        if (waitingOn == who)
+            return;
+        waitingOn = who;
+        StateHasChanged();
+    }
+
+    /// <summary>Runs at the top of each painted frame: starts the shared game once the
+    /// room is full, which for the host means handing over its machine and for everybody
+    /// else means putting it on.</summary>
+    private void OpenTheGate()
+    {
+        // A partner who closed their tab is never going to send frame N's buttons, so
+        // the game drops back to one player rather than waiting for them all evening.
+        if (together && session is not { Connected: true, Full: true })
+        {
+            together = false;
+            waitingOn = null;
+            StateHasChanged();
+            return;
+        }
+
+        if (session is not { Connected: true, Full: true } play || together || core is null)
+            return;
+
+        if (play.IsHost)
+        {
+            if (!core.SaveState(stateBuffer))
+                return;
+            play.SendState(netFrame, stateBuffer);
+        }
+        else
+        {
+            if (play.TakeArrivingState() is not { } arriving)
+                return;
+            if (!core.LoadState(arriving.Machine))
+                return;
+            netFrame = arriving.Frame;
+        }
+
+        // Nobody has committed buttons for the frames already inside the delay window,
+        // and both machines have to agree about them — so both fill them with nothing.
+        for (var frame = netFrame; frame < netFrame + PlayProtocol.InputDelay; frame++)
+            play.SendInput(frame, GamepadButtons.None);
+        together = true;
+        StateHasChanged();
+    }
+
+    private async Task PlayTogetherAsync()
+    {
+        if (core is null || session is not null)
+            return;
+        var address = Navigation.ToAbsoluteUri($"/api/nodes/{NodeId}/play");
+        var endpoint = new UriBuilder(address)
+        {
+            Scheme = address.Scheme == Uri.UriSchemeHttps ? "wss" : "ws",
+        }.Uri;
+        try
+        {
+            session = await NetplaySession.ConnectAsync(endpoint, romHash, core.PlayerCount);
+            session.Changed += OnSessionChanged;
+        }
+        catch (Exception problem)
+        {
+            // The cartridge still plays on its own; only the invitation failed.
+            togetherProblem = $"This game could not be opened up: {problem.Message}";
+        }
+        StateHasChanged();
+    }
+
+    private async Task LeaveTogetherAsync()
+    {
+        var play = session;
+        session = null;
+        together = false;
+        waitingOn = null;
+        togetherProblem = null;
+        if (play is null)
+            return;
+        play.Changed -= OnSessionChanged;
+        await play.DisposeAsync();
+    }
+
+    private async Task LeaveAndRedrawAsync()
+    {
+        await LeaveTogetherAsync();
+        StateHasChanged();
+    }
+
+    private void OnSessionChanged()
+    {
+        if (session?.Fault is not null)
+            together = false;
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void PushSound()
+    {
+        if (!sound || core is null || module is null)
+            return;
+        var count = core.ReadAudio(samples);
+        if (count == 0)
+            return;
+        // The buffer goes over whole and the count says how much of it is real, so
+        // there is no per-frame array to allocate and collect.
+        Buffer.BlockCopy(samples, 0, sampleBytes, 0, count * 2);
+        if (directModule is not null)
+            directModule.InvokeVoid("queueEmulatorAudio", sampleBytes, count);
+        else
+            _ = module.InvokeVoidAsync("queueEmulatorAudio", sampleBytes, count);
+    }
+
+    /// <summary>A save is written a couple of seconds after the game first touches its
+    /// battery memory, not on every write: a game that keeps a running checksum there
+    /// would otherwise have this writing to storage several times a frame. The two
+    /// seconds are counted from the first write of a burst rather than the last, so a
+    /// game that never stops writing still gets saved.</summary>
+    private void WatchSave()
+    {
+        if (core is null || !core.BatteryBacked)
+            return;
+        if (core.SaveDirty)
+        {
+            core.MarkSaved();
+            if (saveDue == DateTime.MaxValue)
+                saveDue = DateTime.UtcNow.AddSeconds(2);
+        }
+        if (saveDue == DateTime.MaxValue || DateTime.UtcNow < saveDue)
+            return;
+        saveDue = DateTime.MaxValue;
+        _ = FlushSaveAsync();
+    }
+
+    private async Task FlushSaveAsync()
+    {
+        if (core is null || !core.BatteryBacked || module is null)
+            return;
+        savedData = Convert.ToBase64String(core.SaveRam());
+        core.MarkSaved();
+        saveDue = DateTime.MaxValue;
+        try
+        {
+            await module.InvokeVoidAsync("writeEmulatorSave", NodeId, savedData);
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadSaveAsync(InputFileChangeEventArgs e)
+    {
+        if (core is null)
+            return;
+        await using var stream = e.File.OpenReadStream(maxAllowedSize: 1024 * 1024);
+        using var buffer = new MemoryStream();
+        await stream.CopyToAsync(buffer);
+        core.LoadSaveRam(buffer.ToArray());
+        core.Reset();
+        await FlushSaveAsync();
+        canvas?.Invalidate();
+    }
+
+    private void Hold(GamepadButtons button)
+    {
+        pressed |= button;
+        core?.SetButtons(0, pressed);
+    }
+
+    private void Release(GamepadButtons button)
+    {
+        pressed &= ~button;
+        core?.SetButtons(0, pressed);
+    }
+
+    /// <summary>Keys are swallowed while the game is running — the arrow keys would
+    /// scroll the page out from under it otherwise — so Escape is the way back out to
+    /// the rest of the page for anyone using a keyboard.</summary>
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+        {
+            ReleaseAll();
+            await exit.FocusAsync();
+            return;
+        }
+        if (Map(e.Key) is { } button)
+            Hold(button);
+    }
+
+    private void OnKeyUp(KeyboardEventArgs e)
+    {
+        if (Map(e.Key) is { } button)
+            Release(button);
+    }
+
+    /// <summary>Both consoles have the same eight buttons, so there is one mapping.
+    /// Z and X sit where a right hand rests on a keyboard, in the order the two face
+    /// buttons sit on both machines.</summary>
+    private static GamepadButtons? Map(string key) => key switch
+    {
+        "ArrowUp" or "w" or "W" => GamepadButtons.Up,
+        "ArrowDown" or "s" or "S" => GamepadButtons.Down,
+        "ArrowLeft" or "a" or "A" => GamepadButtons.Left,
+        "ArrowRight" or "d" or "D" => GamepadButtons.Right,
+        "z" or "Z" => GamepadButtons.B,
+        "x" or "X" => GamepadButtons.A,
+        "Enter" => GamepadButtons.Start,
+        "Shift" => GamepadButtons.Select,
+        _ => null,
+    };
+
+    /// <summary>Lets go of the bitmap and the pin under it. The frame buffer is pinned
+    /// for as long as a cartridge is loaded, so it has to be released when one is
+    /// swapped out as well as when the page closes.</summary>
+    private void Unload()
+    {
+        picture?.Dispose();
+        picture = null;
+        if (pinnedFrame.IsAllocated)
+            pinnedFrame.Free();
+        core = null;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        running = false;
+        await LeaveTogetherAsync();
+        await FlushSaveAsync();
+        await StopSoundAsync();
+        Unload();
+        if (module is null)
+            return;
+        try
+        {
+            await module.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+    }
+}

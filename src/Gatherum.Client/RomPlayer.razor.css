@@ -1,0 +1,219 @@
+.rom-player {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* Black around the picture, because a console's picture has an edge and the room
+   around it should not pretend otherwise. */
+.rom-screen {
+    position: relative;
+    display: grid;
+    width: 100%;
+    max-width: 640px;
+    margin-inline: auto;
+    background: #000;
+    border: 1px solid var(--outline-dim);
+    border-radius: var(--radius);
+    overflow: hidden;
+
+    /* The keyboard focus ring matters here — it is the difference between the arrow
+       keys reaching the game and scrolling the page. */
+    &:focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 2px;
+    }
+
+    & ::deep canvas {
+        width: 100%;
+        height: 100%;
+        display: block;
+        image-rendering: pixelated;
+    }
+}
+
+.rom-start {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background: color-mix(in srgb, #000 55%, transparent);
+    color: #fff;
+    border: 0;
+    font: inherit;
+    font-size: 15px;
+    cursor: pointer;
+
+    &:hover {
+        background: color-mix(in srgb, #000 40%, transparent);
+    }
+}
+
+.rom-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+
+    & .rom-system {
+        flex: 1;
+        min-width: 140px;
+        color: var(--on-surface-dim);
+        font-size: 13px;
+    }
+}
+
+.rom-keys {
+    margin: 0;
+    color: var(--on-surface-dim);
+    font-size: 13px;
+
+    & kbd {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        padding: 1px 5px;
+        border: 1px solid var(--outline);
+        border-radius: var(--radius-s);
+        background: var(--surface-dim);
+    }
+}
+
+/* On a touchscreen there is no keyboard to hold two directions down on, so the pad is
+   the only way to play. A mouse cannot press two of these at once either, which is
+   why it never sees them. */
+.rom-pad {
+    display: none;
+}
+
+@media (pointer: coarse) {
+    .rom-pad {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        align-items: center;
+        gap: 12px;
+        user-select: none;
+        touch-action: manipulation;
+    }
+
+    .rom-dpad {
+        display: grid;
+        grid-template-columns: repeat(3, var(--tap));
+        grid-template-rows: repeat(3, var(--tap));
+
+        & button {
+            padding: 0;
+            border: 1px solid var(--outline);
+            background: var(--surface-dim);
+            border-radius: var(--radius-s);
+        }
+
+        & button:active {
+            background: var(--hover-strong);
+        }
+
+        & .up { grid-area: 1 / 2; }
+        & .left { grid-area: 2 / 1; }
+        & .right { grid-area: 2 / 3; }
+        & .down { grid-area: 3 / 2; }
+    }
+
+    .rom-face {
+        display: flex;
+        gap: 12px;
+        justify-content: flex-end;
+
+        & .round {
+            width: calc(var(--tap) * 1.2);
+            height: calc(var(--tap) * 1.2);
+            border-radius: var(--radius-full);
+            border: 1px solid var(--outline);
+            background: var(--surface-dim);
+            font-weight: 600;
+        }
+
+        & .round:active {
+            background: var(--hover-strong);
+        }
+    }
+
+    .rom-menu {
+        grid-column: 1 / -1;
+        display: flex;
+        gap: 12px;
+        justify-content: center;
+
+        & button {
+            min-width: 96px;
+            border-radius: var(--radius-full);
+            border: 1px solid var(--outline);
+            background: var(--surface-dim);
+            font-size: 13px;
+        }
+    }
+}
+
+.rom-waiting {
+    padding: 40px 30px;
+    text-align: center;
+    color: var(--on-surface-dim);
+    border: 1px dashed var(--outline);
+    border-radius: var(--radius);
+
+    & p {
+        margin: 0 auto;
+        max-width: 46ch;
+    }
+
+    &.failed {
+        color: var(--danger);
+        border-style: solid;
+    }
+}
+
+/* Who else is in the game, and what it is waiting for. */
+.rom-together {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 14px;
+    padding: 8px 14px;
+    font-size: 13px;
+    color: var(--on-surface-dim);
+    background: color-mix(in srgb, var(--surface-dim) 55%, transparent);
+    border: 1px solid var(--outline-dim);
+    border-radius: var(--radius);
+
+    &.failed {
+        color: var(--danger);
+        border-color: color-mix(in srgb, var(--danger) 40%, var(--outline));
+    }
+}
+
+.rom-seats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.rom-seat {
+    padding: 1px 10px;
+    border-radius: var(--radius-full);
+    background: var(--surface-dim);
+    border: 1px solid var(--outline-dim);
+
+    /* Your own seat wears the accent the app uses for "this is you" everywhere else. */
+    &.you {
+        background: var(--chip-bg);
+        color: var(--on-chip);
+        border-color: transparent;
+    }
+}
+
+/* A stall is the honest face of a slow connection: the game stops rather than
+   guessing what the other player did and being wrong about it. */
+.rom-stall {
+    font-style: italic;
+}
