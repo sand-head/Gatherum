@@ -1,6 +1,7 @@
 using Gatherum.Client.Emulation;
 using Gatherum.Client.Emulation.GameBoy;
 using Gatherum.Client.Emulation.Nes;
+using Gatherum.Client.Emulation.Sega;
 
 namespace Gatherum.Tests;
 
@@ -213,5 +214,116 @@ public class CartridgeBoardTests
         var lines = console.ReadByte(0xFF00);
         Assert.Equal(0, lines & 0x02);      // left is held
         Assert.Equal(0x01, lines & 0x01);   // right is not
+    }
+
+    // ---- Master System ---------------------------------------------------------
+
+    /// <summary>A cartridge whose every bank says which one it is, at three places: the
+    /// first byte, one inside the kilobyte that never pages, and one past it.</summary>
+    private static byte[] NumberedSegaBanks(int banks)
+    {
+        var image = RomFixtures.Sega([], banks: banks);
+        for (var bank = 0; bank < banks; bank++)
+        {
+            image[bank * 0x4000] = (byte)bank;
+            image[bank * 0x4000 + 0x0100] = (byte)(0x40 + bank);
+            image[bank * 0x4000 + 0x2000] = (byte)(0x80 + bank);
+        }
+        return image;
+    }
+
+    [Fact]
+    public void A_sega_board_starts_with_the_first_three_banks_in_the_three_windows()
+    {
+        var console = new MasterSystem(NumberedSegaBanks(4), gameGear: false);
+        Assert.Equal(0, console.Read(0x0000));
+        Assert.Equal(1, console.Read(0x4000));
+        Assert.Equal(2, console.Read(0x8000));
+    }
+
+    [Fact]
+    public void A_sega_board_pages_through_the_registers_at_the_top_of_memory()
+    {
+        var console = new MasterSystem(NumberedSegaBanks(4), gameGear: false);
+        console.Write(0xFFFF, 3);
+        Assert.Equal(3, console.Read(0x8000));
+        console.Write(0xFFFE, 3);
+        Assert.Equal(3, console.Read(0x4000));
+    }
+
+    [Fact]
+    public void The_paging_registers_are_also_ordinary_memory()
+    {
+        // They sit inside work memory rather than beside it, so a game that reads one
+        // back gets the byte it wrote.
+        var console = new MasterSystem(NumberedSegaBanks(4), gameGear: false);
+        console.Write(0xFFFD, 2);
+        Assert.Equal(2, console.Read(0xFFFD));
+    }
+
+    [Fact]
+    public void The_first_kilobyte_of_a_sega_board_never_pages_away()
+    {
+        // The interrupt vectors live there. A game that could page them out could not
+        // return from anything.
+        var console = new MasterSystem(NumberedSegaBanks(4), gameGear: false);
+        console.Write(0xFFFD, 2);
+        Assert.Equal(0x40, console.Read(0x0100));
+        Assert.Equal(0x80 + 2, console.Read(0x2000));
+    }
+
+    [Fact]
+    public void A_codemasters_board_pages_by_writing_to_the_window_itself()
+    {
+        var image = RomFixtures.Codemasters([], banks: 4);
+        for (var bank = 0; bank < 4; bank++)
+            image[bank * 0x4000] = (byte)bank;
+
+        var console = new MasterSystem(image, gameGear: false);
+        console.Write(0x0000, 3);
+        // Nothing is pinned on this board, so even address zero moves.
+        Assert.Equal(3, console.Read(0x0000));
+        console.Write(0x8000, 1);
+        Assert.Equal(1, console.Read(0x8000));
+    }
+
+    [Fact]
+    public void Cartridge_memory_appears_where_a_bank_was_and_is_remembered()
+    {
+        var console = new MasterSystem(NumberedSegaBanks(4), gameGear: false);
+        Assert.False(console.BatteryBacked);
+
+        console.Write(0xFFFC, 0x08);                 // memory on, first half
+        Assert.True(console.BatteryBacked);
+        console.Write(0x8000, 0xAB);
+        Assert.Equal(0xAB, console.Read(0x8000));
+        Assert.True(console.SaveDirty);
+
+        // The other half is a different eight kilobytes, not the same one again.
+        console.Write(0xFFFC, 0x0C);
+        Assert.NotEqual(0xAB, console.Read(0x8000));
+        console.Write(0xFFFC, 0x08);
+        Assert.Equal(0xAB, console.Read(0x8000));
+
+        console.MarkSaved();
+        Assert.False(console.SaveDirty);
+        Assert.NotEmpty(console.SaveRam());
+    }
+
+    [Fact]
+    public void Switching_cartridge_memory_off_puts_the_bank_back()
+    {
+        var console = new MasterSystem(NumberedSegaBanks(4), gameGear: false);
+        console.Write(0xFFFC, 0x08);
+        console.Write(0x8000, 0xAB);
+        console.Write(0xFFFC, 0x00);
+        Assert.Equal(2, console.Read(0x8000));
+    }
+
+    [Fact]
+    public void A_cartridge_that_is_not_a_whole_number_of_banks_reads_as_open_bus()
+    {
+        var console = new MasterSystem(new byte[0x4000 + 0x100], gameGear: false);
+        Assert.Equal(0xFF, console.Read(0x7FFF));
     }
 }

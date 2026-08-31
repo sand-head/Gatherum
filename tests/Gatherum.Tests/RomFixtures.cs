@@ -59,6 +59,46 @@ public static class RomFixtures
         return image;
     }
 
+    /// <summary>A Master System or Game Gear cartridge: 32 KB — two banks, which is the
+    /// smallest a mapper can page — with Sega's header at the end of the first one and
+    /// the program at the reset vector, address zero.</summary>
+    public static byte[] Sega(byte[] program, bool gameGear = false, int banks = 2,
+        int productCode = 12345)
+    {
+        var image = new byte[banks * 0x4000];
+        program.CopyTo(image, 0);
+
+        var header = 0x7FF0;
+        if (image.Length >= header + 16)
+        {
+            "TMR SEGA"u8.ToArray().CopyTo(image, header);
+            image[header + 12] = ToDecimal(productCode % 100);
+            image[header + 13] = ToDecimal(productCode / 100 % 100);
+            image[header + 14] = (byte)(productCode / 10000 << 4);
+            // The region nibble is the only thing in the file that says which of the
+            // two consoles a cartridge was sold for.
+            image[header + 15] = (byte)((gameGear ? 6 : 4) << 4 | 0x0C);
+        }
+        return image;
+    }
+
+    private static byte ToDecimal(int value) => (byte)(value / 10 << 4 | value % 10);
+
+    /// <summary>A cartridge on Codemasters' board, which declares itself only by the
+    /// checksum their tools wrote where Sega's header would be.</summary>
+    public static byte[] Codemasters(byte[] program, int banks = 2)
+    {
+        var image = new byte[banks * 0x4000];
+        program.CopyTo(image, 0);
+        var checksum = 0x1234;
+        image[0x7FE6] = (byte)checksum;
+        image[0x7FE7] = (byte)(checksum >> 8);
+        var complement = 0x10000 - checksum;
+        image[0x7FE8] = (byte)complement;
+        image[0x7FE9] = (byte)(complement >> 8);
+        return image;
+    }
+
     public static readonly byte[] NintendoLogo =
     [
         0xCE, 0xED, 0x66, 0x66, 0xCC, 0x0D, 0x00, 0x0B, 0x03, 0x73, 0x00, 0x83,

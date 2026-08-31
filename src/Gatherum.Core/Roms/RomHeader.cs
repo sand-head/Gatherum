@@ -8,6 +8,8 @@ public enum RomSystem
 {
     Nes,
     GameBoy,
+    MasterSystem,
+    GameGear,
 }
 
 /// <summary>What a cartridge image says about itself before anything runs it: the
@@ -31,7 +33,7 @@ public sealed record RomHeader(
     /// <summary>Reads the header, or nothing when the bytes are not a cartridge this
     /// knows — a truncated download, or a `.gb` that is really something else.</summary>
     public static RomHeader? Read(ReadOnlySpan<byte> bytes) =>
-        ReadNes(bytes) ?? ReadGameBoy(bytes);
+        ReadNes(bytes) ?? ReadGameBoy(bytes) ?? ReadSega(bytes);
 
     /// <summary>The header as lines a person — or a search index — can read.</summary>
     public string Describe()
@@ -180,6 +182,70 @@ public sealed record RomHeader(
             GameBoyBattery(cartridgeType),
             bytes[0x14A] == 0 ? "Japan" : "Overseas");
     }
+
+    // ---- Master System and Game Gear -------------------------------------------
+
+    /// <summary>Sega's header sits near the end of the first bank rather than at the
+    /// start of the file — at whichever of three places left room on the cartridge —
+    /// and it carries no title at all. What it does carry is the product code the game
+    /// was catalogued under and the region it was sold in, which together are what
+    /// makes one findable.</summary>
+    private static RomHeader? ReadSega(ReadOnlySpan<byte> bytes)
+    {
+        foreach (var at in (ReadOnlySpan<int>)[0x1FF0, 0x3FF0, 0x7FF0])
+        {
+            if (bytes.Length < at + 16 || !bytes.Slice(at, 8).SequenceEqual("TMR SEGA"u8))
+                continue;
+
+            var header = bytes.Slice(at, 16);
+            var region = header[15] >> 4;
+            var handheld = region >= 5;
+
+            // Five digits packed as binary-coded decimal, with the last one squeezed
+            // into the nibble above the version number.
+            var code = (header[14] >> 4) * 10000
+                + FromDecimal(header[13]) * 100
+                + FromDecimal(header[12]);
+
+            return new RomHeader(
+                handheld ? RomSystem.GameGear : RomSystem.MasterSystem,
+                handheld ? "Game Gear" : "Master System",
+                null,
+                // Nothing in the header names the board; the paging hardware is worked
+                // out from the file itself when a game is loaded, not from here.
+                $"Product {code:00000}, version {header[14] & 0x0F}",
+                SegaRomBytes(header[15] & 0x0F, bytes.Length),
+                0, 0, false,
+                region switch
+                {
+                    3 or 5 => "Japan",
+                    4 => "Export",
+                    6 => "Export",
+                    7 => "International",
+                    _ => null,
+                });
+        }
+        return null;
+    }
+
+    private static int FromDecimal(byte packed) => (packed >> 4) * 10 + (packed & 0x0F);
+
+    /// <summary>The size nibble stops being meaningful above a megabyte and several
+    /// cartridges lie about it outright, so the file's own length wins wherever the two
+    /// disagree.</summary>
+    private static int SegaRomBytes(int code, int fileLength) => code switch
+    {
+        0xA => 8 * 1024,
+        0xB => 16 * 1024,
+        0xC => 32 * 1024,
+        0xD => 48 * 1024,
+        0xE => 64 * 1024,
+        0xF => 128 * 1024,
+        0x0 => 256 * 1024,
+        0x1 => 512 * 1024,
+        0x2 => 1024 * 1024,
+        _ => fileLength,
+    };
 
     private static bool GameBoyBattery(byte type) => type is 0x03 or 0x06 or 0x09 or 0x0D
         or 0x0F or 0x10 or 0x13 or 0x1B or 0x1E or 0x22 or 0xFF;

@@ -266,16 +266,24 @@ export function stopEmulatorAudio() {
   emulatorAudio = undefined;
 }
 
-export function queueEmulatorAudio(bytes, sampleCount) {
-  if (!emulatorAudio || sampleCount <= 0) return;
+export function queueEmulatorAudio(bytes, valueCount, channels) {
+  if (!emulatorAudio || valueCount <= 0) return;
   const { context, rate } = emulatorAudio;
-  const buffer = context.createBuffer(1, sampleCount, rate);
-  const channel = buffer.getChannelData(0);
-  // Signed sixteen-bit, little-endian, read a byte at a time: a typed-array view would
-  // need the interop buffer to be two-byte aligned, which is not promised.
-  for (let i = 0; i < sampleCount; i++) {
-    const raw = bytes[i * 2] | (bytes[i * 2 + 1] << 8);
-    channel[i] = (raw >= 32768 ? raw - 65536 : raw) / 32768;
+  const ears = channels || 1;
+  // A stereo core hands over its two ears interleaved, so the count of values is a
+  // multiple of the channel count rather than the number of moments of sound.
+  const frames = Math.floor(valueCount / ears);
+  if (frames <= 0) return;
+  const buffer = context.createBuffer(ears, frames, rate);
+  for (let ear = 0; ear < ears; ear++) {
+    const channel = buffer.getChannelData(ear);
+    // Signed sixteen-bit, little-endian, read a byte at a time: a typed-array view
+    // would need the interop buffer to be two-byte aligned, which is not promised.
+    for (let i = 0; i < frames; i++) {
+      const at = (i * ears + ear) * 2;
+      const raw = bytes[at] | (bytes[at + 1] << 8);
+      channel[i] = (raw >= 32768 ? raw - 65536 : raw) / 32768;
+    }
   }
   const source = context.createBufferSource();
   source.buffer = buffer;
@@ -285,7 +293,7 @@ export function queueEmulatorAudio(bytes, sampleCount) {
   const now = context.currentTime;
   if (emulatorAudio.cursor < now + 0.02) emulatorAudio.cursor = now + 0.08;
   source.start(emulatorAudio.cursor);
-  emulatorAudio.cursor += sampleCount / rate;
+  emulatorAudio.cursor += frames / rate;
 }
 
 // A cartridge's battery-backed memory. It is the player's own, not the wiki's: the ROM

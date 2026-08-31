@@ -75,9 +75,9 @@ auto-login. Migrations: `dotnet ef migrations add <Name> -p src/Gatherum.Infrast
   `DocumentHtmlView` instead — the version panel's preview is the one today), tree,
   sidebar panels (contents/similar/recent), search box, node header, the category bar at
   the foot of a page (`NodeCategories`), version panel, file view, settings keys, and
-  the ROM player (`RomPlayer` over `Emulation/` — `IEmulatorCore` with a NES and a Game
-  Boy behind it, here because a console only ever runs in the reader's own browser, plus
-  `Emulation/Netplay/` where two of them keep in step) —
+  the ROM player (`RomPlayer` over `Emulation/` — `IEmulatorCore` with a NES, a Game Boy
+  and a Master System behind it, here because a console only ever runs in the reader's
+  own browser, plus `Emulation/Netplay/` where two of them keep in step) —
   plus Gatherum's Markdown dialect, which lives
   here because it is the editor's word: `GatherumMarkdown` (the extension set and the
   only read/write door), `AsideExtension`/`CalloutExtension`/`BlockTags`,
@@ -169,6 +169,10 @@ fresh DI scope via `Services/AppOperations`.
   a save state. Draining audio is the trap: how often a browser asks for samples is its
   own business, so the sample queue is deliberately not serialized. `EmulatorStateTests`
   holds the line, including a muted console that must still match an unmuted one.
+- The eight buttons are the same on every console; the printing on them is not. What a
+  machine calls them is `ButtonLabels` on the core, and a `null` is a button it never
+  had — the player leaves those off the pad rather than drawing one the hardware has no
+  wire for.
 - The netplay server relays and understands nothing. It stamps which seat a message came
   from — a client says what it pressed, never who pressed it — and forwards it. How many
   seats a room has is the console's answer, not the server's. Don't teach it the game.
@@ -282,13 +286,19 @@ second icon set, and don't hand-draw a path when the pack has one.
    One frame per `RunFrame`, an ARGB `Frame` the player pins once, and audio drained
    through `ReadAudio`; the player owns the clock.
 2. Teach `Emulation/Emulator.Load` to recognise it — by the bytes first, the extension
-   second — and `MediaTypes` its extension.
+   second — `MediaTypes` its extension, and `FileView.IsRom` both. That last one is a
+   second copy on purpose: Gatherum.Client does not reference Core, so the extension
+   list is spelled twice or the page renders a download link instead of a console.
 3. Teach `Core/Roms/RomHeader` to read its header, so a cartridge is findable by what it
-   says it is, and add the row to the extraction table in `Docs/pages-and-files.md`.
-4. Implement `SaveState`/`LoadState` over `StateWriter`/`StateReader` — positional and
+   says it is, and add the row to the extraction table in `Docs/pages-and-files.md`. A
+   header is not always at the start of the file — Sega's is at the end of the first
+   bank — and `RomTextExtractor.HeaderBytes` bounds how far the search goes.
+4. Name its plastic in `ButtonLabels`. The eight bits are the same on every machine, but
+   what they are printed as is not, and a `null` is a button the console never had.
+5. Implement `SaveState`/`LoadState` over `StateWriter`/`StateReader` — positional and
    untagged, so both sides must walk the same fields in the same order; the four-byte tag
    at the head is what refuses somebody else's state. Leave the audio queue out.
-5. Add tests beside `Nes6502Tests`/`GameBoyTests`: hand-assembled programs in
+6. Add tests beside `Nes6502Tests`/`GameBoyTests`/`Z80Tests`: hand-assembled programs in
    `RomFixtures`, never a real game — a checked-in ROM is somebody's copyrighted work.
    A console that reports more than one player also needs the determinism tests in
    `EmulatorStateTests` pointed at it, or netplay on it is a coin toss.

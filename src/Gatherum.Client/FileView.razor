@@ -264,10 +264,16 @@
     /// benefit of the doubt the reader endpoints give a book.</summary>
     private static bool IsRom(FileFacts file) =>
         file.MediaType is "application/x-nes-rom" or "application/x-gameboy-rom"
-            or "application/x-gameboy-color-rom"
-        || file.FileName.EndsWith(".nes", StringComparison.OrdinalIgnoreCase)
-        || file.FileName.EndsWith(".gb", StringComparison.OrdinalIgnoreCase)
-        || file.FileName.EndsWith(".gbc", StringComparison.OrdinalIgnoreCase);
+            or "application/x-gameboy-color-rom" or "application/x-sms-rom"
+            or "application/x-gamegear-rom"
+        || RomExtensions.Any(extension =>
+            file.FileName.EndsWith(extension, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>Spelled out here rather than read from `MediaTypes`, because this
+    /// project deliberately does not reference Core — it reaches the server only through
+    /// `IAppData`. Adding a console means adding its extension in both places.</summary>
+    private static readonly string[] RomExtensions =
+        [".nes", ".gb", ".gbc", ".sms", ".gg"];
 
     private static string TranscriptLabel(string mediaType) =>
         mediaType.StartsWith("image/") ? "Text in the image" : "Transcript";

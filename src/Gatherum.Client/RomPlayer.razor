@@ -153,24 +153,36 @@ else
                 <button type="button" class="round" @onpointerdown="() => Hold(GamepadButtons.B)"
                         @onpointerup="() => Release(GamepadButtons.B)"
                         @onpointerleave="() => Release(GamepadButtons.B)"
-                        @onpointercancel="() => Release(GamepadButtons.B)">B</button>
+                        @onpointercancel="() => Release(GamepadButtons.B)">@core.Buttons.B</button>
                 <button type="button" class="round" @onpointerdown="() => Hold(GamepadButtons.A)"
                         @onpointerup="() => Release(GamepadButtons.A)"
                         @onpointerleave="() => Release(GamepadButtons.A)"
-                        @onpointercancel="() => Release(GamepadButtons.A)">A</button>
+                        @onpointercancel="() => Release(GamepadButtons.A)">@core.Buttons.A</button>
             </div>
             <div class="rom-menu">
-                <button type="button" @onpointerdown="() => Hold(GamepadButtons.Select)"
-                        @onpointerup="() => Release(GamepadButtons.Select)"
-                        @onpointercancel="() => Release(GamepadButtons.Select)">Select</button>
-                <button type="button" @onpointerdown="() => Hold(GamepadButtons.Start)"
-                        @onpointerup="() => Release(GamepadButtons.Start)"
-                        @onpointercancel="() => Release(GamepadButtons.Start)">Start</button>
+                @if (core.Buttons.Select is { } select)
+                {
+                    <button type="button" @onpointerdown="() => Hold(GamepadButtons.Select)"
+                            @onpointerup="() => Release(GamepadButtons.Select)"
+                            @onpointercancel="() => Release(GamepadButtons.Select)">@select</button>
+                }
+                @if (core.Buttons.Start is { } start)
+                {
+                    <button type="button" @onpointerdown="() => Hold(GamepadButtons.Start)"
+                            @onpointerup="() => Release(GamepadButtons.Start)"
+                            @onpointercancel="() => Release(GamepadButtons.Start)">@start</button>
+                }
             </div>
         </div>
 
-        <p class="rom-keys">Arrow keys move, <kbd>Z</kbd> and <kbd>X</kbd> are B and A,
-            <kbd>Enter</kbd> is Start and <kbd>Shift</kbd> is Select.
+        <p class="rom-keys">Arrow keys move, <kbd>Z</kbd> and <kbd>X</kbd> are
+            @core.Buttons.B and @core.Buttons.A@if (core.Buttons.Start is { } startKey)
+            {
+                <text>, <kbd>Enter</kbd> is @startKey</text>
+            }@if (core.Buttons.Select is { } selectKey)
+            {
+                <text> and <kbd>Shift</kbd> is @selectKey</text>
+            }.
             @if (core.BatteryBacked)
             {
                 <text>This cartridge saves, and its save is kept in this browser —
@@ -566,9 +578,9 @@ else
         // there is no per-frame array to allocate and collect.
         Buffer.BlockCopy(samples, 0, sampleBytes, 0, count * 2);
         if (directModule is not null)
-            directModule.InvokeVoid("queueEmulatorAudio", sampleBytes, count);
+            directModule.InvokeVoid("queueEmulatorAudio", sampleBytes, count, core.AudioChannels);
         else
-            _ = module.InvokeVoidAsync("queueEmulatorAudio", sampleBytes, count);
+            _ = module.InvokeVoidAsync("queueEmulatorAudio", sampleBytes, count, core.AudioChannels);
     }
 
     /// <summary>A save is written a couple of seconds after the game first touches its
@@ -655,7 +667,7 @@ else
             Release(button);
     }
 
-    /// <summary>Both consoles have the same eight buttons, so there is one mapping.
+    /// <summary>Every console here has the same eight buttons, so there is one mapping.
     /// Z and X sit where a right hand rests on a keyboard, in the order the two face
     /// buttons sit on both machines.</summary>
     private static GamepadButtons? Map(string key) => key switch

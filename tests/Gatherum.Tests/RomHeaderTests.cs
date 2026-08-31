@@ -92,10 +92,12 @@ public class RomHeaderTests
         Assert.False(extractor.CanExtract(MediaTypes.PlainText, "sonic.txt"));
 
         // Four megabytes of cartridge, and the extractor only ever looks at the head
-        // of it — a stream that refuses to be read past the header proves it.
+        // of it — a stream that refuses to be read past the header proves it. The head
+        // is the first bank, because Sega put their header at the end of one rather
+        // than at the start of the file.
         var image = RomFixtures.GameBoy([0x00], title: "METROID");
         Array.Resize(ref image, 4 * 1024 * 1024);
-        await using var stream = new HeaderOnlyStream(image, 0x150);
+        await using var stream = new HeaderOnlyStream(image, 0x8000);
 
         var text = await extractor.ExtractAsync(stream, MediaTypes.GameBoyRom, "metroid.gb");
 
@@ -129,5 +131,38 @@ public class RomHeaderTests
         public override void SetLength(long value) => throw new NotSupportedException();
         public override void Write(byte[] buffer, int offset, int count) =>
             throw new NotSupportedException();
+    }
+
+    [Fact]
+    public void A_sega_header_names_the_console_it_was_sold_for()
+    {
+        var master = RomHeader.Read(RomFixtures.Sega([0x00], gameGear: false));
+        Assert.NotNull(master);
+        Assert.Equal(RomSystem.MasterSystem, master.System);
+        Assert.Equal("Master System", master.SystemName);
+        Assert.Equal("Export", master.Region);
+
+        var handheld = RomHeader.Read(RomFixtures.Sega([0x00], gameGear: true));
+        Assert.NotNull(handheld);
+        Assert.Equal(RomSystem.GameGear, handheld.System);
+        Assert.Equal("Game Gear", handheld.SystemName);
+    }
+
+    [Fact]
+    public void A_sega_header_carries_a_product_code_where_a_title_would_be()
+    {
+        // Sega's header has no room for a name, so the catalogue number is the only
+        // thing in the file that identifies a particular game.
+        var header = RomHeader.Read(RomFixtures.Sega([0x00], productCode: 12345));
+        Assert.NotNull(header);
+        Assert.Null(header.Title);
+        Assert.Contains("12345", header.Cartridge);
+        Assert.Contains("Product 12345", header.Describe());
+    }
+
+    [Fact]
+    public void A_cartridge_with_no_sega_header_is_not_mistaken_for_one()
+    {
+        Assert.Null(RomHeader.Read(new byte[0x8000]));
     }
 }

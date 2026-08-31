@@ -43,6 +43,11 @@ public sealed class NesConsole : IEmulatorCore
     public double FramesPerSecond => 60.0988;
 
     public int SampleRate => NesApu.SampleRate;
+
+    /// <summary>One. The console mixes everything down to a single pin.</summary>
+    public int AudioChannels => 1;
+
+    public ButtonLabels Buttons => new("A", "B", "Start", "Select");
     public int PlayerCount => 2;
     public uint[] Frame => ppu.Frame;
     public bool BatteryBacked => Cartridge.Battery;

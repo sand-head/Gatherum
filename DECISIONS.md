@@ -1951,3 +1951,53 @@ another that lies. Somebody who wants to cheat has an emulator of their own.
 the button. Two people on a Game Boy meant two Game Boys and a link cable, which is a
 second console to emulate and a serial protocol to synchronise — a different feature
 wearing the same words.
+
+## A third console, and what a second one had already settled
+
+The Master System is the first console added since `IEmulatorCore` existed, which made it
+a test of the seam as much as of the hardware. Most of it needed nothing: the same eight
+buttons, the same one-frame-per-`RunFrame` contract, the same positional save state, and
+netplay that worked on the first run because two ports on the front of a console is
+exactly what the protocol was written against. Two things did not fit, and both were the
+seam being too narrow rather than the console being strange.
+
+**Sound is not always one channel.** A Game Gear has a register saying which of the four
+channels reach which ear — it is the whole reason the register exists — and the audio path
+handed the browser a single mono buffer. The choice was to implement the register and
+throw its answer away, or widen the seam by one property. Discarding it would have left
+code that does nothing, which is worse than either alternative, so `AudioChannels` joins
+the interface and `queueEmulatorAudio` deinterleaves. A mono core answers 1 and behaves
+exactly as before.
+
+**The plastic is part of the machine.** The player drew a pad labelled A, B, Start and
+Select because that is what both Nintendos are printed with. Sega numbered the face
+buttons, put Pause on the console rather than the pad, and wired Reset to a line the game
+reads and answers for itself — and a Game Gear has none of the four, only a Start button
+beside the screen. `ButtonLabels` is one property carrying four strings, `null` meaning a
+button the machine never had, and the player leaves those off the pad and out of the
+sentence about the keyboard. The bits stay the same everywhere; only the printing moves.
+
+Three details of the hardware were worth the code they cost. The paging registers live
+*inside* work memory at the top of the address space, so a write to `$FFFD` both stores a
+byte and moves a bank — and the first kilobyte never pages, because the interrupt vectors
+are there and a program that could page them away could not return from anything. Nothing
+in a cartridge file says which of the two boards is fitted, so Codemasters' own checksum
+is what gives their board away; paging one as the other hangs on the title screen. And the
+picture chip draws a line at the moment the beam finishes it rather than pixel by pixel,
+because the registers that decide a line have stopped moving by then — what a game changes
+in a line interrupt lands on the line after, which is precisely what a split screen is.
+
+The Game Gear is not a fourth core. It is the same silicon behind a smaller window: it
+draws the identical 256×192 picture and shows the 160×144 in the middle, so the crop lives
+in the picture chip rather than in the player, and a cartridge that runs on one runs on the
+other. Which console a file wants is a nibble in Sega's header, and where that header sits
+is the one thing that made the search-side extraction more expensive — it is at the end of
+the first bank rather than the start of the file, so identifying a cartridge now reads the
+first 32 KB instead of the first 336 bytes. Still bounded, still constant, still nothing
+like reading the file.
+
+**What was not done.** The picture chip's four older modes, inherited from the TMS9918 the
+Master System's was built out of, are not implemented: mode 4 is what the library was
+written for, and a handful of early cartridges that use mode 2 will draw wrongly rather
+than refuse. The FM sound board sold in Japan is not emulated either — a game that has an
+FM soundtrack plays its ordinary one.

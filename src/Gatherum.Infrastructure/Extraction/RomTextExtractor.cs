@@ -9,10 +9,11 @@ namespace Gatherum.Infrastructure.Extraction;
 /// so this is the whole of what search can honestly know about one.</summary>
 public class RomTextExtractor : ITextExtractor
 {
-    /// <summary>Enough of the file to reach the Game Boy header at 0x100; the iNES one
-    /// is in the first sixteen bytes. Nothing past this is ever looked at, so a 4 MB
+    /// <summary>Enough of the file to reach the last place a header hides: Sega put
+    /// theirs at the end of the first bank rather than the start of the file, where the
+    /// iNES and Game Boy ones are. Nothing past this is ever looked at, so a 4 MB
     /// cartridge costs the same as a 32 KB one.</summary>
-    private const int HeaderBytes = 0x150;
+    private const int HeaderBytes = 0x8000;
 
     public bool CanExtract(string mediaType, string fileName) =>
         MediaTypes.IsRom(mediaType, fileName);

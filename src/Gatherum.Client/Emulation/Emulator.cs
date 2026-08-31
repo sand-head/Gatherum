@@ -1,5 +1,6 @@
 using Gatherum.Client.Emulation.GameBoy;
 using Gatherum.Client.Emulation.Nes;
+using Gatherum.Client.Emulation.Sega;
 
 namespace Gatherum.Client.Emulation;
 
@@ -15,6 +16,8 @@ public static class Emulator
             return new NesConsole(rom);
         if (LooksLikeGameBoy(rom))
             return new GameBoyConsole(rom);
+        if (SegaRegion(rom) is { } region)
+            return new MasterSystem(rom, gameGear: region >= 5);
 
         // Nothing declared itself, so the name gets the last word — and whichever core
         // it names says what is wrong with the file.
@@ -22,9 +25,12 @@ public static class Emulator
         {
             ".nes" => new NesConsole(rom),
             ".gb" or ".gbc" => new GameBoyConsole(rom),
+            ".sms" => new MasterSystem(rom, gameGear: false),
+            ".gg" => new MasterSystem(rom, gameGear: true),
             _ => throw new NotSupportedException(
                 "This does not look like a cartridge image the player knows: it plays " +
-                "Nintendo Entertainment System (.nes) and Game Boy (.gb, .gbc) files."),
+                "Nintendo Entertainment System (.nes), Game Boy (.gb, .gbc), " +
+                "Master System (.sms) and Game Gear (.gg) files."),
         };
     }
 
@@ -36,6 +42,23 @@ public static class Emulator
     /// otherwise, so every cartridge that ever ran carries it.</summary>
     private static bool LooksLikeGameBoy(ReadOnlySpan<byte> rom) =>
         rom.Length >= 0x150 && rom.Slice(0x104, 48).SequenceEqual(NintendoLogo);
+
+    /// <summary>Sega stamped a header near the end of the first bank — at one of three
+    /// places, depending on how big the cartridge was — and the code in it says which of
+    /// the two consoles the game was sold for. Its absence is not fatal: plenty of
+    /// cartridges shipped without one, and the file's name gets the last word.</summary>
+    private static int? SegaRegion(ReadOnlySpan<byte> rom)
+    {
+        foreach (var at in (ReadOnlySpan<int>)[0x1FF0, 0x3FF0, 0x7FF0])
+        {
+            if (rom.Length < at + 16 || !rom.Slice(at, 8).SequenceEqual("TMR SEGA"u8))
+                continue;
+            // Codes 3 and 4 are the bigger console, 5 upwards the handheld.
+            var region = rom[at + 15] >> 4;
+            return region is >= 3 and <= 7 ? region : 4;
+        }
+        return null;
+    }
 
     private static ReadOnlySpan<byte> NintendoLogo =>
     [

@@ -73,6 +73,12 @@ public sealed class GameBoyConsole : IEmulatorCore
 
     public int SampleRate => GameBoyApu.SampleRate;
 
+    /// <summary>One. The hardware pans between two, but only the headphone socket ever
+    /// carried them apart, and the queue here is already mixed.</summary>
+    public int AudioChannels => 1;
+
+    public ButtonLabels Buttons => new("A", "B", "Start", "Select");
+
     /// <summary>One. Two people on a Game Boy meant two Game Boys and a cable between
     /// them, which is a machine to emulate rather than a second port to read.</summary>
     public int PlayerCount => 1;
