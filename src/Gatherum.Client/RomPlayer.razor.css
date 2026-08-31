@@ -139,6 +139,28 @@
         }
     }
 
+    /* Shoulder buttons sit above the rest, where they sit on the console — and only
+       appear at all on a machine that had them. */
+    .rom-shoulders {
+        grid-column: 1 / -1;
+        display: flex;
+        gap: 12px;
+        justify-content: space-between;
+
+        & button {
+            min-width: 72px;
+            border-radius: var(--radius-s);
+            border: 1px solid var(--outline);
+            background: var(--surface-dim);
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        & button:active {
+            background: var(--hover-strong);
+        }
+    }
+
     .rom-menu {
         grid-column: 1 / -1;
         display: flex;

@@ -10,6 +10,7 @@ public enum RomSystem
     GameBoy,
     MasterSystem,
     GameGear,
+    GameBoyAdvance,
 }
 
 /// <summary>What a cartridge image says about itself before anything runs it: the
@@ -27,13 +28,13 @@ public sealed record RomHeader(
     int ProgramBytes,
     int GraphicsBytes,
     int SaveRamBytes,
-    bool Battery,
+    bool? Battery,
     string? Region)
 {
     /// <summary>Reads the header, or nothing when the bytes are not a cartridge this
     /// knows — a truncated download, or a `.gb` that is really something else.</summary>
     public static RomHeader? Read(ReadOnlySpan<byte> bytes) =>
-        ReadNes(bytes) ?? ReadGameBoy(bytes) ?? ReadSega(bytes);
+        ReadNes(bytes) ?? ReadGameBoy(bytes) ?? ReadGameBoyAdvance(bytes) ?? ReadSega(bytes);
 
     /// <summary>The header as lines a person — or a search index — can read.</summary>
     public string Describe()
@@ -48,7 +49,11 @@ public sealed record RomHeader(
             text.AppendLine($"Graphics: {Kilobytes(GraphicsBytes)}");
         if (SaveRamBytes > 0)
             text.AppendLine($"Save memory: {Kilobytes(SaveRamBytes)}");
-        text.AppendLine(Battery ? "Saves: battery-backed" : "Saves: none");
+        // A Game Boy Advance cartridge says nothing about saving anywhere in its
+        // header — the hardware is worked out by looking for a marker in the program
+        // itself — so the honest thing is to leave the line out rather than guess.
+        if (Battery is { } battery)
+            text.AppendLine(battery ? "Saves: battery-backed" : "Saves: none");
         if (Region is { Length: > 0 })
             text.AppendLine($"Region: {Region}");
         return text.ToString();
@@ -181,6 +186,47 @@ public sealed record RomHeader(
             GameBoyBoard(cartridgeType), programBytes, 0, saveRam,
             GameBoyBattery(cartridgeType),
             bytes[0x14A] == 0 ? "Japan" : "Overseas");
+    }
+
+    // ---- Game Boy Advance --------------------------------------------------------
+
+    /// <summary>The two bytes mGBA itself checks: the ARM branch every cartridge starts
+    /// with, and the fixed byte at $B2. There is a 156-byte logo in between that the
+    /// hardware also verifies, but these two are what an emulator settles for and what
+    /// tells a renamed download apart from a picture of one.</summary>
+    private static RomHeader? ReadGameBoyAdvance(ReadOnlySpan<byte> bytes)
+    {
+        if (bytes.Length < 0xC0 || bytes[3] != 0xEA || bytes[0xB2] != 0x96)
+            return null;
+
+        var titleBytes = bytes.Slice(0xA0, 12);
+        var end = titleBytes.IndexOf((byte)0);
+        var title = Encoding.ASCII
+            .GetString(end < 0 ? titleBytes : titleBytes[..end])
+            .Trim();
+
+        var code = Encoding.ASCII.GetString(bytes.Slice(0xAC, 4)).Trim();
+        var maker = Encoding.ASCII.GetString(bytes.Slice(0xB0, 2)).Trim();
+
+        // The fourth letter of the game code is the region the cartridge was sold in.
+        var region = code.Length == 4
+            ? code[3] switch
+            {
+                'J' => "Japan",
+                'E' => "North America",
+                'P' => "Europe",
+                'D' => "Germany",
+                'F' => "France",
+                'I' => "Italy",
+                'S' => "Spain",
+                _ => null,
+            }
+            : null;
+
+        return new RomHeader(RomSystem.GameBoyAdvance, "Game Boy Advance",
+            title.Length == 0 ? null : title,
+            code.Length == 0 ? "Cartridge" : $"Game code {code}, maker {maker}",
+            bytes.Length, 0, 0, null, region);
     }
 
     // ---- Master System and Game Gear -------------------------------------------

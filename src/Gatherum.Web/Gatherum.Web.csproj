@@ -27,4 +27,20 @@
     <PackageReference Include="ModelContextProtocol.AspNetCore" Version="2.2.0" />
   </ItemGroup>
 
+  <!-- The vendored emulator core, staged into wwwroot so the browser fetches it from
+       this app's own origin and no deployment reaches anybody else's server to play a
+       game. It is produced by native/build-core.sh, which the Docker build runs in a
+       stage of its own; a working copy that has never run it simply has no Game Boy
+       Advance core, and those cartridges offer a download instead of a console. -->
+  <PropertyGroup>
+    <EmulatorCorePath>$(MSBuildThisFileDirectory)..\..\native\dist\mgba.wasm</EmulatorCorePath>
+  </PropertyGroup>
+
+  <Target Name="StageEmulatorCore" BeforeTargets="ResolveStaticWebAssetsInputs;AssignTargetPaths"
+          Condition="Exists('$(EmulatorCorePath)')">
+    <Copy SourceFiles="$(EmulatorCorePath)"
+          DestinationFolder="$(MSBuildThisFileDirectory)wwwroot\cores\"
+          SkipUnchangedFiles="true" />
+  </Target>
+
 </Project>

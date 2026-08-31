@@ -149,6 +149,18 @@ else
                         @onpointercancel="() => Release(GamepadButtons.Down)"
                         aria-label="Down"></button>
             </div>
+            @if (core.Buttons.LeftShoulder is { } leftShoulder
+                 && core.Buttons.RightShoulder is { } rightShoulder)
+            {
+                <div class="rom-shoulders">
+                    <button type="button" @onpointerdown="() => Hold(GamepadButtons.LeftShoulder)"
+                            @onpointerup="() => Release(GamepadButtons.LeftShoulder)"
+                            @onpointercancel="() => Release(GamepadButtons.LeftShoulder)">@leftShoulder</button>
+                    <button type="button" @onpointerdown="() => Hold(GamepadButtons.RightShoulder)"
+                            @onpointerup="() => Release(GamepadButtons.RightShoulder)"
+                            @onpointercancel="() => Release(GamepadButtons.RightShoulder)">@rightShoulder</button>
+                </div>
+            }
             <div class="rom-face">
                 <button type="button" class="round" @onpointerdown="() => Hold(GamepadButtons.B)"
                         @onpointerup="() => Release(GamepadButtons.B)"
@@ -182,6 +194,10 @@ else
             }@if (core.Buttons.Select is { } selectKey)
             {
                 <text> and <kbd>Shift</kbd> is @selectKey</text>
+            }@if (core.Buttons.LeftShoulder is { } leftKey
+                  && core.Buttons.RightShoulder is { } rightKey)
+            {
+                <text>; <kbd>Q</kbd> and <kbd>E</kbd> are @leftKey and @rightKey</text>
             }.
             @if (core.BatteryBacked)
             {
@@ -198,6 +214,10 @@ else
 
     private IEmulatorCore? core;
     private Guid loaded;
+
+    /// <summary>The cartridge whose save has been put back and whose first frame has
+    /// been painted, so that work happens once per cartridge rather than once ever.</summary>
+    private Guid restored;
     private string? failure;
     private bool running, started, sound = true;
 
@@ -268,7 +288,21 @@ else
             // The same spelling the server stores, so a room can refuse two people who
             // are not holding the same cartridge.
             romHash = Convert.ToHexStringLower(SHA256.HashData(rom));
-            core = Emulator.Load(rom, FileName);
+            if (Emulator.NeedsVendoredCore(rom, FileName))
+            {
+                // A core from elsewhere is fetched and instantiated rather than
+                // constructed, so the module has to be in hand before the first render.
+                module ??= await Js.InvokeAsync<IJSObjectReference>("import", "./js/gatherum.js");
+                directModule = module as IJSInProcessObjectReference;
+                core = await VendoredCore.CreateAsync(module, rom)
+                    ?? throw new NotSupportedException(
+                        "This Gatherum was built without a Game Boy Advance core, so " +
+                        "this cartridge can be downloaded but not played.");
+            }
+            else
+            {
+                core = Emulator.Load(rom, FileName);
+            }
             stateBuffer = new byte[core.SaveStateSize];
             pinnedFrame = GCHandle.Alloc(core.Frame, GCHandleType.Pinned);
             picture = new SKBitmap();
@@ -289,9 +323,12 @@ else
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (core is null || module is not null)
+        // Once per cartridge, not once per component: a second cartridge loaded into the
+        // same player has its own save to put back and its own first frame to paint.
+        if (core is null || restored == loaded)
             return;
-        module = await Js.InvokeAsync<IJSObjectReference>("import", "./js/gatherum.js");
+        restored = loaded;
+        module ??= await Js.InvokeAsync<IJSObjectReference>("import", "./js/gatherum.js");
         directModule = module as IJSInProcessObjectReference;
         if (core.BatteryBacked)
         {
@@ -680,6 +717,8 @@ else
         "x" or "X" => GamepadButtons.A,
         "Enter" => GamepadButtons.Start,
         "Shift" => GamepadButtons.Select,
+        "q" or "Q" => GamepadButtons.LeftShoulder,
+        "e" or "E" => GamepadButtons.RightShoulder,
         _ => null,
     };
 
@@ -692,7 +731,11 @@ else
         picture = null;
         if (pinnedFrame.IsAllocated)
             pinnedFrame.Free();
+        // A vendored core holds a cartridge inside its own WebAssembly heap and pins
+        // arrays on this side; letting go of the reference would leak both.
+        (core as IDisposable)?.Dispose();
         core = null;
+        restored = Guid.Empty;
     }
 
     public async ValueTask DisposeAsync()

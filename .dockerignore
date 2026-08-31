@@ -6,3 +6,9 @@
 data/
 tests/
 *.md
+
+# The vendored core's own build tree: its fetched source and a 360 MB toolchain. The
+# core stage builds these itself; sending them in the context would be pointless weight.
+native/build/
+native/dist/
+native/core-shim/target/

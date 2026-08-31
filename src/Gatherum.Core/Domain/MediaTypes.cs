@@ -17,6 +17,7 @@ public static class MediaTypes
     public const string GameBoyColorRom = "application/x-gameboy-color-rom";
     public const string MasterSystemRom = "application/x-sms-rom";
     public const string GameGearRom = "application/x-gamegear-rom";
+    public const string GameBoyAdvanceRom = "application/x-gba-rom";
 
     /// <summary>What a directory is, when it is only a place to keep things. A folder
     /// somebody made in their file manager is a node too.</summary>
@@ -44,6 +45,7 @@ public static class MediaTypes
         [".gbc"] = GameBoyColorRom,
         [".sms"] = MasterSystemRom,
         [".gg"] = GameGearRom,
+        [".gba"] = GameBoyAdvanceRom,
     };
 
     /// <summary>Extensions whose content is text even when the upload says otherwise —
@@ -88,11 +90,11 @@ public static class MediaTypes
     /// <summary>Whether this is a cartridge image the player can run.</summary>
     public static bool IsRom(string mediaType, string fileName) =>
         mediaType is NesRom or GameBoyRom or GameBoyColorRom
-            or MasterSystemRom or GameGearRom ||
+            or MasterSystemRom or GameGearRom or GameBoyAdvanceRom ||
         RomExtensions.Contains(Path.GetExtension(fileName));
 
     private static readonly HashSet<string> RomExtensions =
-        new(StringComparer.OrdinalIgnoreCase) { ".nes", ".gb", ".gbc", ".sms", ".gg" };
+        new(StringComparer.OrdinalIgnoreCase) { ".nes", ".gb", ".gbc", ".sms", ".gg", ".gba" };
 
     public static bool IsText(string mediaType, string fileName) =>
         mediaType.StartsWith("text/", StringComparison.OrdinalIgnoreCase) ||

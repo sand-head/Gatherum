@@ -265,7 +265,7 @@
     private static bool IsRom(FileFacts file) =>
         file.MediaType is "application/x-nes-rom" or "application/x-gameboy-rom"
             or "application/x-gameboy-color-rom" or "application/x-sms-rom"
-            or "application/x-gamegear-rom"
+            or "application/x-gamegear-rom" or "application/x-gba-rom"
         || RomExtensions.Any(extension =>
             file.FileName.EndsWith(extension, StringComparison.OrdinalIgnoreCase));
 
@@ -273,7 +273,7 @@
     /// project deliberately does not reference Core — it reaches the server only through
     /// `IAppData`. Adding a console means adding its extension in both places.</summary>
     private static readonly string[] RomExtensions =
-        [".nes", ".gb", ".gbc", ".sms", ".gg"];
+        [".nes", ".gb", ".gbc", ".sms", ".gg", ".gba"];
 
     private static string TranscriptLabel(string mediaType) =>
         mediaType.StartsWith("image/") ? "Text in the image" : "Transcript";

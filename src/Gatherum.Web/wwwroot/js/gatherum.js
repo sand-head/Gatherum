@@ -316,3 +316,217 @@ export function writeEmulatorSave(nodeId, base64) {
     // the download button is what gets it out.
   }
 }
+
+// ---- A vendored emulator core ----------------------------------------------------
+//
+// Some machines are too big to write from scratch, so their core is somebody else's,
+// compiled to WebAssembly and fetched at build time (see native/README.md). It is a
+// plain module with no glue of its own: everything it needs from a host is here, and
+// everything it offers is a function taking integers.
+//
+// Two heaps are in play — the core's and the .NET runtime's — and the frame has to
+// cross between them every sixteen milliseconds. Blazor hands out the address of a
+// pinned array and this copies into it directly, which is one memcpy rather than a
+// marshalled round trip.
+
+let core;
+
+/// The clock the core is allowed to see. It counts frames, not time: two people playing
+/// the same cartridge run the same frames from the same buttons, and a core that read a
+/// real clock would drift apart from its twin with nothing to show for it.
+let coreFrameClock = 0n;
+
+const NANOSECONDS_PER_FRAME = 16666667n;
+
+/// Every file the core asks for is not there. A browser has no filesystem to offer and
+/// does not need one: the cartridge is handed in from memory and the save comes back the
+/// same way. EBADF is the honest answer.
+const NO_FILE = 8;
+
+function coreHost() {
+  const bytes = () => new Uint8Array(core.memory.buffer);
+  const words = () => new DataView(core.memory.buffer);
+  return {
+    wasi_snapshot_preview1: {
+      clock_time_get: (_id, _precision, out) => {
+        words().setBigUint64(out, coreFrameClock, true);
+        return 0;
+      },
+      fd_close: () => NO_FILE,
+      fd_fdstat_get: () => NO_FILE,
+      fd_filestat_get: () => NO_FILE,
+      fd_filestat_set_size: () => NO_FILE,
+      fd_prestat_dir_name: () => NO_FILE,
+      fd_prestat_get: () => NO_FILE,
+      fd_read: () => NO_FILE,
+      fd_seek: () => NO_FILE,
+      fd_sync: () => NO_FILE,
+      fd_tell: () => NO_FILE,
+      // Anything the core prints goes to the console, where a person debugging it can
+      // find it; nothing else reads it.
+      fd_write: (fd, iovs, count, out) => {
+        let written = 0;
+        let text = "";
+        for (let i = 0; i < count; i++) {
+          const at = words().getUint32(iovs + i * 8, true);
+          const length = words().getUint32(iovs + i * 8 + 4, true);
+          text += new TextDecoder().decode(bytes().subarray(at, at + length));
+          written += length;
+        }
+        if (text.trim()) console.warn("emulator core:", text.trim());
+        words().setUint32(out, written, true);
+        return 0;
+      },
+      path_open: () => NO_FILE,
+      proc_exit: () => { throw new Error("The emulator core gave up."); },
+    },
+    // Two number-formatting helpers from the one source file of the core's that wants a
+    // POSIX locale. Nothing on the emulation path calls them.
+    env: {
+      ftostr_u: () => 0,
+      strtof_u: () => 0,
+    },
+  };
+}
+
+export async function loadEmulatorCore(url) {
+  if (core) return true;
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return false;
+    const source = await WebAssembly.instantiate(await response.arrayBuffer(), coreHost());
+    const exports = source.instance.exports;
+    core = { exports, memory: exports.memory };
+    exports._initialize?.();
+    exports.gatherum_boot();
+    return true;
+  } catch (error) {
+    console.warn("The emulator core would not load:", error);
+    core = undefined;
+    return false;
+  }
+}
+
+/// Hands the cartridge over. The core keeps the bytes rather than copying them, so they
+/// are allocated out of its own heap and freed when the game is unloaded.
+export function loadEmulatorCartridge(rom) {
+  if (!core) return null;
+  const address = core.exports.gatherum_alloc(rom.length);
+  if (!address) return null;
+  new Uint8Array(core.memory.buffer).set(rom, address);
+  if (!core.exports.gatherum_load(address, rom.length)) return null;
+
+  coreFrameClock = 0n;
+  core.exports.gatherum_run();
+  return {
+    width: core.exports.gatherum_frame_width(),
+    height: core.exports.gatherum_frame_height(),
+    fps: core.exports.gatherum_fps(),
+    sampleRate: core.exports.gatherum_sample_rate(),
+    stateSize: core.exports.gatherum_state_size(),
+    saveSize: core.exports.gatherum_sram_len(),
+  };
+}
+
+export function runEmulatorCore(first, second) {
+  if (!core) return;
+  core.exports.gatherum_set_buttons(0, first);
+  core.exports.gatherum_set_buttons(1, second);
+  coreFrameClock += NANOSECONDS_PER_FRAME;
+  core.exports.gatherum_run();
+}
+
+export function resetEmulatorCore() {
+  if (core) core.exports.gatherum_reset();
+}
+
+export function unloadEmulatorCartridge() {
+  if (core) core.exports.gatherum_unload();
+}
+
+/// The .NET heap, fetched fresh each time: it moves when the runtime grows it, and a
+/// view kept from last frame would be pointing at a buffer nobody owns any more.
+function dotnetHeap() {
+  const runtime = globalThis.getDotnetRuntime && globalThis.getDotnetRuntime(0);
+  return runtime && runtime.localHeapViewU8 && runtime.localHeapViewU8();
+}
+
+function copyOut(source, length, address) {
+  const heap = dotnetHeap();
+  if (!heap) return 0;
+  heap.set(new Uint8Array(core.memory.buffer, source, length), address);
+  return length;
+}
+
+export function readEmulatorCoreFrame(address, bytes) {
+  if (!core) return 0;
+  return copyOut(core.exports.gatherum_frame_ptr(), bytes, address);
+}
+
+export function readEmulatorCoreAudio(address, capacity) {
+  if (!core) return 0;
+  const values = Math.min(core.exports.gatherum_audio_len(), capacity);
+  if (values <= 0) return 0;
+  copyOut(core.exports.gatherum_audio_ptr(), values * 2, address);
+  return values;
+}
+
+export function saveEmulatorCoreState(address, bytes) {
+  if (!core) return false;
+  const scratch = core.exports.gatherum_alloc(bytes);
+  if (!scratch) return false;
+  const saved = core.exports.gatherum_state_save(scratch, bytes);
+  if (saved) copyOut(scratch, bytes, address);
+  core.exports.gatherum_free(scratch);
+  return saved;
+}
+
+export function loadEmulatorCoreState(address, bytes) {
+  if (!core) return false;
+  const scratch = core.exports.gatherum_alloc(bytes);
+  if (!scratch) return false;
+  const heap = dotnetHeap();
+  if (!heap) { core.exports.gatherum_free(scratch); return false; }
+  new Uint8Array(core.memory.buffer).set(heap.subarray(address, address + bytes), scratch);
+  const loaded = core.exports.gatherum_state_load(scratch, bytes);
+  core.exports.gatherum_free(scratch);
+  return loaded;
+}
+
+export function readEmulatorCoreSave(address) {
+  if (!core) return 0;
+  const length = core.exports.gatherum_sram_len();
+  const source = core.exports.gatherum_sram_ptr();
+  if (!length || !source) return 0;
+  return copyOut(source, length, address);
+}
+
+export function writeEmulatorCoreSave(address, bytes) {
+  if (!core) return false;
+  const length = core.exports.gatherum_sram_len();
+  const target = core.exports.gatherum_sram_ptr();
+  const heap = dotnetHeap();
+  if (!length || !target || !heap) return false;
+  const taken = Math.min(length, bytes);
+  new Uint8Array(core.memory.buffer).set(heap.subarray(address, address + taken), target);
+  return true;
+}
+
+/// A cheap fingerprint of the cartridge's battery memory, computed where the memory
+/// already lives. The player watches this to decide whether a save is worth writing, and
+/// copying 128 KB into .NET every second only to hash it would be the expensive way to
+/// answer a question that is usually "nothing changed".
+export function fingerprintEmulatorCoreSave() {
+  if (!core) return 0;
+  const length = core.exports.gatherum_sram_len();
+  const source = core.exports.gatherum_sram_ptr();
+  if (!length || !source) return 0;
+  const memory = new Uint8Array(core.memory.buffer, source, length);
+  let hash = 2166136261;
+  // Every byte of a megabyte-and-a-bit is more than this needs; a stride catches the
+  // writes a game actually makes without walking the whole array sixty times a minute.
+  for (let at = 0; at < length; at += 17) {
+    hash = Math.imul(hash ^ memory[at], 16777619);
+  }
+  return hash >>> 0;
+}

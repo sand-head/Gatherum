@@ -1,6 +1,8 @@
 # Status
 
-As of a third console — a Master System and the Game Gear that is the same machine in a
+As of a Game Boy Advance, which is the first console here whose emulator Gatherum did not
+write: mGBA, built to one glue-free WebAssembly module at image-build time and driven
+through the same seam as the rest. Before that: a third console — a Master System and the Game Gear that is the same machine in a
 smaller case, joining the Nintendo Entertainment System and the Game Boy. Before that:
 two people open the same cartridge and take a controller each, with nothing but a byte of
 buttons a frame crossing the network because both browsers are running the same

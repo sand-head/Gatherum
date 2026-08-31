@@ -14,7 +14,7 @@ search, one login, one API, plus an MCP server so agents are first-class users.
 C#/Blazor end to end — static shell with Interactive Auto islands for everything
 interactive: the first visit renders on a server circuit while the WASM runtime
 downloads, every later visit runs fully in WebAssembly over `/api` (the only JS is
-`wwwroot/js/gatherum.js`, ~150 lines, plus the pager script `EpubChapterHtml` injects
+`wwwroot/js/gatherum.js`, plus the pager script `EpubChapterHtml` injects
 into rendered EPUB chapters — see DECISIONS.md) — PostgreSQL, deployed as a single rootless
 Podman container behind a TLS-terminating reverse proxy with Authelia for OIDC.
 
@@ -312,6 +312,21 @@ second icon set, and don't hand-draw a path when the pack has one.
    `RomFixtures`, never a real game — a checked-in ROM is somebody's copyrighted work.
    A console that reports more than one player also needs the determinism tests in
    `EmulatorStateTests` pointed at it, or netplay on it is a coin toss.
+
+**Add a vendored console** (a machine too big to write from scratch):
+1. Read `native/README.md` first — it carries the licence table, and a core whose licence
+   does not fit AGPL-3.0 cannot be added whatever else is true of it.
+2. Pin it in `native/build-core.sh` and work out which of its sources want an operating
+   system underneath them. Link it against `core-shim` unchanged: the shim is not
+   specific to any core, and anything the built module imports beyond WASI is a source
+   file you meant to compile and did not.
+3. Answer its `clock_time_get` with a counter, never the time. Everything else the WASI
+   host in `gatherum.js` already covers.
+4. Teach `Emulator.Identify` its bytes and `NeedsVendoredCore` its kind, so the player
+   takes the async road; `MediaTypes` and `FileView.IsRom` as for any console.
+5. Report `PlayerCount => 1` unless you can hold the core to the determinism rule above.
+   Netplay is two machines that must agree frame for frame, and a vendored core's
+   determinism is somebody else's claim rather than this project's promise.
 
 **Add a text extractor**:
 1. Implement `ITextExtractor` in `src/Gatherum.Infrastructure/Extraction/` (cf.

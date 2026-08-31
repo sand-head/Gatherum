@@ -92,8 +92,8 @@ Pages, uploaded `.docx` documents, and any text file open in the editor.
   place: reopen the book on any device you're signed in on and it opens where you left
   off, and each reader keeps their own place. A visitor on a public book is never
   remembered by the server — their place is kept by their own browser instead, and
-  goes no further. A **game cartridge** — a `.nes`, `.gb`, `.gbc`, `.sms` or `.gg`
-  file — plays: see
+  goes no further. A **game cartridge** — a `.nes`, `.gb`, `.gbc`, `.sms`, `.gg` or
+  `.gba` file — plays: see
   [Playing a cartridge](#playing-a-cartridge) below. Anything else offers a download.
 
 Editing autosaves. Presence shows who else has the document open, and if someone saved
@@ -102,12 +102,14 @@ stays in history either way.
 
 ## Playing a cartridge
 
-Upload a `.nes`, `.gb`, `.gbc`, `.sms` or `.gg` file and its page has a console on it.
-Press **Play** and the game runs.
+Upload a `.nes`, `.gb`, `.gbc`, `.sms`, `.gg` or `.gba` file and its page has a console
+on it. Press **Play** and the game runs.
 
-The console is not a plug-in and not a download: the processor, the picture chip and the
-sound chip are all part of Gatherum, and they run in your browser. The cartridge is
-fetched once and nothing about the game leaves your machine afterwards.
+The console is not a plug-in and not a download. For most of these machines the
+processor, the picture chip and the sound chip are all part of Gatherum itself; the Game
+Boy Advance is big enough that its emulator is a well-known one from elsewhere, built
+into Gatherum when Gatherum was built. Either way it runs in your browser, the cartridge
+is fetched once, and nothing about the game leaves your machine afterwards.
 
 - **The controls** are the arrow keys, <kbd>Z</kbd> and <kbd>X</kbd> for the two face
   buttons, <kbd>Enter</kbd> and <kbd>Shift</kbd> for the other two. What those last two
@@ -149,9 +151,11 @@ playing the same game.
   simply reading.
 
 > [!NOTE]
-> The Game Boy and the Game Gear are one-player machines here. Two people on either meant
+> The Game Boy, the Game Gear and the Game Boy Advance are one-player machines here. Two people on either meant
 > two consoles and a cable between them, which is a second machine to emulate rather than
-> a second port to read — it is not built.
+> a second port to read — it is not built. Playing together also asks that both machines
+> agree frame for frame, and that is a promise Gatherum can only make about the consoles
+> it wrote itself.
 
 ### The consoles
 
@@ -161,12 +165,18 @@ playing the same game.
 | Game Boy and Game Boy Color | `.gb`, `.gbc` | One |
 | Master System | `.sms` | Two |
 | Game Gear | `.gg` | One |
+| Game Boy Advance | `.gba` | One |
 
 Gatherum knows the Nintendo Entertainment System's common cartridge boards (NROM, MMC1,
 UxROM, CNROM, MMC3, AxROM and a few others), the Game Boy's (none, MBC1, MBC2, MBC3 with
 its clock, and MBC5) and the Master System's (Sega's own paging hardware, and the cheaper
 board Codemasters built for their own games). A cartridge on a board it has not met says
 so by name instead of failing quietly.
+
+A Game Boy Advance cartridge is the one machine here whose emulator Gatherum did not
+write, so which games run well is that emulator's business rather than Gatherum's. Its
+header says nothing about whether the cartridge saves, so the file's details do not
+either — the console works it out when the game starts.
 
 A Master System cartridge carries no title, only the catalogue number Sega sold it under,
 so that is what search has to go on for one. A Game Gear plays in colour on a screen a
@@ -217,6 +227,7 @@ Two different tempos, and they never share a path.
 | Images | Embedded metadata |
 | `.nes`, `.gb`, `.gbc` | What the cartridge header says: the console, the title printed in it, the board, and whether it saves |
 | `.sms`, `.gg` | What Sega's header says: the console, the catalogue number the game was sold under, and the region |
+| `.gba` | The title and game code printed in the header, and the region its last letter names |
 
 **Analysis** asks a model, takes minutes, and runs on a background worker after the
 upload has already returned. It is off unless the instance's owner has configured

@@ -99,6 +99,24 @@ public static class RomFixtures
         return image;
     }
 
+    /// <summary>A Game Boy Advance cartridge: the ARM branch every one begins with, the
+    /// fixed byte the hardware checks, and a header naming the game. There is no program
+    /// in it — nothing here runs one, because the core that would is fetched at build
+    /// time rather than compiled into the tests.</summary>
+    public static byte[] GameBoyAdvance(string title = "TESTCART", string code = "TSTE")
+    {
+        var image = new byte[0x200];
+        image[3] = 0xEA;                          // b <start>
+        image[0xB2] = 0x96;                       // the byte a cartridge must carry
+        foreach (var (character, index) in title.Take(12).Select((c, i) => (c, i)))
+            image[0xA0 + index] = (byte)character;
+        foreach (var (character, index) in code.Take(4).Select((c, i) => (c, i)))
+            image[0xAC + index] = (byte)character;
+        image[0xB0] = (byte)'0';
+        image[0xB1] = (byte)'1';
+        return image;
+    }
+
     public static readonly byte[] NintendoLogo =
     [
         0xCE, 0xED, 0x66, 0x66, 0xCC, 0x0D, 0x00, 0x0B, 0x03, 0x73, 0x00, 0x83,

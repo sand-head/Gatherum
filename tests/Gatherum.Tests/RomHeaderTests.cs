@@ -165,4 +165,43 @@ public class RomHeaderTests
     {
         Assert.Null(RomHeader.Read(new byte[0x8000]));
     }
+
+    [Fact]
+    public void A_game_boy_advance_header_carries_a_title_and_a_game_code()
+    {
+        var header = RomHeader.Read(RomFixtures.GameBoyAdvance("METROID4", "AMTE"));
+        Assert.NotNull(header);
+        Assert.Equal(RomSystem.GameBoyAdvance, header.System);
+        Assert.Equal("Game Boy Advance", header.SystemName);
+        Assert.Equal("METROID4", header.Title);
+        Assert.Contains("AMTE", header.Cartridge);
+        // The fourth letter of the code is where the cartridge was sold.
+        Assert.Equal("North America", header.Region);
+    }
+
+    [Fact]
+    public void A_game_boy_advance_header_says_nothing_about_saving_so_neither_do_we()
+    {
+        // Nothing in the header declares a save chip: the hardware is worked out by
+        // looking for a marker in the program itself. Printing "Saves: none" would be
+        // a guess dressed up as a fact.
+        var header = RomHeader.Read(RomFixtures.GameBoyAdvance());
+        Assert.NotNull(header);
+        Assert.Null(header.Battery);
+        Assert.DoesNotContain("Saves:", header.Describe());
+    }
+
+    [Fact]
+    public void Something_that_is_not_a_cartridge_is_not_read_as_one()
+    {
+        // Both of the two bytes a Game Boy Advance cartridge is recognised by, and
+        // neither on its own.
+        var almost = RomFixtures.GameBoyAdvance();
+        almost[0xB2] = 0x00;
+        Assert.Null(RomHeader.Read(almost));
+
+        var alsoAlmost = RomFixtures.GameBoyAdvance();
+        alsoAlmost[3] = 0x00;
+        Assert.Null(RomHeader.Read(alsoAlmost));
+    }
 }

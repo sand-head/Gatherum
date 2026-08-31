@@ -120,13 +120,14 @@ public static class PlayProtocol
     [
         (byte)PlayMessage.Input, (byte)slot,
         (byte)frame, (byte)(frame >> 8), (byte)(frame >> 16), (byte)(frame >> 24),
-        (byte)buttons,
+        // Two bytes, not one: a console with shoulder buttons does not fit in eight bits.
+        (byte)buttons, (byte)((int)buttons >> 8),
     ];
 
     public static (int Slot, int Frame, GamepadButtons Buttons) ReadInput(ReadOnlySpan<byte> message) =>
-        message.Length < 7
+        message.Length < 8
             ? (0, -1, GamepadButtons.None)
-            : (message[1], ReadInt(message[2..]), (GamepadButtons)message[6]);
+            : (message[1], ReadInt(message[2..]), (GamepadButtons)(message[6] | message[7] << 8));
 
     public static byte[] Checksum(int slot, int frame, ulong hash)
     {

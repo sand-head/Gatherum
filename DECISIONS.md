@@ -2001,3 +2001,59 @@ Master System's was built out of, are not implemented: mode 4 is what the librar
 written for, and a handful of early cartridges that use mode 2 will draw wrongly rather
 than refuse. The FM sound board sold in Japan is not emulated either — a game that has an
 FM soundtrack plays its ordinary one.
+
+## A core from elsewhere, built at image time and wearing the same seam
+
+The consoles in `Gatherum.Client/Emulation` were written here because the alternative was
+vendoring somebody's minified JavaScript emulator, and the whole point of `gatherum.js`
+being short is that a person can read all the JavaScript in the app in one sitting. That
+argument holds for a NES. It does not hold for a Game Boy Advance: an accurate ARM7TDMI
+with the picture and sound hardware around it is not a weekend, and writing a worse one
+than mGBA to avoid a dependency would be pride rather than engineering.
+
+So the Game Boy Advance is mGBA — and the reason it can be is that **the thing vendored
+is not JavaScript**. mGBA compiles to a single WebAssembly module with no glue file: the
+rule that bends is only that `gatherum.js` grew by a WASI host, which is Gatherum's own
+code and readable as such. An Emscripten build would have shipped a JavaScript library
+and was never on the table.
+
+**The shim is Rust, and that was a preference rather than a finding.** Both were built
+and measured: identical frame times, the same sixteen imports, 2.6% more binary for Rust.
+The deciding argument was the owner's — code you like and can read in your own repository
+beats code that is marginally simpler to build — and it is a better criterion than binary
+size. What makes it work is `no_std`: the core brings wasi-libc with it, and Rust's own
+copy would be a second one. The shim exists at all because libretro is built out of
+function pointers and JavaScript cannot manufacture one, so a host written purely in JS
+cannot reach the end of `retro_init`.
+
+**Nothing is committed and nothing is fetched at run time.** `build-core.sh` pins mGBA by
+commit and the toolchain by hash, and the Dockerfile runs it in a stage of its own so the
+compiler never reaches the shipped image. That is the bargain `models/` already strikes.
+A working copy that has never run the script simply has no Game Boy Advance core, and
+those cartridges offer a download rather than a broken console — which is also what a
+deployment that would rather not carry one gets.
+
+Three things fell out of the work that were not obvious going in.
+
+**A wall clock is how a vendored core breaks netplay.** mGBA asks the host for
+`clock_time_get`. Answer honestly and two people playing the same cartridge drift apart
+with nothing on screen to say why. The host feeds it a counter that advances one frame per
+frame. It is written down in three places because it is the kind of thing that is
+forgotten exactly once.
+
+**A Game Boy Advance has ten buttons and the seam had eight.** `GamepadButtons` grew two
+shoulders and the netplay wire grew a byte to carry them. Leaving them out was tempting
+and would have made half the library unplayable.
+
+**A cartridge's header does not always know what the cartridge does.** Every other format
+here declares whether it saves; a GBA does not — the save hardware is found by scanning
+the program for a marker. `RomHeader.Battery` became a `bool?` so the answer can be "the
+format does not say" rather than a guess printed as a fact, and the console works it out
+at run time regardless.
+
+**What this is not.** `PlayerCount` is 1, and not because a Game Boy Advance had one
+controller port — it is because playing together rests on two machines being guaranteed
+to reach identical states, and that guarantee is the one thing a core from elsewhere
+cannot give. The C# consoles are held to it by `EmulatorStateTests`; mGBA is held to
+nothing here. Offering "play together" on a core nobody in this project can hold to that
+line would be selling a promise that belongs to somebody else.
