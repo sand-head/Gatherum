@@ -87,6 +87,13 @@ auto-login. Migrations: `dotnet ef migrations add <Name> -p src/Gatherum.Infrast
   `NodeLinks` (the padlock a link the reader may not follow wears) and `NodeUrl`. `IAppData` (`AppData.cs`) is their only view of the world —
   implemented by `ServerAppData` over the services on the server circuit and by
   `HttpAppData` over `/api` in WebAssembly.
+- `native/` — the second way a cartridge can play: an emulator somebody else wrote,
+  compiled to WebAssembly. `core-shim/` is Rust and is the only part that lives in the
+  repo — a `no_std` staticlib giving libretro's function-pointer interface a flat surface
+  JavaScript can call, because JavaScript cannot manufacture a wasm function pointer.
+  `build-core.sh` fetches the core at a pinned commit and builds it; what it fetches and
+  what it emits are both gitignored, the same bargain `models/` strikes. See
+  `native/README.md`, which also carries the licence table.
 - `tests/Gatherum.Tests` — unit tests plus `AppIntegrationTests` booting the real app.
 
 Render modes: static SSR for pages and layout; every interactive component is an
@@ -168,7 +175,10 @@ fresh DI scope via `Services/AppOperations`.
   console's cycles), no randomness, and nothing the player does *outside* the console in
   a save state. Draining audio is the trap: how often a browser asks for samples is its
   own business, so the sample queue is deliberately not serialized. `EmulatorStateTests`
-  holds the line, including a muted console that must still match an unmuted one.
+  holds the line, including a muted console that must still match an unmuted one. A
+  vendored core is held to the same rule from outside: mGBA asks the host for
+  `clock_time_get`, and the host answers with a counter that advances a frame at a time,
+  never the time — a core that reads a real clock desyncs quietly, minutes in.
 - The eight buttons are the same on every console; the printing on them is not. What a
   machine calls them is `ButtonLabels` on the core, and a `null` is a button it never
   had — the player leaves those off the pad rather than drawing one the hardware has no

@@ -1,0 +1,15 @@
+[package]
+name = "gatherum-core-shim"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+description = "A flat, host-friendly surface over a libretro core built for WebAssembly."
+
+[lib]
+name = "gatherum_core_shim"
+crate-type = ["staticlib"]
+
+[profile.release]
+opt-level = "s"
+panic = "abort"
+strip = true
