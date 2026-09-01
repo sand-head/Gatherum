@@ -93,11 +93,12 @@ public class RomHeaderTests
 
         // Four megabytes of cartridge, and the extractor only ever looks at the head
         // of it — a stream that refuses to be read past the header proves it. The head
-        // is the first bank, because Sega put their header at the end of one rather
-        // than at the start of the file.
+        // reaches the last place any of these machines hid one: Sega at the end of the
+        // first bank, a Super Nintendo at the end of the first 64 KB, plus the 512 bytes
+        // a copier may have written in front of everything.
         var image = RomFixtures.GameBoy([0x00], title: "METROID");
         Array.Resize(ref image, 4 * 1024 * 1024);
-        await using var stream = new HeaderOnlyStream(image, 0x8000);
+        await using var stream = new HeaderOnlyStream(image, 0x10200);
 
         var text = await extractor.ExtractAsync(stream, MediaTypes.GameBoyRom, "metroid.gb");
 
@@ -189,6 +190,63 @@ public class RomHeaderTests
         Assert.NotNull(header);
         Assert.Null(header.Battery);
         Assert.DoesNotContain("Saves:", header.Describe());
+    }
+
+    [Fact]
+    public void A_super_nintendo_header_is_found_at_whichever_end_of_a_bank_it_sits()
+    {
+        var low = RomHeader.Read(RomFixtures.SuperNintendo("ZELDA III"));
+        Assert.NotNull(low);
+        Assert.Equal(RomSystem.SuperNintendo, low.System);
+        Assert.Equal("Super Nintendo", low.SystemName);
+        Assert.Equal("ZELDA III", low.Title);
+        Assert.Equal("LoROM", low.Cartridge);
+
+        var high = RomHeader.Read(RomFixtures.SuperNintendo("ZELDA III", hiRom: true));
+        Assert.NotNull(high);
+        Assert.Equal("ZELDA III", high.Title);
+        Assert.Equal("HiROM", high.Cartridge);
+    }
+
+    [Fact]
+    public void A_super_nintendo_cartridge_says_whether_it_remembers_anything()
+    {
+        // Type 2 is RAM behind a battery, and the size byte is a power of two in
+        // kilobytes — so this one keeps eight.
+        var saves = RomHeader.Read(
+            RomFixtures.SuperNintendo(cartridgeType: 0x02, saveRamSize: 0x03));
+        Assert.NotNull(saves);
+        Assert.Equal(8 * 1024, saves.SaveRamBytes);
+        Assert.True(saves.Battery);
+
+        // RAM with nothing behind it forgets when the console is switched off.
+        var forgets = RomHeader.Read(
+            RomFixtures.SuperNintendo(cartridgeType: 0x01, saveRamSize: 0x03));
+        Assert.NotNull(forgets);
+        Assert.False(forgets.Battery);
+    }
+
+    [Fact]
+    public void A_second_processor_on_the_board_is_named()
+    {
+        var superFx = RomHeader.Read(RomFixtures.SuperNintendo(cartridgeType: 0x15));
+        Assert.NotNull(superFx);
+        Assert.Contains("Super FX", superFx.Cartridge);
+
+        // Nothing but ROM and RAM is not a coprocessor, whatever the nibble says.
+        var plain = RomHeader.Read(RomFixtures.SuperNintendo(cartridgeType: 0x02));
+        Assert.NotNull(plain);
+        Assert.Equal("LoROM", plain.Cartridge);
+    }
+
+    [Fact]
+    public void A_pile_of_bytes_with_no_checksum_in_it_is_not_a_super_nintendo_cartridge()
+    {
+        // The checksum beside its own complement is the whole of what makes the header
+        // findable, so breaking it has to be enough to lose it.
+        var broken = RomFixtures.SuperNintendo();
+        broken[0x7FDE] ^= 0xFF;
+        Assert.Null(RomHeader.Read(broken));
     }
 
     [Fact]

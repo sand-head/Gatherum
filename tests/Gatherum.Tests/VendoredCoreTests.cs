@@ -1,6 +1,7 @@
 using Gatherum.Client.Emulation;
 using Gatherum.Client.Emulation.Netplay;
 using Gatherum.Core.Domain;
+using Gatherum.Core.Roms;
 
 namespace Gatherum.Tests;
 
@@ -53,6 +54,33 @@ public class VendoredCoreTests
     }
 
     [Fact]
+    public void A_super_nintendo_cartridge_is_recognised_by_its_bytes()
+    {
+        Assert.Equal(ConsoleKind.SuperNintendo,
+            Emulator.Identify(RomFixtures.SuperNintendo(), "misnamed.bin"));
+        Assert.Equal(ConsoleKind.SuperNintendo,
+            Emulator.Identify(RomFixtures.SuperNintendo(hiRom: true), "misnamed.bin"));
+    }
+
+    [Fact]
+    public void The_512_bytes_a_copier_wrote_do_not_hide_the_header()
+    {
+        Assert.Equal(ConsoleKind.SuperNintendo,
+            Emulator.Identify(RomFixtures.SuperNintendo(copierHeader: true), "misnamed.bin"));
+        var header = RomHeader.Read(RomFixtures.SuperNintendo("DEMO", copierHeader: true));
+        Assert.NotNull(header);
+        Assert.Equal("DEMO", header.Title);
+    }
+
+    [Fact]
+    public void A_super_nintendo_cartridge_goes_to_a_core_from_elsewhere()
+    {
+        Assert.True(Emulator.NeedsVendoredCore(RomFixtures.SuperNintendo(), "game.sfc"));
+        Assert.True(MediaTypes.IsRom(MediaTypes.SuperNintendoRom, "game.sfc"));
+        Assert.Equal(MediaTypes.SuperNintendoRom, MediaTypes.Resolve(null, "game.smc"));
+    }
+
+    [Fact]
     public void The_two_shoulder_buttons_survive_the_wire()
     {
         // They live above the eighth bit, which is why netplay sends two bytes of
@@ -64,6 +92,18 @@ public class VendoredCoreTests
 
         Assert.Equal(1, slot);
         Assert.Equal(4242, frame);
+        Assert.Equal(pressed, buttons);
+    }
+
+    [Fact]
+    public void So_do_the_second_pair_of_face_buttons()
+    {
+        // X and Y live above the shoulders, at bits ten and eleven, which is what the
+        // second byte of a netplay input message is for.
+        var pressed = GamepadButtons.X | GamepadButtons.Y | GamepadButtons.RightShoulder;
+        var (_, _, buttons) = PlayProtocol.ReadInput(
+            PlayProtocol.Input(slot: 0, frame: 1, pressed));
+
         Assert.Equal(pressed, buttons);
     }
 }

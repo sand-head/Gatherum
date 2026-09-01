@@ -4,10 +4,6 @@ using Gatherum.Client.Emulation.Sega;
 
 namespace Gatherum.Client.Emulation;
 
-/// <summary>Which console a file is for. The bytes are asked before the name is: a ROM
-/// that has been renamed, or downloaded with whatever extension a server felt like, is
-/// still perfectly playable — and a `.gb` that is really something else should fail
-/// with a sentence rather than a stack trace.</summary>
 /// <summary>Which machine a cartridge image is for.</summary>
 public enum ConsoleKind
 {
@@ -16,6 +12,7 @@ public enum ConsoleKind
     MasterSystem,
     GameGear,
     GameBoyAdvance,
+    SuperNintendo,
 }
 
 public static class Emulator
@@ -34,6 +31,8 @@ public static class Emulator
             return ConsoleKind.GameBoyAdvance;
         if (SegaRegion(rom) is { } region)
             return region >= 5 ? ConsoleKind.GameGear : ConsoleKind.MasterSystem;
+        if (LooksLikeSuperNintendo(rom))
+            return ConsoleKind.SuperNintendo;
 
         // Nothing declared itself, so the name gets the last word.
         return Path.GetExtension(fileName).ToLowerInvariant() switch
@@ -43,6 +42,7 @@ public static class Emulator
             ".sms" => ConsoleKind.MasterSystem,
             ".gg" => ConsoleKind.GameGear,
             ".gba" => ConsoleKind.GameBoyAdvance,
+            ".sfc" or ".smc" => ConsoleKind.SuperNintendo,
             _ => null,
         };
     }
@@ -51,7 +51,7 @@ public static class Emulator
     /// fetched and instantiated rather than constructed, which cannot happen inside a
     /// synchronous call — so the player asks this first and takes the other road.</summary>
     public static bool NeedsVendoredCore(ReadOnlySpan<byte> rom, string fileName) =>
-        Identify(rom, fileName) == ConsoleKind.GameBoyAdvance;
+        Identify(rom, fileName) is { } kind && VendoredCore.Handles(kind);
 
     /// <summary>Builds one of the consoles written in C#. A cartridge for a machine that
     /// needs a vendored core does not come through here.</summary>
@@ -62,14 +62,41 @@ public static class Emulator
             ConsoleKind.GameBoy => new GameBoyConsole(rom),
             ConsoleKind.MasterSystem => new MasterSystem(rom, gameGear: false),
             ConsoleKind.GameGear => new MasterSystem(rom, gameGear: true),
-            ConsoleKind.GameBoyAdvance => throw new NotSupportedException(
-                "A Game Boy Advance cartridge plays on a core this build did not fetch. " +
-                "See native/README.md."),
+            ConsoleKind.GameBoyAdvance or ConsoleKind.SuperNintendo =>
+                throw new NotSupportedException(
+                    "This cartridge plays on a core this build did not fetch. " +
+                    "See native/README.md."),
             _ => throw new NotSupportedException(
                 "This does not look like a cartridge image the player knows: it plays " +
                 "Nintendo Entertainment System (.nes), Game Boy (.gb, .gbc), " +
-                "Game Boy Advance (.gba), Master System (.sms) and Game Gear (.gg) files."),
+                "Game Boy Advance (.gba), Super Nintendo (.sfc, .smc), " +
+                "Master System (.sms) and Game Gear (.gg) files."),
         };
+
+    /// <summary>The Super Nintendo is the one machine here that stamped nothing at a
+    /// fixed place. Its header sits at the end of a bank — which bank depending on how the
+    /// cartridge was wired — and the sixteen bits at its end are a checksum beside its own
+    /// complement, which is what makes it findable at all. A copier header, the 512 bytes
+    /// some dumps carry in front, is the only reason a cartridge image is not a whole
+    /// number of kilobytes.
+    ///
+    /// <para>Spelled here as well as in Core's RomHeader because this project does not
+    /// reference that one, and a cartridge the player cannot name is a download link.</para></summary>
+    private static bool LooksLikeSuperNintendo(ReadOnlySpan<byte> rom)
+    {
+        var image = rom.Length % 1024 == 512 ? rom[512..] : rom;
+        foreach (var at in (ReadOnlySpan<int>)[0x7FC0, 0xFFC0])
+        {
+            if (image.Length < at + 32)
+                continue;
+            var header = image.Slice(at, 32);
+            var complement = header[28] | header[29] << 8;
+            var checksum = header[30] | header[31] << 8;
+            if (checksum != 0 && (checksum ^ complement) == 0xFFFF)
+                return true;
+        }
+        return false;
+    }
 
     private static bool LooksLikeNes(ReadOnlySpan<byte> rom) =>
         rom.Length >= 16 && rom[0] == 'N' && rom[1] == 'E' && rom[2] == 'S' && rom[3] == 0x1A;

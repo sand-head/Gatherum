@@ -2,8 +2,9 @@ namespace Gatherum.Client.Emulation;
 
 /// <summary>Every button any of these machines has. The first eight are the ones they
 /// all share — a NES pad and a Game Boy pad differ in their plastic, not their bits —
-/// and the two shoulders were added when a console arrived that had them. A core simply
-/// ignores the bits its hardware never had.</summary>
+/// and the rest were added as consoles arrived that had them: two shoulders, then the
+/// second pair of face buttons that turned a Super Nintendo's two into a diamond of
+/// four. A core simply ignores the bits its hardware never had.</summary>
 [Flags]
 public enum GamepadButtons
 {
@@ -18,19 +19,23 @@ public enum GamepadButtons
     Right = 128,
     LeftShoulder = 256,
     RightShoulder = 512,
+    X = 1024,
+    Y = 2048,
 }
 
-/// <summary>What a machine's plastic calls the eight bits above. The buttons are the
-/// same everywhere; the printing on them is not, and a Master System that told you to
-/// press Start would be naming a button its pad does not have. A label of null is a
-/// button the machine never had at all, and the player leaves it off the pad.</summary>
+/// <summary>What a machine's plastic calls the bits above. The buttons are the same
+/// everywhere; the printing on them is not, and a Master System that told you to press
+/// Start would be naming a button its pad does not have. A label of null is a button the
+/// machine never had at all, and the player leaves it off the pad.</summary>
 public readonly record struct ButtonLabels(
     string A,
     string B,
     string? Start,
     string? Select,
     string? LeftShoulder = null,
-    string? RightShoulder = null);
+    string? RightShoulder = null,
+    string? X = null,
+    string? Y = null);
 
 /// <summary>A console, running. The player component owns the clock — it decides when a
 /// frame is due, because only the browser knows when the display will take one — and a

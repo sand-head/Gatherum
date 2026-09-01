@@ -13,15 +13,48 @@ namespace Gatherum.Client.Emulation;
 /// millisecond and is the reason this is worth doing at all rather than marshalling
 /// pixels through the runtime.</para>
 ///
-/// <para>Unlike the cores in this project, this one is a claim rather than a promise:
-/// its determinism, its accuracy and its bugs are somebody else's. That is why it reports
-/// a single player — playing together needs two machines that are guaranteed to agree,
-/// and a guarantee is exactly what a vendored core cannot give.</para></summary>
+/// <para>Unlike the cores in this project, a vendored one is a claim rather than a
+/// promise: its determinism, its accuracy and its bugs are somebody else's. So a
+/// descriptor says how many players a core is trusted with, and the answer is one until
+/// somebody has <em>measured</em> otherwise — two copies of it, the same cartridge, the
+/// same buttons, byte-identical states. bsnes has been measured and mGBA has not, which
+/// is the whole of why one of them plays together and the other does not.</para></summary>
 public sealed class VendoredCore : IEmulatorCore, IDisposable
 {
-    /// <summary>Where the built module is served from. It is the app's own origin, so no
-    /// deployment reaches anybody else's server to play a game.</summary>
-    public const string ModuleUrl = "/cores/mgba.wasm";
+    /// <summary>What it takes to play one machine on somebody else's core: where the
+    /// module is served from — the app's own origin, so no deployment reaches anybody
+    /// else's server to play a game — what the cartridge file has to be called for a core
+    /// that opens it itself, what the pad is printed with, how many can play, and
+    /// anything the core must be told before it powers on.</summary>
+    private sealed record Machine(
+        string SystemName,
+        string ModuleUrl,
+        string Extension,
+        ButtonLabels Buttons,
+        int PlayerCount,
+        string[] Settings);
+
+    private static readonly Dictionary<ConsoleKind, Machine> Machines = new()
+    {
+        [ConsoleKind.GameBoyAdvance] = new(
+            "Game Boy Advance", "/cores/mgba.wasm", ".gba",
+            new("A", "B", "Start", "Select", "L", "R"),
+            // A Game Boy Advance played with somebody else meant a second console and a
+            // cable. Nobody has held this core to the seam's promise that two copies of
+            // it agree frame for frame, so it is not asked to keep it.
+            PlayerCount: 1, Settings: []),
+
+        [ConsoleKind.SuperNintendo] = new(
+            "Super Nintendo", "/cores/bsnes.mjs", ".sfc",
+            new("A", "B", "Start", "Select", "L", "R", X: "X", Y: "Y"),
+            // Two, and measured rather than assumed: two of these run six hundred frames
+            // of scripted two-player input and come out byte for byte the same.
+            PlayerCount: 2,
+            // The one setting that is not taste. bsnes fills memory with noise at
+            // power-on, faithfully to the hardware and fatally for two people whose
+            // consoles have to start life identical.
+            Settings: ["bsnes_entropy", "None"]),
+    };
 
     /// <summary>How often the cartridge's battery memory is checked for changes. Every
     /// frame would be a hash of a hundred kilobytes sixty times a second to answer a
@@ -43,10 +76,12 @@ public sealed class VendoredCore : IEmulatorCore, IDisposable
     private int framesSinceSaveCheck;
     private bool disposed;
 
-    private VendoredCore(IJSInProcessObjectReference js, CartridgeFacts facts)
+    private VendoredCore(IJSInProcessObjectReference js, Machine machine, CartridgeFacts facts)
     {
         this.js = js;
-        SystemName = "Game Boy Advance";
+        SystemName = machine.SystemName;
+        Buttons = machine.Buttons;
+        PlayerCount = machine.PlayerCount;
         Width = facts.Width;
         Height = facts.Height;
         FramesPerSecond = facts.Fps;
@@ -64,21 +99,27 @@ public sealed class VendoredCore : IEmulatorCore, IDisposable
         saveFingerprint = Fingerprint();
     }
 
+    /// <summary>Whether this machine plays on a core from elsewhere.</summary>
+    public static bool Handles(ConsoleKind kind) => Machines.ContainsKey(kind);
+
     /// <summary>Fetches the core if it is not already here, hands it the cartridge, and
     /// returns null when either fails — a deployment that did not build one is a player
     /// that offers a download, not a page that breaks.</summary>
-    public static async Task<VendoredCore?> CreateAsync(IJSObjectReference module, byte[] rom)
+    public static async Task<VendoredCore?> CreateAsync(
+        IJSObjectReference module, ConsoleKind kind, byte[] rom)
     {
         if (module is not IJSInProcessObjectReference js)
             return null;
-        if (!await module.InvokeAsync<bool>("loadEmulatorCore", ModuleUrl))
+        if (!Machines.TryGetValue(kind, out var machine))
+            return null;
+        if (!await module.InvokeAsync<bool>("loadEmulatorCore", machine.ModuleUrl, machine.Settings))
             return null;
 
-        var facts = js.Invoke<CartridgeFacts?>("loadEmulatorCartridge", rom);
+        var facts = js.Invoke<CartridgeFacts?>("loadEmulatorCartridge", rom, machine.Extension);
         if (facts is null || facts.Width <= 0 || facts.Height <= 0)
             return null;
 
-        var core = new VendoredCore(js, facts);
+        var core = new VendoredCore(js, machine, facts);
         // Prove the picture can actually cross between the two heaps before handing the
         // core back. If it cannot, the player would otherwise run a game nobody could
         // see — a frozen screen with nothing to say why.
@@ -97,12 +138,11 @@ public sealed class VendoredCore : IEmulatorCore, IDisposable
     /// <summary>libretro hands sound over interleaved, always in pairs.</summary>
     public int AudioChannels => 2;
 
-    /// <summary>One. A Game Boy Advance played with somebody else meant a second console
-    /// and a cable, and the seam's promise of two machines that agree frame for frame is
-    /// not one this core can be held to.</summary>
-    public int PlayerCount => 1;
+    /// <summary>How many can play, which is the descriptor's answer rather than this
+    /// class's: see the note on <see cref="Machines"/>.</summary>
+    public int PlayerCount { get; }
 
-    public ButtonLabels Buttons => new("A", "B", "Start", "Select", "L", "R");
+    public ButtonLabels Buttons { get; }
 
     public uint[] Frame { get; }
 
@@ -151,6 +191,7 @@ public sealed class VendoredCore : IEmulatorCore, IDisposable
     {
         var mask = 0;
         if (pressed.HasFlag(GamepadButtons.B)) mask |= 1 << 0;
+        if (pressed.HasFlag(GamepadButtons.Y)) mask |= 1 << 1;
         if (pressed.HasFlag(GamepadButtons.Select)) mask |= 1 << 2;
         if (pressed.HasFlag(GamepadButtons.Start)) mask |= 1 << 3;
         if (pressed.HasFlag(GamepadButtons.Up)) mask |= 1 << 4;
@@ -158,6 +199,7 @@ public sealed class VendoredCore : IEmulatorCore, IDisposable
         if (pressed.HasFlag(GamepadButtons.Left)) mask |= 1 << 6;
         if (pressed.HasFlag(GamepadButtons.Right)) mask |= 1 << 7;
         if (pressed.HasFlag(GamepadButtons.A)) mask |= 1 << 8;
+        if (pressed.HasFlag(GamepadButtons.X)) mask |= 1 << 9;
         if (pressed.HasFlag(GamepadButtons.LeftShoulder)) mask |= 1 << 10;
         if (pressed.HasFlag(GamepadButtons.RightShoulder)) mask |= 1 << 11;
         return mask;

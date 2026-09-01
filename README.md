@@ -44,18 +44,18 @@ page-turner.
   (plain text/markdown/code verbatim, PDF via PdfPig, docx as its Markdown rendering,
   EPUB chapters in reading order, cartridge headers, image metadata) feeds search — and see **Multimedia** below for what a model adds to
   that on top.
-- **Cartridges play**: upload a `.nes`, `.gb`, `.gbc`, `.sms`, `.gg` or `.gba` and its
-  page has a console on it — Nintendo Entertainment System, Game Boy and Game Boy Color,
-  Master System, Game Gear and Game Boy Advance — with keyboard or on-screen pad, sound,
-  and battery saves kept by your own browser with a `.sav` download to take them
-  anywhere. The first four emulators are C# in the app; the Game Boy Advance is mGBA,
-  built to WebAssembly at image-build time with no JavaScript glue (see
-  `native/README.md`). Both run in WebAssembly in your browser, and nothing about the
-  game leaves your machine. **Two people can play one cartridge** on the
-  machines that had two ports for it: whoever else can see the page takes the second
-  controller, and because both browsers run the same deterministic console, all that
-  crosses the network is a byte of buttons a frame — the server passes them along and
-  never learns what any of them do.
+- **Cartridges play**: upload a `.nes`, `.gb`, `.gbc`, `.sms`, `.gg`, `.gba`, `.sfc` or
+  `.smc` and its page has a console on it — Nintendo Entertainment System, Game Boy and
+  Game Boy Color, Master System, Game Gear, Game Boy Advance and Super Nintendo — with
+  keyboard or on-screen pad, sound, and battery saves kept by your own browser with a
+  `.sav` download to take them anywhere. The first four emulators are C# in the app; the
+  Game Boy Advance is mGBA and the Super Nintendo is bsnes, both built to WebAssembly at
+  image-build time from pinned sources (see `native/README.md`). All of them run in
+  WebAssembly in your browser, and nothing about the game leaves your machine. **Two
+  people can play one cartridge** on the machines that had two ports for it: whoever else
+  can see the page takes the second controller, and because both browsers run the same
+  deterministic console, all that crosses the network is two bytes of buttons a frame —
+  the server passes them along and never learns what any of them do.
 - **Bookmarks**: paste a URL and Gatherum keeps the page the way an archive would —
   fetched once, on request, never on a schedule. A headless Chromium (in the container
   image) loads the page, its scripts run and settle, lazy-loaded images are scrolled

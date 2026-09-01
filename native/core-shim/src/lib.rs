@@ -71,6 +71,54 @@ static AUDIO: Shared<[i16; AUDIO_CAPACITY]> = Shared::new([0; AUDIO_CAPACITY]);
 static AUDIO_LEN: Shared<usize> = Shared::new(0);
 static BUTTONS: Shared<[u16; 4]> = Shared::new([0; 4]);
 
+/// Answers parked where a second call can fetch them.
+///
+/// A core whose chips are coroutines — bsnes runs its processor, sound and picture as
+/// separate threads — may switch fibers while working out an answer. Where those fibers
+/// are the browser's, switching unwinds the stack out to JavaScript and rewinds it back,
+/// and **the return value does not survive the trip**: the call completes, every side
+/// effect happens, and the caller is handed a zero. Anything that can switch therefore
+/// writes its answer down here, and a separate call that cannot switch reads it.
+static STATE_SIZE: Shared<usize> = Shared::new(0);
+static STATE_OK: Shared<bool> = Shared::new(false);
+
+/// The settings the host has chosen, as pointers to strings the host keeps alive.
+///
+/// Most of a core's options are taste — which filter, how loud. A few are not: bsnes
+/// fills memory with noise at power-on unless told otherwise, which is faithful to the
+/// hardware and fatal to two people playing together, because their consoles would start
+/// life different. A host that wants machines that agree has to say so.
+static OPTIONS: Shared<[(*const u8, *const u8); MAX_OPTIONS]> =
+    Shared::new([(core::ptr::null(), core::ptr::null()); MAX_OPTIONS]);
+static OPTION_COUNT: Shared<usize> = Shared::new(0);
+
+/// A libretro variable, whose value the host fills in.
+#[repr(C)]
+struct Variable {
+    key: *const u8,
+    value: *const u8,
+}
+
+/// Compares two NUL-terminated strings. There is no `str` here to lean on: the pointers
+/// come from C on one side and JavaScript on the other.
+unsafe fn same_text(left: *const u8, right: *const u8) -> bool {
+    if left.is_null() || right.is_null() {
+        return false;
+    }
+    let mut at = 0;
+    loop {
+        let a = *left.add(at);
+        let b = *right.add(at);
+        if a != b {
+            return false;
+        }
+        if a == 0 {
+            return true;
+        }
+        at += 1;
+    }
+}
+
 /// The packed picture handed to the host: one opaque 0xAARRGGBB pixel per element, rows
 /// tight against each other. A core draws into a buffer of its own choosing, padded to
 /// whatever stride suited it, so somebody has to repack — and doing it here costs a copy
@@ -85,7 +133,13 @@ static ROM: Shared<*mut c_void> = Shared::new(core::ptr::null_mut());
 // ---- the core we are compiled against -------------------------------------------
 
 const SET_PIXEL_FORMAT: c_uint = 10;
+const GET_VARIABLE: c_uint = 15;
 const PIXEL_FORMAT_XRGB8888: c_uint = 1;
+
+/// How many settings a host may hand a core. Cores have dozens; the ones that need
+/// answering here are the few that change what the machine *does* rather than how it
+/// looks.
+const MAX_OPTIONS: usize = 16;
 const MEMORY_SAVE_RAM: c_uint = 0;
 
 type Environment = unsafe extern "C" fn(c_uint, *mut c_void) -> bool;
@@ -101,6 +155,18 @@ struct GameInfo {
     data: *const c_void,
     size: usize,
     meta: *const u8,
+}
+
+/// What a core says about itself before anything is loaded. The field that matters here
+/// is the last one: some cores read the cartridge out of memory, and others insist on
+/// opening a file for themselves.
+#[repr(C)]
+struct SystemInfo {
+    library_name: *const u8,
+    library_version: *const u8,
+    valid_extensions: *const u8,
+    need_fullpath: bool,
+    block_extract: bool,
 }
 
 #[repr(C)]
@@ -137,6 +203,7 @@ extern "C" {
     fn retro_load_game(game: *const GameInfo) -> bool;
     fn retro_unload_game();
     fn retro_get_system_av_info(info: *mut AvInfo);
+    fn retro_get_system_info(info: *mut SystemInfo);
     fn retro_serialize_size() -> usize;
     fn retro_serialize(data: *mut c_void, size: usize) -> bool;
     fn retro_unserialize(data: *const c_void, size: usize) -> bool;
@@ -155,10 +222,24 @@ extern "C" {
 /// layout the packing below knows how to read — a core told yes to a format nobody
 /// agreed on would draw a picture that looked almost right.
 unsafe extern "C" fn on_environment(command: c_uint, data: *mut c_void) -> bool {
-    if command != SET_PIXEL_FORMAT || data.is_null() {
+    if data.is_null() {
         return false;
     }
-    *(data as *const c_uint) == PIXEL_FORMAT_XRGB8888
+    match command {
+        SET_PIXEL_FORMAT => *(data as *const c_uint) == PIXEL_FORMAT_XRGB8888,
+        GET_VARIABLE => {
+            let asked = &mut *(data as *mut Variable);
+            let options = OPTIONS.get();
+            for (key, value) in options.iter().take(*OPTION_COUNT.get()) {
+                if same_text(*key, asked.key) {
+                    asked.value = *value;
+                    return true;
+                }
+            }
+            false
+        }
+        _ => false,
+    }
 }
 
 unsafe extern "C" fn on_video(data: *const c_void, width: c_uint, height: c_uint, pitch: usize) {
@@ -205,6 +286,21 @@ unsafe extern "C" fn on_input_state(
 
 // ---- the surface the host calls -------------------------------------------------
 
+/// Records a setting for the core to find when it asks. Both strings belong to the host
+/// and must outlive the core. Call before <c>gatherum_boot</c>: a core reads most of its
+/// options once, on the way up.
+#[no_mangle]
+pub extern "C" fn gatherum_set_option(key: *const u8, value: *const u8) {
+    unsafe {
+        let count = OPTION_COUNT.get();
+        if *count >= MAX_OPTIONS {
+            return;
+        }
+        OPTIONS.get()[*count] = (key, value);
+        *count += 1;
+    }
+}
+
 /// Hands the core its six callbacks and starts it. Must happen before anything else.
 #[no_mangle]
 pub extern "C" fn gatherum_boot() {
@@ -229,6 +325,41 @@ pub extern "C" fn gatherum_alloc(bytes: usize) -> *mut u8 {
 #[no_mangle]
 pub extern "C" fn gatherum_free(pointer: *mut u8) {
     unsafe { free(pointer as *mut c_void) }
+}
+
+/// Whether this core insists on opening the cartridge itself rather than being handed
+/// the bytes. bsnes is one such: it reads the path and ignores the buffer entirely, and
+/// reports success either way — so a host that guesses wrong gets a console that loaded
+/// nothing and says nothing.
+#[no_mangle]
+pub extern "C" fn gatherum_needs_path() -> bool {
+    unsafe {
+        let mut info = SystemInfo {
+            library_name: core::ptr::null(),
+            library_version: core::ptr::null(),
+            valid_extensions: core::ptr::null(),
+            need_fullpath: false,
+            block_extract: false,
+        };
+        retro_get_system_info(&mut info);
+        info.need_fullpath
+    }
+}
+
+/// For a core that wants a path: the host has already put the cartridge somewhere the
+/// core can open it, and hands over the name it filed it under.
+#[no_mangle]
+pub extern "C" fn gatherum_load_path(path: *const u8) -> bool {
+    unsafe {
+        gatherum_unload();
+        let info = GameInfo {
+            path,
+            data: core::ptr::null(),
+            size: 0,
+            meta: core::ptr::null(),
+        };
+        retro_load_game(&info)
+    }
 }
 
 /// Takes ownership of the cartridge bytes: libretro does not promise to copy what it is
@@ -376,19 +507,40 @@ pub extern "C" fn gatherum_sample_rate() -> f64 {
 
 // ---- state, and the memory a battery would have kept -----------------------------
 
+/// Works out what a state costs and parks the answer. Returns nothing on purpose: the
+/// fiber swap this may go through would lose it.
+#[no_mangle]
+pub extern "C" fn gatherum_measure_state() {
+    unsafe {
+        *STATE_SIZE.get() = retro_serialize_size();
+    }
+}
+
+/// What the last measurement found. Touches nothing that can switch a fiber, so it can
+/// be trusted to answer.
 #[no_mangle]
 pub extern "C" fn gatherum_state_size() -> usize {
-    unsafe { retro_serialize_size() }
+    unsafe { *STATE_SIZE.get() }
 }
 
 #[no_mangle]
-pub extern "C" fn gatherum_state_save(data: *mut u8, bytes: usize) -> bool {
-    unsafe { retro_serialize(data as *mut c_void, bytes) }
+pub extern "C" fn gatherum_state_save(data: *mut u8, bytes: usize) {
+    unsafe {
+        *STATE_OK.get() = retro_serialize(data as *mut c_void, bytes);
+    }
 }
 
 #[no_mangle]
-pub extern "C" fn gatherum_state_load(data: *const u8, bytes: usize) -> bool {
-    unsafe { retro_unserialize(data as *const c_void, bytes) }
+pub extern "C" fn gatherum_state_load(data: *const u8, bytes: usize) {
+    unsafe {
+        *STATE_OK.get() = retro_unserialize(data as *const c_void, bytes);
+    }
+}
+
+/// Whether the last save or load actually worked.
+#[no_mangle]
+pub extern "C" fn gatherum_state_ok() -> bool {
+    unsafe { *STATE_OK.get() }
 }
 
 #[no_mangle]

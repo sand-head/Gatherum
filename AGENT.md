@@ -88,12 +88,15 @@ auto-login. Migrations: `dotnet ef migrations add <Name> -p src/Gatherum.Infrast
   implemented by `ServerAppData` over the services on the server circuit and by
   `HttpAppData` over `/api` in WebAssembly.
 - `native/` — the second way a cartridge can play: an emulator somebody else wrote,
-  compiled to WebAssembly. `core-shim/` is Rust and is the only part that lives in the
+  compiled to WebAssembly. `core-shim/` is Rust and is nearly all of what lives in the
   repo — a `no_std` staticlib giving libretro's function-pointer interface a flat surface
-  JavaScript can call, because JavaScript cannot manufacture a wasm function pointer.
-  `build-core.sh` fetches the core at a pinned commit and builds it; what it fetches and
-  what it emits are both gitignored, the same bargain `models/` strikes. See
-  `native/README.md`, which also carries the licence table.
+  JavaScript can call, because JavaScript cannot manufacture a wasm function pointer, and
+  the same one links both cores unchanged (`bsnes-support/libco-extras.c` is the small
+  exception, three functions bsnes's Emscripten backend leaves out). `build-core.sh`
+  fetches each core at a pinned commit and builds it — mGBA against WASI, bsnes against
+  Emscripten, because a core built out of coroutines and exceptions cannot use the first;
+  what it fetches and what it emits are both gitignored, the same bargain `models/`
+  strikes. See `native/README.md`, which also carries the licence table.
 - `tests/Gatherum.Tests` — unit tests plus `AppIntegrationTests` booting the real app.
 
 Render modes: static SSR for pages and layout; every interactive component is an
@@ -179,10 +182,12 @@ fresh DI scope via `Services/AppOperations`.
   vendored core is held to the same rule from outside: mGBA asks the host for
   `clock_time_get`, and the host answers with a counter that advances a frame at a time,
   never the time — a core that reads a real clock desyncs quietly, minutes in.
-- The eight buttons are the same on every console; the printing on them is not. What a
-  machine calls them is `ButtonLabels` on the core, and a `null` is a button it never
-  had — the player leaves those off the pad rather than drawing one the hardware has no
-  wire for.
+- The buttons are the same on every console; the printing on them is not. Eight are
+  shared, and the four above them — two shoulders, then the second pair of face buttons —
+  arrived with the machines that had them. What a machine calls each is `ButtonLabels` on
+  the core, and a `null` is a button it never had: the player leaves those off the pad
+  rather than drawing one the hardware has no wire for. A button that lives above the
+  eighth bit is why a netplay input message carries two bytes of buttons.
 - The netplay server relays and understands nothing. It stamps which seat a message came
   from — a client says what it pressed, never who pressed it — and forwards it. How many
   seats a room has is the console's answer, not the server's. Don't teach it the game.
@@ -227,10 +232,13 @@ fresh DI scope via `Services/AppOperations`.
   API endpoint is authenticated unless it says `.AllowAnonymous()`, and no write ever does.
 - `INodeAuthorizer.VisibleTo` is the only door for visibility. Never spell the rule again
   in a query — widening the seam is what makes a change correct everywhere at once.
-- No JavaScript beyond `wwwroot/js/gatherum.js` and the pager `EpubChapterHtml`
-  injects into the chapters it renders (a sandboxed frame has no Blazor to lean on;
-  the CSP admits that script by hash and nothing else). Nothing goes in either that
-  Blazor can do natively.
+- No **hand-written** JavaScript beyond `wwwroot/js/gatherum.js` and the pager
+  `EpubChapterHtml` injects into the chapters it renders (a sandboxed frame has no Blazor
+  to lean on; the CSP admits that script by hash and nothing else). Nothing goes in either
+  that Blazor can do natively. **And no JavaScript library, ever** — vendored, fetched or
+  otherwise. The loader Emscripten emits beside a vendored core is neither: it is compiler
+  output for a pinned, hash-verified input, the same category as Blazor's own
+  `dotnet.native.js`. That is the whole of the exception; see DECISIONS.md.
 - Every Markdown ⇄ document conversion goes through `GatherumMarkdown` — never
   `MarkdownSerializer` directly. A page read without the extension set writes the wiki's
   own syntax back out as prose.
@@ -316,17 +324,25 @@ second icon set, and don't hand-draw a path when the pack has one.
 **Add a vendored console** (a machine too big to write from scratch):
 1. Read `native/README.md` first — it carries the licence table, and a core whose licence
    does not fit AGPL-3.0 cannot be added whatever else is true of it.
-2. Pin it in `native/build-core.sh` and work out which of its sources want an operating
-   system underneath them. Link it against `core-shim` unchanged: the shim is not
-   specific to any core, and anything the built module imports beyond WASI is a source
+2. Pin it in `native/build-core.sh` beside the two there. Plain C with no threads, no
+   coroutines and no exceptions goes to WASI and comes out glue-free; anything else goes
+   to Emscripten. Link it against `core-shim` unchanged: the shim is not specific to any
+   core, and on the WASI side anything the built module imports beyond WASI is a source
    file you meant to compile and did not.
-3. Answer its `clock_time_get` with a counter, never the time. Everything else the WASI
-   host in `gatherum.js` already covers.
-4. Teach `Emulator.Identify` its bytes and `NeedsVendoredCore` its kind, so the player
-   takes the async road; `MediaTypes` and `FileView.IsRom` as for any console.
-5. Report `PlayerCount => 1` unless you can hold the core to the determinism rule above.
-   Netplay is two machines that must agree frame for frame, and a vendored core's
-   determinism is somebody else's claim rather than this project's promise.
+3. Never let it learn the time. mGBA asks WASI for `clock_time_get` and the host answers
+   with a frame counter; bsnes calls `clock()` and `libco-extras.c` answers zero. Find
+   which it does before trusting anything it says about two machines agreeing.
+4. Give it a row in `VendoredCore.Machines` — module URL, pad labels, player count, and
+   any core option that changes what the machine *does* rather than how it looks. Teach
+   `Emulator.Identify` its bytes; `MediaTypes` and `FileView.IsRom` as for any console.
+5. Report `PlayerCount` 1 until you have **measured** two of it in step: same cartridge,
+   scripted two-player input, `retro_serialize` compared every sixty frames over several
+   hundred, plus a control run proving different buttons still diverge. Netplay is two
+   machines that must agree frame for frame; a vendored core's determinism is somebody
+   else's claim, and the answer to a claim is a measurement, not an assumption either way.
+6. If it swaps coroutines under Asyncify, remember that a value returned across a swap is
+   lost. Park the answer in a static and fetch it with a second call, the way the shim's
+   state calls already do.
 
 **Add a text extractor**:
 1. Implement `ITextExtractor` in `src/Gatherum.Infrastructure/Extraction/` (cf.

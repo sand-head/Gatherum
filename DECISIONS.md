@@ -2057,3 +2057,76 @@ to reach identical states, and that guarantee is the one thing a core from elsew
 cannot give. The C# consoles are held to it by `EmulatorStateTests`; mGBA is held to
 nothing here. Offering "play together" on a core nobody in this project can hold to that
 line would be selling a promise that belongs to somebody else.
+
+## bsnes, an Emscripten core, and a measurement rather than a promise
+
+The previous section closed by saying `PlayerCount` was 1 because a vendored core's
+determinism is somebody else's claim. That was the right answer to the wrong question.
+"A guarantee is what a core from elsewhere cannot give" is true and beside the point: the
+seam does not need a guarantee, it needs a fact. Two copies of the module, the same
+cartridge, the same buttons on the same frames, `retro_serialize` compared every sixty
+frames — either they agree or they do not, and that is measurable from outside.
+
+bsnes was measured. Two machines agreed at all ten checkpoints over six hundred frames of
+scripted two-player input, and a control run proves different buttons still reach
+different states, so the agreement is not a core ignoring its pads. `PlayerCount` is 2 for
+the Super Nintendo, and it is 2 for that reason and no other. mGBA has not been measured
+and stays at 1; if somebody measures it, it changes.
+
+Getting there took three findings.
+
+**The core must not be allowed to know anything but the cartridge.** bsnes fills memory
+with noise at power-on — faithful to the hardware, and fatal to two consoles that have to
+start life identical. That is the core option `bsnes_entropy=None`, which meant teaching
+the shim to answer `RETRO_ENVIRONMENT_GET_VARIABLE`. With entropy off the two machines
+still differed by eight bytes, which turned out to be `emulator/random.hpp` seeding itself
+from `clock()`. The wall-clock rule the last section wrote down three times had a fourth
+place to be written: `libco-extras.c` answers zero. A seed that is never used still lands
+in a save state, and a desync check comparing states would have cried wolf every frame.
+
+**A value returned across an Asyncify fiber swap does not survive the trip.** bsnes runs
+its processor, sound and picture as coroutines, and on Emscripten a coroutine swap unwinds
+the WebAssembly stack out to JavaScript and rewinds it back in. `retro_serialize_size`
+completed, every side effect happened, and the caller was handed a zero — a save state of
+nought bytes with nothing to say why. Anything in the shim that can swap now parks its
+answer in a static and a second call that cannot swap reads it. This is a property of the
+mechanism rather than of bsnes, so the next coroutine-shaped core inherits the fix.
+
+**A `bool` from WebAssembly is a number.** The shim's `gatherum_state_ok` comes back to
+JavaScript as `1`, which the .NET runtime refuses to deserialize as a `System.Boolean` —
+and the symptom was netplay stuck on "Handing the game over…" rather than anything naming
+a type. Coerced at the boundary now.
+
+### The rule that actually bent
+
+"No JavaScript beyond `gatherum.js`" was the reason the last section gave for mGBA being
+a WASI build and for an Emscripten one being "never on the table". That was stricter than
+the principle it was defending, and bsnes is where the difference shows: WASI's libc++
+ships without exception support and offers nothing to build a coroutine swap on, so bsnes
+cannot be built that way at all. Emscripten emits an 84 KB loader beside the module.
+
+The principle is that a person can read all the JavaScript in this app in one sitting, and
+that nothing in it is a library somebody else maintains and this project cannot explain.
+Compiler output for a pinned, hash-verified core is neither — and Gatherum has shipped 352
+KB of exactly this kind of file since the day it was written, because Blazor's own
+`dotnet.native.js` is an Emscripten build too. The line is not "no `.js` files". It is
+**no hand-written JavaScript but `gatherum.js`, and no JavaScript library**, and both
+still hold.
+
+What is given up is real and worth naming: the WASI build's import list is fourteen
+functions long and can be read in a minute, and `bsnes.mjs` cannot. The mitigation is that
+it is generated from pinned inputs by a script in the repository, so it is reproducible
+rather than trusted.
+
+### Why bsnes rather than a smaller core
+
+Asked for a Super Nintendo, the honest first answer was Supafaust — it needs no coroutines
+and would have been a plainer build. The owner asked for bsnes, twice, and bsnes is the
+more accurate emulator; where accuracy is the whole point of an emulator, deferring to it
+over build convenience is the right call anyway. The cost is 2.3 MB of module against
+Supafaust's 2.3 MB and a harder build, which is not much of a cost.
+
+**Both cores link the same shim, unchanged.** That was the claim `core-shim` was written
+on and this is the evidence for it: a C core built against WASI and a C++ core built
+against Emscripten, sharing one Rust translation unit that knows libretro and nothing
+about either.

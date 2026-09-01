@@ -320,9 +320,16 @@ export function writeEmulatorSave(nodeId, base64) {
 // ---- A vendored emulator core ----------------------------------------------------
 //
 // Some machines are too big to write from scratch, so their core is somebody else's,
-// compiled to WebAssembly and fetched at build time (see native/README.md). It is a
-// plain module with no glue of its own: everything it needs from a host is here, and
-// everything it offers is a function taking integers.
+// compiled to WebAssembly and fetched at build time (see native/README.md).
+//
+// There are two shapes of module and the difference is the core's own doing. A core
+// that is plain C with no threads and no exceptions compiles against WASI and arrives
+// as one bare module: everything it needs from a host is below, and everything it
+// offers is a function taking integers. A core built out of coroutines cannot, so it
+// compiles against Emscripten and arrives with the loader Emscripten emits beside it.
+// Past `openCore` neither the rest of this file nor anything in C# can tell which it
+// got: both answer `bytes()` with a view of the core's heap and `exports` with the same
+// flat surface, because both link the same shim.
 //
 // Two heaps are in play — the core's and the .NET runtime's — and the frame has to
 // cross between them every sixteen milliseconds. Blazor hands out the address of a
@@ -330,6 +337,7 @@ export function writeEmulatorSave(nodeId, base64) {
 // marshalled round trip.
 
 let core;
+let coreUrl;
 
 /// The clock the core is allowed to see. It counts frames, not time: two people playing
 /// the same cartridge run the same frames from the same buttons, and a core that read a
@@ -343,9 +351,9 @@ const NANOSECONDS_PER_FRAME = 16666667n;
 /// same way. EBADF is the honest answer.
 const NO_FILE = 8;
 
-function coreHost() {
-  const bytes = () => new Uint8Array(core.memory.buffer);
-  const words = () => new DataView(core.memory.buffer);
+function coreHost(memoryOf) {
+  const bytes = () => new Uint8Array(memoryOf().buffer);
+  const words = () => new DataView(memoryOf().buffer);
   return {
     wasi_snapshot_preview1: {
       clock_time_get: (_id, _precision, out) => {
@@ -389,16 +397,76 @@ function coreHost() {
   };
 }
 
-export async function loadEmulatorCore(url) {
-  if (core) return true;
+/// The shim's whole surface. Naming it here rather than reaching for whatever a module
+/// happens to export is what lets the two kinds be flattened into one: Emscripten spells
+/// an exported C function with a leading underscore and a bare module does not.
+const CORE_CALLS = [
+  "gatherum_set_option", "gatherum_alloc", "gatherum_free",
+  "gatherum_needs_path", "gatherum_load", "gatherum_load_path", "gatherum_unload",
+  "gatherum_boot", "gatherum_reset", "gatherum_run",
+  "gatherum_frame_ptr", "gatherum_frame_width", "gatherum_frame_height",
+  "gatherum_audio_ptr", "gatherum_audio_len", "gatherum_set_buttons",
+  "gatherum_fps", "gatherum_sample_rate",
+  "gatherum_measure_state", "gatherum_state_size", "gatherum_state_save",
+  "gatherum_state_load", "gatherum_state_ok",
+  "gatherum_sram_ptr", "gatherum_sram_len",
+];
+
+function flattened(source, prefix) {
+  const calls = {};
+  for (const name of CORE_CALLS) calls[name] = source[prefix + name].bind(source);
+  return calls;
+}
+
+/// Fetches and starts a module, whichever shape it is. What comes back is the same
+/// either way: the shim's surface, a look at the core's heap, and — for the kind that
+/// has one — the in-memory filesystem a core that opens its own cartridge will need.
+async function openCore(url) {
+  if (url.endsWith(".mjs")) {
+    const module = await (await import(url)).default();
+    // Emscripten replaces its heap rather than resizing it when it grows, so the view
+    // has to be asked for again every time rather than kept.
+    return { exports: flattened(module, "_"), bytes: () => module.HEAPU8, fs: module.FS };
+  }
+  const response = await fetch(url);
+  if (!response.ok) return null;
+  let memory;
+  const source = await WebAssembly.instantiate(
+    await response.arrayBuffer(), coreHost(() => memory));
+  const exports = source.instance.exports;
+  memory = exports.memory;
+  exports._initialize?.();
+  return { exports: flattened(exports, ""), bytes: () => new Uint8Array(memory.buffer) };
+}
+
+/// Writes a string into the core's heap and leaves it there. A core keeps the pointers
+/// it is given for as long as it runs, so this is memory deliberately never freed.
+function planted(text) {
+  const encoded = new TextEncoder().encode(text + "\0");
+  const address = core.exports.gatherum_alloc(encoded.length);
+  if (address) core.bytes().set(encoded, address);
+  return address;
+}
+
+/// Starts a core, first telling it anything it must know before it powers on.
+///
+/// `settings` is a flat list of names and values. Most of a core's options are taste;
+/// the ones that come through here are not. bsnes fills memory with noise at power-on
+/// unless told otherwise, which is faithful to the hardware and fatal to two people
+/// whose consoles have to start life identical.
+export async function loadEmulatorCore(url, settings) {
+  if (core && coreUrl === url) return true;
+  core = undefined;
+  coreUrl = undefined;
   try {
-    const response = await fetch(url);
-    if (!response.ok) return false;
-    const source = await WebAssembly.instantiate(await response.arrayBuffer(), coreHost());
-    const exports = source.instance.exports;
-    core = { exports, memory: exports.memory };
-    exports._initialize?.();
-    exports.gatherum_boot();
+    const opened = await openCore(url);
+    if (!opened) return false;
+    core = opened;
+    for (let at = 0; at + 1 < (settings?.length ?? 0); at += 2) {
+      core.exports.gatherum_set_option(planted(settings[at]), planted(settings[at + 1]));
+    }
+    core.exports.gatherum_boot();
+    coreUrl = url;
     return true;
   } catch (error) {
     console.warn("The emulator core would not load:", error);
@@ -407,17 +475,31 @@ export async function loadEmulatorCore(url) {
   }
 }
 
-/// Hands the cartridge over. The core keeps the bytes rather than copying them, so they
-/// are allocated out of its own heap and freed when the game is unloaded.
-export function loadEmulatorCartridge(rom) {
+/// Hands the cartridge over.
+///
+/// Most cores read it out of memory, and keep the bytes rather than copying them, so
+/// they are allocated out of the core's own heap and freed when the game is unloaded.
+/// A few insist on opening the file themselves and ignore a buffer entirely — reporting
+/// success either way, so a host that guesses wrong gets a console that loaded nothing
+/// and said nothing. `gatherum_needs_path` is how it says which it is, and the answer
+/// for one of those is a file in a filesystem that exists only in this tab.
+export function loadEmulatorCartridge(rom, extension) {
   if (!core) return null;
-  const address = core.exports.gatherum_alloc(rom.length);
-  if (!address) return null;
-  new Uint8Array(core.memory.buffer).set(rom, address);
-  if (!core.exports.gatherum_load(address, rom.length)) return null;
+  if (core.exports.gatherum_needs_path()) {
+    if (!core.fs) return null;
+    const path = "/cartridge" + extension;
+    core.fs.writeFile(path, rom);
+    if (!core.exports.gatherum_load_path(planted(path))) return null;
+  } else {
+    const address = core.exports.gatherum_alloc(rom.length);
+    if (!address) return null;
+    core.bytes().set(rom, address);
+    if (!core.exports.gatherum_load(address, rom.length)) return null;
+  }
 
   coreFrameClock = 0n;
   core.exports.gatherum_run();
+  core.exports.gatherum_measure_state();
   return {
     width: core.exports.gatherum_frame_width(),
     height: core.exports.gatherum_frame_height(),
@@ -454,7 +536,7 @@ function dotnetHeap() {
 function copyOut(source, length, address) {
   const heap = dotnetHeap();
   if (!heap) return 0;
-  heap.set(new Uint8Array(core.memory.buffer, source, length), address);
+  heap.set(core.bytes().subarray(source, source + length), address);
   return length;
 }
 
@@ -471,11 +553,20 @@ export function readEmulatorCoreAudio(address, capacity) {
   return values;
 }
 
+// A save state is worked out in two calls rather than one, and so is the verdict on
+// whether it came off. A core whose chips are coroutines may switch fibers in the
+// middle of serializing, and where those fibers are the browser's, switching unwinds
+// the stack out to JavaScript and rewinds it back — the work all happens, but the
+// return value does not survive the trip. So the shim parks its answer and a second
+// call that cannot switch fetches it.
 export function saveEmulatorCoreState(address, bytes) {
   if (!core) return false;
   const scratch = core.exports.gatherum_alloc(bytes);
   if (!scratch) return false;
-  const saved = core.exports.gatherum_state_save(scratch, bytes);
+  core.exports.gatherum_state_save(scratch, bytes);
+  // A WebAssembly export has no booleans in it, so what comes back is 0 or 1 and the
+  // coercion is what makes it a boolean the runtime on the other side will accept.
+  const saved = !!core.exports.gatherum_state_ok();
   if (saved) copyOut(scratch, bytes, address);
   core.exports.gatherum_free(scratch);
   return saved;
@@ -487,8 +578,9 @@ export function loadEmulatorCoreState(address, bytes) {
   if (!scratch) return false;
   const heap = dotnetHeap();
   if (!heap) { core.exports.gatherum_free(scratch); return false; }
-  new Uint8Array(core.memory.buffer).set(heap.subarray(address, address + bytes), scratch);
-  const loaded = core.exports.gatherum_state_load(scratch, bytes);
+  core.bytes().set(heap.subarray(address, address + bytes), scratch);
+  core.exports.gatherum_state_load(scratch, bytes);
+  const loaded = !!core.exports.gatherum_state_ok();
   core.exports.gatherum_free(scratch);
   return loaded;
 }
@@ -508,7 +600,7 @@ export function writeEmulatorCoreSave(address, bytes) {
   const heap = dotnetHeap();
   if (!length || !target || !heap) return false;
   const taken = Math.min(length, bytes);
-  new Uint8Array(core.memory.buffer).set(heap.subarray(address, address + taken), target);
+  core.bytes().set(heap.subarray(address, address + taken), target);
   return true;
 }
 
@@ -521,12 +613,12 @@ export function fingerprintEmulatorCoreSave() {
   const length = core.exports.gatherum_sram_len();
   const source = core.exports.gatherum_sram_ptr();
   if (!length || !source) return 0;
-  const memory = new Uint8Array(core.memory.buffer, source, length);
+  const memory = core.bytes();
   let hash = 2166136261;
   // Every byte of a megabyte-and-a-bit is more than this needs; a stride catches the
   // writes a game actually makes without walking the whole array sixty times a minute.
   for (let at = 0; at < length; at += 17) {
-    hash = Math.imul(hash ^ memory[at], 16777619);
+    hash = Math.imul(hash ^ memory[source + at], 16777619);
   }
   return hash >>> 0;
 }

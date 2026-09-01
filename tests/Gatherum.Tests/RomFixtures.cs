@@ -117,6 +117,44 @@ public static class RomFixtures
         return image;
     }
 
+    /// <summary>A Super Nintendo cartridge. Its header sits at the end of a bank rather
+    /// than the start of the file — the low half of memory for a LoROM board, the high
+    /// half for a HiROM one — and what makes it findable there at all is the checksum
+    /// beside its own complement, so this works that out rather than writing a constant.
+    ///
+    /// <para><paramref name="copierHeader"/> adds the 512 bytes some dumps carry in
+    /// front, which is the one thing that shifts every offset in the file.</para></summary>
+    public static byte[] SuperNintendo(string title = "GATHERUM TEST", bool hiRom = false,
+        byte cartridgeType = 0x00, byte saveRamSize = 0x00, byte region = 0x01,
+        bool copierHeader = false)
+    {
+        var image = new byte[hiRom ? 0x20000 : 0x10000];
+        var at = hiRom ? 0xFFC0 : 0x7FC0;
+
+        for (var index = 0; index < 21; index++)
+            image[at + index] = (byte)(index < title.Length ? title[index] : ' ');
+        image[at + 21] = (byte)(hiRom ? 0x21 : 0x20);
+        image[at + 22] = cartridgeType;
+        image[at + 23] = 0x05;                    // 32 KB, as a power of two
+        image[at + 24] = saveRamSize;
+        image[at + 25] = region;
+        image[at + 26] = 0x33;                    // developer
+        image[at + 27] = 0x00;                    // version
+        image[at + 28] = 0xFF;                    // the complement, before it is worked out
+        image[at + 29] = 0xFF;
+
+        var total = 0;
+        foreach (var b in image)
+            total += b;
+        total &= 0xFFFF;
+        image[at + 30] = (byte)total;
+        image[at + 31] = (byte)(total >> 8);
+        image[at + 28] = (byte)(total ^ 0xFFFF);
+        image[at + 29] = (byte)((total ^ 0xFFFF) >> 8);
+
+        return copierHeader ? [.. new byte[512], .. image] : image;
+    }
+
     public static readonly byte[] NintendoLogo =
     [
         0xCE, 0xED, 0x66, 0x66, 0xCC, 0x0D, 0x00, 0x0B, 0x03, 0x73, 0x00, 0x83,

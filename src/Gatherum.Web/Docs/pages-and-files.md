@@ -151,11 +151,13 @@ playing the same game.
   simply reading.
 
 > [!NOTE]
-> The Game Boy, the Game Gear and the Game Boy Advance are one-player machines here. Two people on either meant
-> two consoles and a cable between them, which is a second machine to emulate rather than
-> a second port to read — it is not built. Playing together also asks that both machines
-> agree frame for frame, and that is a promise Gatherum can only make about the consoles
-> it wrote itself.
+> The Game Boy, the Game Gear and the Game Boy Advance are one-player machines here. Two
+> people on either meant two consoles and a cable between them, which is a second machine
+> to emulate rather than a second port to read — it is not built. Playing together also
+> asks that both machines agree frame for frame; for a console Gatherum wrote that is a
+> promise it keeps, and for one it did not write it is a claim that has to be measured
+> before anybody relies on it. The Super Nintendo's has been, which is why it plays with
+> two, and the Game Boy Advance's has not.
 
 ### The consoles
 
@@ -166,6 +168,7 @@ playing the same game.
 | Master System | `.sms` | Two |
 | Game Gear | `.gg` | One |
 | Game Boy Advance | `.gba` | One |
+| Super Nintendo | `.sfc`, `.smc` | Two |
 
 Gatherum knows the Nintendo Entertainment System's common cartridge boards (NROM, MMC1,
 UxROM, CNROM, MMC3, AxROM and a few others), the Game Boy's (none, MBC1, MBC2, MBC3 with
@@ -173,10 +176,21 @@ its clock, and MBC5) and the Master System's (Sega's own paging hardware, and th
 board Codemasters built for their own games). A cartridge on a board it has not met says
 so by name instead of failing quietly.
 
-A Game Boy Advance cartridge is the one machine here whose emulator Gatherum did not
-write, so which games run well is that emulator's business rather than Gatherum's. Its
-header says nothing about whether the cartridge saves, so the file's details do not
-either — the console works it out when the game starts.
+The Game Boy Advance and the Super Nintendo are the two machines here whose emulators
+Gatherum did not write, so which games run well on them is those emulators' business
+rather than Gatherum's. They are also the two that are fetched and built rather than
+shipped, so a Gatherum built without them offers a download where the others offer a
+console, and says so.
+
+A Game Boy Advance cartridge's header says nothing about whether it saves, so the file's
+details do not either — the console works it out when the game starts. A Super Nintendo
+cartridge hides its header at the end of a bank rather than the start of the file, and
+which bank depends on how the board was wired; Gatherum looks in both places and trusts
+the one whose checksum adds up. A `.smc` file with the extra 512 bytes an old copier
+wrote in front of it reads the same as a `.sfc` without them. The Super Nintendo's pad
+has four face buttons rather than two, and they are drawn in the diamond the console
+printed them in: <kbd>Z</kbd> and <kbd>X</kbd> are B and A as everywhere else, and
+<kbd>A</kbd> and <kbd>S</kbd>, above them, are Y and X.
 
 A Master System cartridge carries no title, only the catalogue number Sega sold it under,
 so that is what search has to go on for one. A Game Gear plays in colour on a screen a
@@ -228,6 +242,7 @@ Two different tempos, and they never share a path.
 | `.nes`, `.gb`, `.gbc` | What the cartridge header says: the console, the title printed in it, the board, and whether it saves |
 | `.sms`, `.gg` | What Sega's header says: the console, the catalogue number the game was sold under, and the region |
 | `.gba` | The title and game code printed in the header, and the region its last letter names |
+| `.sfc`, `.smc` | The title printed in the header, the board and any second processor on it, the save memory, and the region |
 
 **Analysis** asks a model, takes minutes, and runs on a background worker after the
 upload has already returned. It is off unless the instance's owner has configured

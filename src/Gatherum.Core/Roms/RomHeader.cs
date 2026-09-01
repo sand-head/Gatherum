@@ -11,6 +11,7 @@ public enum RomSystem
     MasterSystem,
     GameGear,
     GameBoyAdvance,
+    SuperNintendo,
 }
 
 /// <summary>What a cartridge image says about itself before anything runs it: the
@@ -34,7 +35,8 @@ public sealed record RomHeader(
     /// <summary>Reads the header, or nothing when the bytes are not a cartridge this
     /// knows — a truncated download, or a `.gb` that is really something else.</summary>
     public static RomHeader? Read(ReadOnlySpan<byte> bytes) =>
-        ReadNes(bytes) ?? ReadGameBoy(bytes) ?? ReadGameBoyAdvance(bytes) ?? ReadSega(bytes);
+        ReadNes(bytes) ?? ReadGameBoy(bytes) ?? ReadGameBoyAdvance(bytes)
+        ?? ReadSega(bytes) ?? ReadSuperNintendo(bytes);
 
     /// <summary>The header as lines a person — or a search index — can read.</summary>
     public string Describe()
@@ -228,6 +230,134 @@ public sealed record RomHeader(
             code.Length == 0 ? "Cartridge" : $"Game code {code}, maker {maker}",
             bytes.Length, 0, 0, null, region);
     }
+
+    // ---- Super Nintendo --------------------------------------------------------
+
+    /// <summary>The Super Nintendo is the one machine here whose cartridges do not say
+    /// where their header is. It sits at the end of a bank, and which bank depends on how
+    /// the cartridge was wired — so both places are tried and the one whose checksum adds
+    /// up wins. A file copied off a cartridge by a 1990s copier carries 512 bytes of its
+    /// own in front, which shifts everything; that is looked past first.</summary>
+    private static RomHeader? ReadSuperNintendo(ReadOnlySpan<byte> bytes)
+    {
+        // A copier header is the only reason a cartridge image is not a whole number of
+        // kilobytes, which is how it is recognised without trusting the file's name.
+        var start = bytes.Length % 1024 == 512 ? 512 : 0;
+        var image = bytes[start..];
+
+        RomHeader? best = null;
+        var bestScore = -1;
+        foreach (var at in (ReadOnlySpan<int>)[0x7FC0, 0xFFC0])
+        {
+            if (image.Length < at + 32)
+                continue;
+            if (SuperNintendoScore(image.Slice(at, 32), at) is { } score && score > bestScore)
+            {
+                bestScore = score;
+                best = ReadSuperNintendoAt(image.Slice(at, 32), image.Length);
+            }
+        }
+        return best;
+    }
+
+    /// <summary>How much a candidate looks like the real header rather than the middle of
+    /// somebody's graphics — or nothing, when it plainly is not one.
+    ///
+    /// <para>The sixteen bits at the end are a checksum beside its own complement, and
+    /// that pair is the whole of what makes the header findable: without it a file of
+    /// zeroes reads as a cartridge. So it decides, and what follows only chooses between
+    /// the two places a real header could be.</para></summary>
+    private static int? SuperNintendoScore(ReadOnlySpan<byte> header, int at)
+    {
+        // The developer and the version sit between the country code and these, which is
+        // why the pair is at 28 rather than 26.
+        var complement = header[28] | header[29] << 8;
+        var checksum = header[30] | header[31] << 8;
+        if (checksum == 0 || (checksum ^ complement) != 0xFFFF)
+            return null;
+
+        // Bit 0 of the map mode says which half of memory the cartridge lives in, and it
+        // is the same bit that decides where this header had to be put.
+        var score = 0;
+        var mapMode = header[21];
+        if ((mapMode & 0x0F) is 0 or 1 or 2 or 3 or 5 && ((mapMode & 1) == 1) == (at == 0xFFC0))
+            score += 4;
+
+        // The name is fixed-width and space-padded, so every byte of it is printable.
+        foreach (var letter in header[..21])
+            if (letter is >= 0x20 and < 0x7F)
+                score++;
+        return score;
+    }
+
+    private static RomHeader ReadSuperNintendoAt(ReadOnlySpan<byte> header, int imageBytes)
+    {
+        var title = Encoding.ASCII.GetString(header[..21]).TrimEnd('\0', ' ');
+        var mapMode = header[21];
+        var type = header[22];
+        // Both sizes are written as a power of two in kilobytes. The program one is what
+        // the cartridge was wired for and can be rounded up from the file, so the file
+        // itself is the more honest answer; the save memory has no other source.
+        var saveRamBytes = header[24] == 0 ? 0 : 1024 << header[24];
+
+        var board = MapModeName(mapMode);
+        if (SuperNintendoChip(type) is { } chip)
+            board += $", {chip}";
+
+        // Types ending in 2, 5 or 6 are the ones with a battery behind the RAM; the rest
+        // forget everything when the console is switched off.
+        var battery = saveRamBytes > 0 && (type & 0x0F) is 2 or 5 or 6;
+
+        return new RomHeader(RomSystem.SuperNintendo, "Super Nintendo",
+            title.Length == 0 ? null : title, board,
+            imageBytes, 0, saveRamBytes, battery, SuperNintendoRegion(header[25]));
+    }
+
+    private static string MapModeName(byte mapMode) => (mapMode & 0x0F) switch
+    {
+        0 => "LoROM",
+        1 => "HiROM",
+        2 => "LoROM with S-DD1",
+        3 => "LoROM with SA-1",
+        5 => "ExHiROM",
+        _ => "Cartridge",
+    };
+
+    /// <summary>Super Nintendo cartridges often carried a second processor of their own,
+    /// and the top half of the type byte names it. Which of the custom chips a cartridge
+    /// used takes a further byte this does not read, so that one is left unnamed rather
+    /// than guessed at.</summary>
+    private static string? SuperNintendoChip(byte type) => type switch
+    {
+        // Nothing on the board but ROM, and perhaps RAM behind a battery.
+        0x00 or 0x01 or 0x02 => null,
+        _ => (type >> 4) switch
+        {
+            0 => "DSP",
+            1 => "Super FX",
+            2 => "OBC1",
+            3 => "SA-1",
+            4 => "S-DD1",
+            5 => "S-RTC",
+            0xE => "a Super Game Boy or Satellaview board",
+            _ => "a custom chip",
+        },
+    };
+
+    private static string? SuperNintendoRegion(byte code) => code switch
+    {
+        0x00 => "Japan",
+        0x01 => "North America",
+        0x02 or 0x03 or 0x06 or 0x08 or 0x09 or 0x0A or 0x0B or 0x0C or 0x11 => "Europe",
+        0x04 => "Finland",
+        0x05 => "Sweden",
+        0x07 => "Denmark",
+        0x0D => "South Korea",
+        0x0F => "Canada",
+        0x10 => "Brazil",
+        0x12 => "Australia",
+        _ => null,
+    };
 
     // ---- Master System and Game Gear -------------------------------------------
 
