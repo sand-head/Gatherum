@@ -89,7 +89,8 @@ wasi_sdk() {
 }
 
 emscripten() {
-  local sdk="$build/emsdk"
+  emsdk="$build/emsdk"
+  local sdk="$emsdk"
   if [ ! -d "$sdk" ]; then
     echo "==> fetching Emscripten $EMSDK_VERSION"
     git clone --quiet --depth 1 "$EMSDK_REPO" "$sdk"
@@ -182,10 +183,26 @@ build_bsnes() {
   clone_pinned "$BSNES_REPO" "$src" "$BSNES_COMMIT" "bsnes"
 
   # bsnes builds itself; asking it for the Emscripten platform gets one archive of the
-  # whole core, named for a bitcode format it stopped being years ago.
+  # whole core, named for a bitcode format it stopped being years ago. It has to be
+  # *emmake*: the platform only picks the target name and static linking, and plain make
+  # would quietly compile the whole core for the machine running the build — an archive
+  # that links without complaint and has not one wasm symbol in it.
   echo "==> compiling bsnes (this takes a while)"
-  make -C "$src" platform=emscripten -j"$(nproc)" > /dev/null
+  emmake make -C "$src" platform=emscripten -j"$(nproc)" > /dev/null
   cp "$src/bsnes_libretro_emscripten.bc" "$build/libbsnes.a"
+
+  # And proof that it is what it claims to be, because the failure mode above is silent:
+  # the wrong archive links without complaint and fails at the far end with a page of
+  # undefined libretro symbols. emsdk_env.sh does not put the LLVM tools on PATH, so this
+  # reaches for the one it means by the path this script already knows — not by anything
+  # sourcing a script may or may not have exported — and lets a missing tool be loud.
+  # Not `grep -q`: it exits on the first match, llvm-nm dies of SIGPIPE half a million
+  # symbols early, and pipefail reports the whole pipeline as a failure — which would make
+  # this check reject exactly the archive it is looking for.
+  if ! "$emsdk/upstream/bin/llvm-nm" "$build/libbsnes.a" | grep "T retro_run" > /dev/null; then
+    echo "bsnes built without retro_run in it — that is a build for the wrong machine." >&2
+    exit 1
+  fi
 
   echo "==> compiling the libco extras"
   emcc -O2 -I"$src/libco" -c "$here/bsnes-support/libco-extras.c" -o "$build/libco-extras.o"
