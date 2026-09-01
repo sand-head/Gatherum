@@ -232,13 +232,19 @@ fresh DI scope via `Services/AppOperations`.
   API endpoint is authenticated unless it says `.AllowAnonymous()`, and no write ever does.
 - `INodeAuthorizer.VisibleTo` is the only door for visibility. Never spell the rule again
   in a query — widening the seam is what makes a change correct everywhere at once.
-- No **hand-written** JavaScript beyond `wwwroot/js/gatherum.js` and the pager
+- No hand-written JavaScript beyond `wwwroot/js/gatherum.js` and the pager
   `EpubChapterHtml` injects into the chapters it renders (a sandboxed frame has no Blazor
   to lean on; the CSP admits that script by hash and nothing else). Nothing goes in either
-  that Blazor can do natively. **And no JavaScript library, ever** — vendored, fetched or
-  otherwise. The loader Emscripten emits beside a vendored core is neither: it is compiler
-  output for a pinned, hash-verified input, the same category as Blazor's own
-  `dotnet.native.js`. That is the whole of the exception; see DECISIONS.md.
+  that Blazor can do natively, and no JavaScript library — vendored or fetched — goes
+  anywhere near the wiki itself. **The rule is about the crucial features**: the tree,
+  the editor, search, sharing, auth. Those are what a person keeps their life's notes in,
+  and they are C# end to end so that the whole of what runs in a browser is code this
+  project can account for. Playing a cartridge is not one of those, and it is scoped so it
+  cannot become one: a console appears on a ROM's page and nowhere else, and a build with
+  no core at all serves a download link while everything else works as before. So the ROM
+  player may take whatever JavaScript a vendored core's toolchain emits — the owner's
+  call, and what puts every libretro core within reach rather than only the few that
+  happen to compile against WASI. It buys a console; it does not buy a jQuery.
 - Every Markdown ⇄ document conversion goes through `GatherumMarkdown` — never
   `MarkdownSerializer` directly. A page read without the extension set writes the wiki's
   own syntax back out as prose.
@@ -413,6 +419,7 @@ identity, or the access model.
 ## What not to do
 
 - No new projects without a real boundary that demands one.
-- No third-party state/MVVM libraries; no JS libraries, vendored or fetched.
+- No third-party state/MVVM libraries; no JS libraries, vendored or fetched — the ROM
+  player's vendored cores are the one exception, and they are confined to a ROM's page.
 - No speculative abstractions, no repository layer over EF.
 - No features beyond `PLAN.md` scope without asking.

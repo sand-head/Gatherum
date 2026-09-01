@@ -2100,23 +2100,38 @@ a type. Coerced at the boundary now.
 ### The rule that actually bent
 
 "No JavaScript beyond `gatherum.js`" was the reason the last section gave for mGBA being
-a WASI build and for an Emscripten one being "never on the table". That was stricter than
-the principle it was defending, and bsnes is where the difference shows: WASI's libc++
-ships without exception support and offers nothing to build a coroutine swap on, so bsnes
-cannot be built that way at all. Emscripten emits an 84 KB loader beside the module.
+a WASI build and for an Emscripten one being "never on the table". bsnes is where that
+stopped being tenable: WASI's libc++ ships without exception support and offers nothing to
+build a coroutine swap on, so bsnes cannot be built that way at all. Emscripten emits an
+84 KB loader beside the module, and it has to ship.
 
-The principle is that a person can read all the JavaScript in this app in one sitting, and
-that nothing in it is a library somebody else maintains and this project cannot explain.
-Compiler output for a pinned, hash-verified core is neither — and Gatherum has shipped 352
-KB of exactly this kind of file since the day it was written, because Blazor's own
-`dotnet.native.js` is an Emscripten build too. The line is not "no `.js` files". It is
-**no hand-written JavaScript but `gatherum.js`, and no JavaScript library**, and both
-still hold.
+Faced with that, the argument written here first was that compiler output for a pinned,
+hash-verified core is not a *library* — that the line was never "no `.js` files", and that
+Gatherum has shipped 352 KB of exactly this kind of file since day one because Blazor's
+own `dotnet.native.js` is an Emscripten build too. All of that is true, and it was still a
+rationalization: it worked backwards from a build that had already succeeded to a reading
+of the rule that permitted it.
+
+The owner's answer is the real one, and it is simpler. **The rule is about the crucial
+features.** The tree, the editor, search, sharing, auth — the things a person keeps their
+life's notes in — are C# end to end so that everything running in a browser is code this
+project can account for. Playing a cartridge is not one of those, and the ROM player is
+scoped so it cannot become one: a console appears on a ROM's page and nowhere else, and a
+build with no core at all serves a download link while the rest of the app is untouched.
+Within that scope, a vendored core may bring whatever its toolchain emits.
+
+That is a wider licence than the rationalization was, and worth stating plainly rather
+than being pleased about: it puts the whole libretro catalogue within reach instead of the
+few cores that happen to compile against WASI, and it means the next such core does not
+need an argument, only a licence check and a determinism measurement. The bound is scope,
+not file format — the wiki proper still takes no JavaScript library, hand-written or
+otherwise.
 
 What is given up is real and worth naming: the WASI build's import list is fourteen
 functions long and can be read in a minute, and `bsnes.mjs` cannot. The mitigation is that
 it is generated from pinned inputs by a script in the repository, so it is reproducible
-rather than trusted.
+rather than trusted. mGBA stays a WASI build for the same reason — nothing forces it to
+change, and glue-free is better where it is free.
 
 ### Why bsnes rather than a smaller core
 

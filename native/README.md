@@ -57,11 +57,14 @@ implements a coroutine swap by unwinding the WebAssembly stack out to JavaScript
 rewinding it back in.
 
 The price is that Emscripten emits a loader in JavaScript beside the module, and it has to
-be shipped. That is compiler output for a vendored core rather than a JavaScript library —
-the same category as `dotnet.native.js`, which Blazor's own runtime has always been —
-and `DECISIONS.md` records why the line was drawn there. It is not licence to reach for a
-JavaScript dependency, and `wwwroot/js/gatherum.js` is still the only hand-written
-JavaScript in the project.
+be shipped. That is allowed here because the no-JavaScript rule is about Gatherum's
+crucial features — the tree, the editor, search, sharing, auth — and playing a cartridge
+is not one: a console appears on a ROM's page and nowhere else, and a build with no core
+at all serves a download link while the rest of the app is untouched. So a vendored core
+may bring whatever its toolchain emits, which is what puts the whole libretro catalogue
+within reach rather than the few cores that compile against WASI. It is not licence to
+reach for a JavaScript dependency anywhere else, and `wwwroot/js/gatherum.js` is still the
+only hand-written JavaScript in the project. See `DECISIONS.md`.
 
 One consequence of Asyncify leaks into the shim and is worth knowing before reading it:
 **a value returned across a fiber swap does not survive the trip.** The function body runs
@@ -149,9 +152,10 @@ Most of the work is already done, because the shim is not specific to any core.
 2. Pin its repository and commit at the top of `build-core.sh`, and give it a
    `build_<name>` function beside the two there.
 3. Decide which toolchain it needs. Plain C with no threads, no coroutines and no
-   exceptions goes to WASI and comes out glue-free; anything else goes to Emscripten.
-   Check the module's imports either way: on the WASI side, anything beyond WASI is a
-   source file you meant to compile and did not.
+   exceptions goes to WASI and comes out glue-free; anything else goes to Emscripten,
+   which is fine — a core needing GL, threads or exceptions is a reason to reach for it,
+   not a reason to give up on the core. Check the module's imports either way: on the
+   WASI side, anything beyond WASI is a source file you meant to compile and did not.
 4. Answer its clock with a counter, never the time.
 5. Teach `Emulator.Identify` its bytes and `VendoredCore` its descriptor. Report one
    player unless you have *measured* that two copies of it stay in step — same cartridge,
