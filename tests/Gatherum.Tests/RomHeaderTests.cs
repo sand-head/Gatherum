@@ -92,10 +92,13 @@ public class RomHeaderTests
         Assert.False(extractor.CanExtract(MediaTypes.PlainText, "sonic.txt"));
 
         // Four megabytes of cartridge, and the extractor only ever looks at the head
-        // of it — a stream that refuses to be read past the header proves it.
+        // of it — a stream that refuses to be read past the header proves it. The head
+        // reaches the last place any of these machines hid one: Sega at the end of the
+        // first bank, a Super Nintendo at the end of the first 64 KB, plus the 512 bytes
+        // a copier may have written in front of everything.
         var image = RomFixtures.GameBoy([0x00], title: "METROID");
         Array.Resize(ref image, 4 * 1024 * 1024);
-        await using var stream = new HeaderOnlyStream(image, 0x150);
+        await using var stream = new HeaderOnlyStream(image, 0x10200);
 
         var text = await extractor.ExtractAsync(stream, MediaTypes.GameBoyRom, "metroid.gb");
 
@@ -129,5 +132,134 @@ public class RomHeaderTests
         public override void SetLength(long value) => throw new NotSupportedException();
         public override void Write(byte[] buffer, int offset, int count) =>
             throw new NotSupportedException();
+    }
+
+    [Fact]
+    public void A_sega_header_names_the_console_it_was_sold_for()
+    {
+        var master = RomHeader.Read(RomFixtures.Sega([0x00], gameGear: false));
+        Assert.NotNull(master);
+        Assert.Equal(RomSystem.MasterSystem, master.System);
+        Assert.Equal("Master System", master.SystemName);
+        Assert.Equal("Export", master.Region);
+
+        var handheld = RomHeader.Read(RomFixtures.Sega([0x00], gameGear: true));
+        Assert.NotNull(handheld);
+        Assert.Equal(RomSystem.GameGear, handheld.System);
+        Assert.Equal("Game Gear", handheld.SystemName);
+    }
+
+    [Fact]
+    public void A_sega_header_carries_a_product_code_where_a_title_would_be()
+    {
+        // Sega's header has no room for a name, so the catalogue number is the only
+        // thing in the file that identifies a particular game.
+        var header = RomHeader.Read(RomFixtures.Sega([0x00], productCode: 12345));
+        Assert.NotNull(header);
+        Assert.Null(header.Title);
+        Assert.Contains("12345", header.Cartridge);
+        Assert.Contains("Product 12345", header.Describe());
+    }
+
+    [Fact]
+    public void A_cartridge_with_no_sega_header_is_not_mistaken_for_one()
+    {
+        Assert.Null(RomHeader.Read(new byte[0x8000]));
+    }
+
+    [Fact]
+    public void A_game_boy_advance_header_carries_a_title_and_a_game_code()
+    {
+        var header = RomHeader.Read(RomFixtures.GameBoyAdvance("METROID4", "AMTE"));
+        Assert.NotNull(header);
+        Assert.Equal(RomSystem.GameBoyAdvance, header.System);
+        Assert.Equal("Game Boy Advance", header.SystemName);
+        Assert.Equal("METROID4", header.Title);
+        Assert.Contains("AMTE", header.Cartridge);
+        // The fourth letter of the code is where the cartridge was sold.
+        Assert.Equal("North America", header.Region);
+    }
+
+    [Fact]
+    public void A_game_boy_advance_header_says_nothing_about_saving_so_neither_do_we()
+    {
+        // Nothing in the header declares a save chip: the hardware is worked out by
+        // looking for a marker in the program itself. Printing "Saves: none" would be
+        // a guess dressed up as a fact.
+        var header = RomHeader.Read(RomFixtures.GameBoyAdvance());
+        Assert.NotNull(header);
+        Assert.Null(header.Battery);
+        Assert.DoesNotContain("Saves:", header.Describe());
+    }
+
+    [Fact]
+    public void A_super_nintendo_header_is_found_at_whichever_end_of_a_bank_it_sits()
+    {
+        var low = RomHeader.Read(RomFixtures.SuperNintendo("ZELDA III"));
+        Assert.NotNull(low);
+        Assert.Equal(RomSystem.SuperNintendo, low.System);
+        Assert.Equal("Super Nintendo", low.SystemName);
+        Assert.Equal("ZELDA III", low.Title);
+        Assert.Equal("LoROM", low.Cartridge);
+
+        var high = RomHeader.Read(RomFixtures.SuperNintendo("ZELDA III", hiRom: true));
+        Assert.NotNull(high);
+        Assert.Equal("ZELDA III", high.Title);
+        Assert.Equal("HiROM", high.Cartridge);
+    }
+
+    [Fact]
+    public void A_super_nintendo_cartridge_says_whether_it_remembers_anything()
+    {
+        // Type 2 is RAM behind a battery, and the size byte is a power of two in
+        // kilobytes — so this one keeps eight.
+        var saves = RomHeader.Read(
+            RomFixtures.SuperNintendo(cartridgeType: 0x02, saveRamSize: 0x03));
+        Assert.NotNull(saves);
+        Assert.Equal(8 * 1024, saves.SaveRamBytes);
+        Assert.True(saves.Battery);
+
+        // RAM with nothing behind it forgets when the console is switched off.
+        var forgets = RomHeader.Read(
+            RomFixtures.SuperNintendo(cartridgeType: 0x01, saveRamSize: 0x03));
+        Assert.NotNull(forgets);
+        Assert.False(forgets.Battery);
+    }
+
+    [Fact]
+    public void A_second_processor_on_the_board_is_named()
+    {
+        var superFx = RomHeader.Read(RomFixtures.SuperNintendo(cartridgeType: 0x15));
+        Assert.NotNull(superFx);
+        Assert.Contains("Super FX", superFx.Cartridge);
+
+        // Nothing but ROM and RAM is not a coprocessor, whatever the nibble says.
+        var plain = RomHeader.Read(RomFixtures.SuperNintendo(cartridgeType: 0x02));
+        Assert.NotNull(plain);
+        Assert.Equal("LoROM", plain.Cartridge);
+    }
+
+    [Fact]
+    public void A_pile_of_bytes_with_no_checksum_in_it_is_not_a_super_nintendo_cartridge()
+    {
+        // The checksum beside its own complement is the whole of what makes the header
+        // findable, so breaking it has to be enough to lose it.
+        var broken = RomFixtures.SuperNintendo();
+        broken[0x7FDE] ^= 0xFF;
+        Assert.Null(RomHeader.Read(broken));
+    }
+
+    [Fact]
+    public void Something_that_is_not_a_cartridge_is_not_read_as_one()
+    {
+        // Both of the two bytes a Game Boy Advance cartridge is recognised by, and
+        // neither on its own.
+        var almost = RomFixtures.GameBoyAdvance();
+        almost[0xB2] = 0x00;
+        Assert.Null(RomHeader.Read(almost));
+
+        var alsoAlmost = RomFixtures.GameBoyAdvance();
+        alsoAlmost[3] = 0x00;
+        Assert.Null(RomHeader.Read(alsoAlmost));
     }
 }

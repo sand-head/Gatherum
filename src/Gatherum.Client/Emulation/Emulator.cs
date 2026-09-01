@@ -1,31 +1,101 @@
 using Gatherum.Client.Emulation.GameBoy;
 using Gatherum.Client.Emulation.Nes;
+using Gatherum.Client.Emulation.Sega;
 
 namespace Gatherum.Client.Emulation;
 
-/// <summary>Which console a file is for. The bytes are asked before the name is: a ROM
-/// that has been renamed, or downloaded with whatever extension a server felt like, is
-/// still perfectly playable — and a `.gb` that is really something else should fail
-/// with a sentence rather than a stack trace.</summary>
+/// <summary>Which machine a cartridge image is for.</summary>
+public enum ConsoleKind
+{
+    Nes,
+    GameBoy,
+    MasterSystem,
+    GameGear,
+    GameBoyAdvance,
+    SuperNintendo,
+}
+
 public static class Emulator
 {
-    public static IEmulatorCore Load(ReadOnlySpan<byte> rom, string fileName)
+    /// <summary>Which console a file is for, or nothing when it is not a cartridge at
+    /// all. The bytes are asked before the name is: a ROM that has been renamed, or
+    /// downloaded with whatever extension a server felt like, is still perfectly
+    /// playable.</summary>
+    public static ConsoleKind? Identify(ReadOnlySpan<byte> rom, string fileName)
     {
         if (LooksLikeNes(rom))
-            return new NesConsole(rom);
+            return ConsoleKind.Nes;
         if (LooksLikeGameBoy(rom))
-            return new GameBoyConsole(rom);
+            return ConsoleKind.GameBoy;
+        if (LooksLikeGameBoyAdvance(rom))
+            return ConsoleKind.GameBoyAdvance;
+        if (SegaRegion(rom) is { } region)
+            return region >= 5 ? ConsoleKind.GameGear : ConsoleKind.MasterSystem;
+        if (LooksLikeSuperNintendo(rom))
+            return ConsoleKind.SuperNintendo;
 
-        // Nothing declared itself, so the name gets the last word — and whichever core
-        // it names says what is wrong with the file.
+        // Nothing declared itself, so the name gets the last word.
         return Path.GetExtension(fileName).ToLowerInvariant() switch
         {
-            ".nes" => new NesConsole(rom),
-            ".gb" or ".gbc" => new GameBoyConsole(rom),
+            ".nes" => ConsoleKind.Nes,
+            ".gb" or ".gbc" => ConsoleKind.GameBoy,
+            ".sms" => ConsoleKind.MasterSystem,
+            ".gg" => ConsoleKind.GameGear,
+            ".gba" => ConsoleKind.GameBoyAdvance,
+            ".sfc" or ".smc" => ConsoleKind.SuperNintendo,
+            _ => null,
+        };
+    }
+
+    /// <summary>Whether this cartridge needs a core Gatherum did not write. Those are
+    /// fetched and instantiated rather than constructed, which cannot happen inside a
+    /// synchronous call — so the player asks this first and takes the other road.</summary>
+    public static bool NeedsVendoredCore(ReadOnlySpan<byte> rom, string fileName) =>
+        Identify(rom, fileName) is { } kind && VendoredCore.Handles(kind);
+
+    /// <summary>Builds one of the consoles written in C#. A cartridge for a machine that
+    /// needs a vendored core does not come through here.</summary>
+    public static IEmulatorCore Load(ReadOnlySpan<byte> rom, string fileName) =>
+        Identify(rom, fileName) switch
+        {
+            ConsoleKind.Nes => new NesConsole(rom),
+            ConsoleKind.GameBoy => new GameBoyConsole(rom),
+            ConsoleKind.MasterSystem => new MasterSystem(rom, gameGear: false),
+            ConsoleKind.GameGear => new MasterSystem(rom, gameGear: true),
+            ConsoleKind.GameBoyAdvance or ConsoleKind.SuperNintendo =>
+                throw new NotSupportedException(
+                    "This cartridge plays on a core this build did not fetch. " +
+                    "See native/README.md."),
             _ => throw new NotSupportedException(
                 "This does not look like a cartridge image the player knows: it plays " +
-                "Nintendo Entertainment System (.nes) and Game Boy (.gb, .gbc) files."),
+                "Nintendo Entertainment System (.nes), Game Boy (.gb, .gbc), " +
+                "Game Boy Advance (.gba), Super Nintendo (.sfc, .smc), " +
+                "Master System (.sms) and Game Gear (.gg) files."),
         };
+
+    /// <summary>The Super Nintendo is the one machine here that stamped nothing at a
+    /// fixed place. Its header sits at the end of a bank — which bank depending on how the
+    /// cartridge was wired — and the sixteen bits at its end are a checksum beside its own
+    /// complement, which is what makes it findable at all. A copier header, the 512 bytes
+    /// some dumps carry in front, is the only reason a cartridge image is not a whole
+    /// number of kilobytes.
+    ///
+    /// <para>Spelled here as well as in Core's RomHeader because this project does not
+    /// reference that one, and a cartridge the player cannot name is a download link.</para></summary>
+    private static bool LooksLikeSuperNintendo(ReadOnlySpan<byte> rom)
+    {
+        var image = rom.Length % 1024 == 512 ? rom[512..] : rom;
+        foreach (var at in (ReadOnlySpan<int>)[0x7FC0, 0xFFC0])
+        {
+            if (image.Length < at + 32)
+                continue;
+            var header = image.Slice(at, 32);
+            var complement = header[28] | header[29] << 8;
+            var checksum = header[30] | header[31] << 8;
+            if (checksum != 0 && (checksum ^ complement) == 0xFFFF)
+                return true;
+        }
+        return false;
     }
 
     private static bool LooksLikeNes(ReadOnlySpan<byte> rom) =>
@@ -36,6 +106,28 @@ public static class Emulator
     /// otherwise, so every cartridge that ever ran carries it.</summary>
     private static bool LooksLikeGameBoy(ReadOnlySpan<byte> rom) =>
         rom.Length >= 0x150 && rom.Slice(0x104, 48).SequenceEqual(NintendoLogo);
+
+    /// <summary>The two bytes mGBA itself settles for: the ARM branch every cartridge
+    /// begins with, and the fixed byte at $B2 that the hardware checks.</summary>
+    private static bool LooksLikeGameBoyAdvance(ReadOnlySpan<byte> rom) =>
+        rom.Length >= 0xC0 && rom[3] == 0xEA && rom[0xB2] == 0x96;
+
+    /// <summary>Sega stamped a header near the end of the first bank — at one of three
+    /// places, depending on how big the cartridge was — and the code in it says which of
+    /// the two consoles the game was sold for. Its absence is not fatal: plenty of
+    /// cartridges shipped without one, and the file's name gets the last word.</summary>
+    private static int? SegaRegion(ReadOnlySpan<byte> rom)
+    {
+        foreach (var at in (ReadOnlySpan<int>)[0x1FF0, 0x3FF0, 0x7FF0])
+        {
+            if (rom.Length < at + 16 || !rom.Slice(at, 8).SequenceEqual("TMR SEGA"u8))
+                continue;
+            // Codes 3 and 4 are the bigger console, 5 upwards the handheld.
+            var region = rom[at + 15] >> 4;
+            return region is >= 3 and <= 7 ? region : 4;
+        }
+        return null;
+    }
 
     private static ReadOnlySpan<byte> NintendoLogo =>
     [

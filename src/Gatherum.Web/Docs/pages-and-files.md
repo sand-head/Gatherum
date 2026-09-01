@@ -92,7 +92,8 @@ Pages, uploaded `.docx` documents, and any text file open in the editor.
   place: reopen the book on any device you're signed in on and it opens where you left
   off, and each reader keeps their own place. A visitor on a public book is never
   remembered by the server — their place is kept by their own browser instead, and
-  goes no further. A **game cartridge** — a `.nes`, `.gb` or `.gbc` file — plays: see
+  goes no further. A **game cartridge** — a `.nes`, `.gb`, `.gbc`, `.sms`, `.gg` or
+  `.gba` file — plays: see
   [Playing a cartridge](#playing-a-cartridge) below. Anything else offers a download.
 
 Editing autosaves. Presence shows who else has the document open, and if someone saved
@@ -101,17 +102,21 @@ stays in history either way.
 
 ## Playing a cartridge
 
-Upload a `.nes`, `.gb` or `.gbc` file and its page has a console on it. Press **Play**
-and the game runs.
+Upload a `.nes`, `.gb`, `.gbc`, `.sms`, `.gg` or `.gba` file and its page has a console
+on it. Press **Play** and the game runs.
 
-The console is not a plug-in and not a download: the processor, the picture chip and the
-sound chip are all part of Gatherum, and they run in your browser. The cartridge is
-fetched once and nothing about the game leaves your machine afterwards.
+The console is not a plug-in and not a download. For most of these machines the
+processor, the picture chip and the sound chip are all part of Gatherum itself; the Game
+Boy Advance is big enough that its emulator is a well-known one from elsewhere, built
+into Gatherum when Gatherum was built. Either way it runs in your browser, the cartridge
+is fetched once, and nothing about the game leaves your machine afterwards.
 
 - **The controls** are the arrow keys, <kbd>Z</kbd> and <kbd>X</kbd> for the two face
-  buttons, <kbd>Enter</kbd> for Start and <kbd>Shift</kbd> for Select. On a touchscreen
-  a pad appears under the screen instead. Click the picture to give it the keyboard
-  again after clicking anything else.
+  buttons, <kbd>Enter</kbd> and <kbd>Shift</kbd> for the other two. What those last two
+  are called depends on the machine — Start and Select on a Nintendo, Pause and Reset on
+  a Master System — and the player prints the names the console's own plastic used. On a
+  touchscreen a pad appears under the screen instead. Click the picture to give it the
+  keyboard again after clicking anything else.
 - **Sound** starts with the game — a browser will not make noise until someone has asked
   it to — and there is a button to turn it off.
 - **Saving.** A cartridge with a battery in it saves the way it always did, and the save
@@ -125,9 +130,10 @@ fetched once and nothing about the game leaves your machine afterwards.
 
 ### Playing together
 
-A Nintendo Entertainment System has two controller ports, and so does the player. Press
-**Play together** and anybody else who can see the page and opens it takes the second
-one — they appear in a strip under the screen, and you are playing the same game.
+A Nintendo Entertainment System has two controller ports, and so does a Master System —
+and so does the player. Press **Play together** and anybody else who can see the page and
+opens it takes the second one — they appear in a strip under the screen, and you are
+playing the same game.
 
 - **Nothing but buttons crosses the network.** Both browsers run the same console from
   the same cartridge, and identical machines given identical buttons stay identical, so
@@ -145,14 +151,51 @@ one — they appear in a strip under the screen, and you are playing the same ga
   simply reading.
 
 > [!NOTE]
-> The Game Boy is a one-player machine here. Two people on a Game Boy meant two Game Boys
-> and a link cable between them, which is a second console to emulate rather than a second
-> port to read — it is not built.
+> The Game Boy, the Game Gear and the Game Boy Advance are one-player machines here. Two
+> people on either meant two consoles and a cable between them, which is a second machine
+> to emulate rather than a second port to read — it is not built. Playing together also
+> asks that both machines agree frame for frame; for a console Gatherum wrote that is a
+> promise it keeps, and for one it did not write it is a claim that has to be measured
+> before anybody relies on it. The Super Nintendo's has been, which is why it plays with
+> two, and the Game Boy Advance's has not.
+
+### The consoles
+
+| Console | Files | Players |
+| --- | --- | --- |
+| Nintendo Entertainment System | `.nes` | Two |
+| Game Boy and Game Boy Color | `.gb`, `.gbc` | One |
+| Master System | `.sms` | Two |
+| Game Gear | `.gg` | One |
+| Game Boy Advance | `.gba` | One |
+| Super Nintendo | `.sfc`, `.smc` | Two |
 
 Gatherum knows the Nintendo Entertainment System's common cartridge boards (NROM, MMC1,
-UxROM, CNROM, MMC3, AxROM and a few others) and the Game Boy's (none, MBC1, MBC2, MBC3
-with its clock, and MBC5). A cartridge on a board it has not met says so by name instead
-of failing quietly.
+UxROM, CNROM, MMC3, AxROM and a few others), the Game Boy's (none, MBC1, MBC2, MBC3 with
+its clock, and MBC5) and the Master System's (Sega's own paging hardware, and the cheaper
+board Codemasters built for their own games). A cartridge on a board it has not met says
+so by name instead of failing quietly.
+
+The Game Boy Advance and the Super Nintendo are the two machines here whose emulators
+Gatherum did not write, so which games run well on them is those emulators' business
+rather than Gatherum's. They are also the two that are fetched and built rather than
+shipped, so a Gatherum built without them offers a download where the others offer a
+console, and says so.
+
+A Game Boy Advance cartridge's header says nothing about whether it saves, so the file's
+details do not either — the console works it out when the game starts. A Super Nintendo
+cartridge hides its header at the end of a bank rather than the start of the file, and
+which bank depends on how the board was wired; Gatherum looks in both places and trusts
+the one whose checksum adds up. A `.smc` file with the extra 512 bytes an old copier
+wrote in front of it reads the same as a `.sfc` without them. The Super Nintendo's pad
+has four face buttons rather than two, and they are drawn in the diamond the console
+printed them in: <kbd>Z</kbd> and <kbd>X</kbd> are B and A as everywhere else, and
+<kbd>A</kbd> and <kbd>S</kbd>, above them, are Y and X.
+
+A Master System cartridge carries no title, only the catalogue number Sega sold it under,
+so that is what search has to go on for one. A Game Gear plays in colour on a screen a
+little smaller than the picture the hardware draws, and shows the middle of it, which is
+what the console did.
 
 > [!NOTE]
 > Gatherum plays cartridges; it does not supply them. What you upload is your business,
@@ -197,6 +240,9 @@ Two different tempos, and they never share a path.
 | `.epub` | Its chapters in reading order, each as its Markdown rendering |
 | Images | Embedded metadata |
 | `.nes`, `.gb`, `.gbc` | What the cartridge header says: the console, the title printed in it, the board, and whether it saves |
+| `.sms`, `.gg` | What Sega's header says: the console, the catalogue number the game was sold under, and the region |
+| `.gba` | The title and game code printed in the header, and the region its last letter names |
+| `.sfc`, `.smc` | The title printed in the header, the board and any second processor on it, the save memory, and the region |
 
 **Analysis** asks a model, takes minutes, and runs on a background worker after the
 upload has already returned. It is off unless the instance's owner has configured

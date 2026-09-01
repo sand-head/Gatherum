@@ -1951,3 +1951,197 @@ another that lies. Somebody who wants to cheat has an emulator of their own.
 the button. Two people on a Game Boy meant two Game Boys and a link cable, which is a
 second console to emulate and a serial protocol to synchronise — a different feature
 wearing the same words.
+
+## A third console, and what a second one had already settled
+
+The Master System is the first console added since `IEmulatorCore` existed, which made it
+a test of the seam as much as of the hardware. Most of it needed nothing: the same eight
+buttons, the same one-frame-per-`RunFrame` contract, the same positional save state, and
+netplay that worked on the first run because two ports on the front of a console is
+exactly what the protocol was written against. Two things did not fit, and both were the
+seam being too narrow rather than the console being strange.
+
+**Sound is not always one channel.** A Game Gear has a register saying which of the four
+channels reach which ear — it is the whole reason the register exists — and the audio path
+handed the browser a single mono buffer. The choice was to implement the register and
+throw its answer away, or widen the seam by one property. Discarding it would have left
+code that does nothing, which is worse than either alternative, so `AudioChannels` joins
+the interface and `queueEmulatorAudio` deinterleaves. A mono core answers 1 and behaves
+exactly as before.
+
+**The plastic is part of the machine.** The player drew a pad labelled A, B, Start and
+Select because that is what both Nintendos are printed with. Sega numbered the face
+buttons, put Pause on the console rather than the pad, and wired Reset to a line the game
+reads and answers for itself — and a Game Gear has none of the four, only a Start button
+beside the screen. `ButtonLabels` is one property carrying four strings, `null` meaning a
+button the machine never had, and the player leaves those off the pad and out of the
+sentence about the keyboard. The bits stay the same everywhere; only the printing moves.
+
+Three details of the hardware were worth the code they cost. The paging registers live
+*inside* work memory at the top of the address space, so a write to `$FFFD` both stores a
+byte and moves a bank — and the first kilobyte never pages, because the interrupt vectors
+are there and a program that could page them away could not return from anything. Nothing
+in a cartridge file says which of the two boards is fitted, so Codemasters' own checksum
+is what gives their board away; paging one as the other hangs on the title screen. And the
+picture chip draws a line at the moment the beam finishes it rather than pixel by pixel,
+because the registers that decide a line have stopped moving by then — what a game changes
+in a line interrupt lands on the line after, which is precisely what a split screen is.
+
+The Game Gear is not a fourth core. It is the same silicon behind a smaller window: it
+draws the identical 256×192 picture and shows the 160×144 in the middle, so the crop lives
+in the picture chip rather than in the player, and a cartridge that runs on one runs on the
+other. Which console a file wants is a nibble in Sega's header, and where that header sits
+is the one thing that made the search-side extraction more expensive — it is at the end of
+the first bank rather than the start of the file, so identifying a cartridge now reads the
+first 32 KB instead of the first 336 bytes. Still bounded, still constant, still nothing
+like reading the file.
+
+**What was not done.** The picture chip's four older modes, inherited from the TMS9918 the
+Master System's was built out of, are not implemented: mode 4 is what the library was
+written for, and a handful of early cartridges that use mode 2 will draw wrongly rather
+than refuse. The FM sound board sold in Japan is not emulated either — a game that has an
+FM soundtrack plays its ordinary one.
+
+## A core from elsewhere, built at image time and wearing the same seam
+
+The consoles in `Gatherum.Client/Emulation` were written here because the alternative was
+vendoring somebody's minified JavaScript emulator, and the whole point of `gatherum.js`
+being short is that a person can read all the JavaScript in the app in one sitting. That
+argument holds for a NES. It does not hold for a Game Boy Advance: an accurate ARM7TDMI
+with the picture and sound hardware around it is not a weekend, and writing a worse one
+than mGBA to avoid a dependency would be pride rather than engineering.
+
+So the Game Boy Advance is mGBA — and the reason it can be is that **the thing vendored
+is not JavaScript**. mGBA compiles to a single WebAssembly module with no glue file: the
+rule that bends is only that `gatherum.js` grew by a WASI host, which is Gatherum's own
+code and readable as such. An Emscripten build would have shipped a JavaScript library
+and was never on the table.
+
+**The shim is Rust, and that was a preference rather than a finding.** Both were built
+and measured: identical frame times, the same sixteen imports, 2.6% more binary for Rust.
+The deciding argument was the owner's — code you like and can read in your own repository
+beats code that is marginally simpler to build — and it is a better criterion than binary
+size. What makes it work is `no_std`: the core brings wasi-libc with it, and Rust's own
+copy would be a second one. The shim exists at all because libretro is built out of
+function pointers and JavaScript cannot manufacture one, so a host written purely in JS
+cannot reach the end of `retro_init`.
+
+**Nothing is committed and nothing is fetched at run time.** `build-core.sh` pins mGBA by
+commit and the toolchain by hash, and the Dockerfile runs it in a stage of its own so the
+compiler never reaches the shipped image. That is the bargain `models/` already strikes.
+A working copy that has never run the script simply has no Game Boy Advance core, and
+those cartridges offer a download rather than a broken console — which is also what a
+deployment that would rather not carry one gets.
+
+Three things fell out of the work that were not obvious going in.
+
+**A wall clock is how a vendored core breaks netplay.** mGBA asks the host for
+`clock_time_get`. Answer honestly and two people playing the same cartridge drift apart
+with nothing on screen to say why. The host feeds it a counter that advances one frame per
+frame. It is written down in three places because it is the kind of thing that is
+forgotten exactly once.
+
+**A Game Boy Advance has ten buttons and the seam had eight.** `GamepadButtons` grew two
+shoulders and the netplay wire grew a byte to carry them. Leaving them out was tempting
+and would have made half the library unplayable.
+
+**A cartridge's header does not always know what the cartridge does.** Every other format
+here declares whether it saves; a GBA does not — the save hardware is found by scanning
+the program for a marker. `RomHeader.Battery` became a `bool?` so the answer can be "the
+format does not say" rather than a guess printed as a fact, and the console works it out
+at run time regardless.
+
+**What this is not.** `PlayerCount` is 1, and not because a Game Boy Advance had one
+controller port — it is because playing together rests on two machines being guaranteed
+to reach identical states, and that guarantee is the one thing a core from elsewhere
+cannot give. The C# consoles are held to it by `EmulatorStateTests`; mGBA is held to
+nothing here. Offering "play together" on a core nobody in this project can hold to that
+line would be selling a promise that belongs to somebody else.
+
+## bsnes, an Emscripten core, and a measurement rather than a promise
+
+The previous section closed by saying `PlayerCount` was 1 because a vendored core's
+determinism is somebody else's claim. That was the right answer to the wrong question.
+"A guarantee is what a core from elsewhere cannot give" is true and beside the point: the
+seam does not need a guarantee, it needs a fact. Two copies of the module, the same
+cartridge, the same buttons on the same frames, `retro_serialize` compared every sixty
+frames — either they agree or they do not, and that is measurable from outside.
+
+bsnes was measured. Two machines agreed at all ten checkpoints over six hundred frames of
+scripted two-player input, and a control run proves different buttons still reach
+different states, so the agreement is not a core ignoring its pads. `PlayerCount` is 2 for
+the Super Nintendo, and it is 2 for that reason and no other. mGBA has not been measured
+and stays at 1; if somebody measures it, it changes.
+
+Getting there took three findings.
+
+**The core must not be allowed to know anything but the cartridge.** bsnes fills memory
+with noise at power-on — faithful to the hardware, and fatal to two consoles that have to
+start life identical. That is the core option `bsnes_entropy=None`, which meant teaching
+the shim to answer `RETRO_ENVIRONMENT_GET_VARIABLE`. With entropy off the two machines
+still differed by eight bytes, which turned out to be `emulator/random.hpp` seeding itself
+from `clock()`. The wall-clock rule the last section wrote down three times had a fourth
+place to be written: `libco-extras.c` answers zero. A seed that is never used still lands
+in a save state, and a desync check comparing states would have cried wolf every frame.
+
+**A value returned across an Asyncify fiber swap does not survive the trip.** bsnes runs
+its processor, sound and picture as coroutines, and on Emscripten a coroutine swap unwinds
+the WebAssembly stack out to JavaScript and rewinds it back in. `retro_serialize_size`
+completed, every side effect happened, and the caller was handed a zero — a save state of
+nought bytes with nothing to say why. Anything in the shim that can swap now parks its
+answer in a static and a second call that cannot swap reads it. This is a property of the
+mechanism rather than of bsnes, so the next coroutine-shaped core inherits the fix.
+
+**A `bool` from WebAssembly is a number.** The shim's `gatherum_state_ok` comes back to
+JavaScript as `1`, which the .NET runtime refuses to deserialize as a `System.Boolean` —
+and the symptom was netplay stuck on "Handing the game over…" rather than anything naming
+a type. Coerced at the boundary now.
+
+### The rule that actually bent
+
+"No JavaScript beyond `gatherum.js`" was the reason the last section gave for mGBA being
+a WASI build and for an Emscripten one being "never on the table". bsnes is where that
+stopped being tenable: WASI's libc++ ships without exception support and offers nothing to
+build a coroutine swap on, so bsnes cannot be built that way at all. Emscripten emits an
+84 KB loader beside the module, and it has to ship.
+
+Faced with that, the argument written here first was that compiler output for a pinned,
+hash-verified core is not a *library* — that the line was never "no `.js` files", and that
+Gatherum has shipped 352 KB of exactly this kind of file since day one because Blazor's
+own `dotnet.native.js` is an Emscripten build too. All of that is true, and it was still a
+rationalization: it worked backwards from a build that had already succeeded to a reading
+of the rule that permitted it.
+
+The owner's answer is the real one, and it is simpler. **The rule is about the crucial
+features.** The tree, the editor, search, sharing, auth — the things a person keeps their
+life's notes in — are C# end to end so that everything running in a browser is code this
+project can account for. Playing a cartridge is not one of those, and the ROM player is
+scoped so it cannot become one: a console appears on a ROM's page and nowhere else, and a
+build with no core at all serves a download link while the rest of the app is untouched.
+Within that scope, a vendored core may bring whatever its toolchain emits.
+
+That is a wider licence than the rationalization was, and worth stating plainly rather
+than being pleased about: it puts the whole libretro catalogue within reach instead of the
+few cores that happen to compile against WASI, and it means the next such core does not
+need an argument, only a licence check and a determinism measurement. The bound is scope,
+not file format — the wiki proper still takes no JavaScript library, hand-written or
+otherwise.
+
+What is given up is real and worth naming: the WASI build's import list is fourteen
+functions long and can be read in a minute, and `bsnes.mjs` cannot. The mitigation is that
+it is generated from pinned inputs by a script in the repository, so it is reproducible
+rather than trusted. mGBA stays a WASI build for the same reason — nothing forces it to
+change, and glue-free is better where it is free.
+
+### Why bsnes rather than a smaller core
+
+Asked for a Super Nintendo, the honest first answer was Supafaust — it needs no coroutines
+and would have been a plainer build. The owner asked for bsnes, twice, and bsnes is the
+more accurate emulator; where accuracy is the whole point of an emulator, deferring to it
+over build convenience is the right call anyway. The cost is 2.3 MB of module against
+Supafaust's 2.3 MB and a harder build, which is not much of a cost.
+
+**Both cores link the same shim, unchanged.** That was the claim `core-shim` was written
+on and this is the evidence for it: a C core built against WASI and a C++ core built
+against Emscripten, sharing one Rust translation unit that knows libretro and nothing
+about either.

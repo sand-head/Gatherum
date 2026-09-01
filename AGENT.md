@@ -14,7 +14,7 @@ search, one login, one API, plus an MCP server so agents are first-class users.
 C#/Blazor end to end — static shell with Interactive Auto islands for everything
 interactive: the first visit renders on a server circuit while the WASM runtime
 downloads, every later visit runs fully in WebAssembly over `/api` (the only JS is
-`wwwroot/js/gatherum.js`, ~150 lines, plus the pager script `EpubChapterHtml` injects
+`wwwroot/js/gatherum.js`, plus the pager script `EpubChapterHtml` injects
 into rendered EPUB chapters — see DECISIONS.md) — PostgreSQL, deployed as a single rootless
 Podman container behind a TLS-terminating reverse proxy with Authelia for OIDC.
 
@@ -75,9 +75,9 @@ auto-login. Migrations: `dotnet ef migrations add <Name> -p src/Gatherum.Infrast
   `DocumentHtmlView` instead — the version panel's preview is the one today), tree,
   sidebar panels (contents/similar/recent), search box, node header, the category bar at
   the foot of a page (`NodeCategories`), version panel, file view, settings keys, and
-  the ROM player (`RomPlayer` over `Emulation/` — `IEmulatorCore` with a NES and a Game
-  Boy behind it, here because a console only ever runs in the reader's own browser, plus
-  `Emulation/Netplay/` where two of them keep in step) —
+  the ROM player (`RomPlayer` over `Emulation/` — `IEmulatorCore` with a NES, a Game Boy
+  and a Master System behind it, here because a console only ever runs in the reader's
+  own browser, plus `Emulation/Netplay/` where two of them keep in step) —
   plus Gatherum's Markdown dialect, which lives
   here because it is the editor's word: `GatherumMarkdown` (the extension set and the
   only read/write door), `AsideExtension`/`CalloutExtension`/`BlockTags`,
@@ -87,6 +87,16 @@ auto-login. Migrations: `dotnet ef migrations add <Name> -p src/Gatherum.Infrast
   `NodeLinks` (the padlock a link the reader may not follow wears) and `NodeUrl`. `IAppData` (`AppData.cs`) is their only view of the world —
   implemented by `ServerAppData` over the services on the server circuit and by
   `HttpAppData` over `/api` in WebAssembly.
+- `native/` — the second way a cartridge can play: an emulator somebody else wrote,
+  compiled to WebAssembly. `core-shim/` is Rust and is nearly all of what lives in the
+  repo — a `no_std` staticlib giving libretro's function-pointer interface a flat surface
+  JavaScript can call, because JavaScript cannot manufacture a wasm function pointer, and
+  the same one links both cores unchanged (`bsnes-support/libco-extras.c` is the small
+  exception, three functions bsnes's Emscripten backend leaves out). `build-core.sh`
+  fetches each core at a pinned commit and builds it — mGBA against WASI, bsnes against
+  Emscripten, because a core built out of coroutines and exceptions cannot use the first;
+  what it fetches and what it emits are both gitignored, the same bargain `models/`
+  strikes. See `native/README.md`, which also carries the licence table.
 - `tests/Gatherum.Tests` — unit tests plus `AppIntegrationTests` booting the real app.
 
 Render modes: static SSR for pages and layout; every interactive component is an
@@ -168,7 +178,16 @@ fresh DI scope via `Services/AppOperations`.
   console's cycles), no randomness, and nothing the player does *outside* the console in
   a save state. Draining audio is the trap: how often a browser asks for samples is its
   own business, so the sample queue is deliberately not serialized. `EmulatorStateTests`
-  holds the line, including a muted console that must still match an unmuted one.
+  holds the line, including a muted console that must still match an unmuted one. A
+  vendored core is held to the same rule from outside: mGBA asks the host for
+  `clock_time_get`, and the host answers with a counter that advances a frame at a time,
+  never the time — a core that reads a real clock desyncs quietly, minutes in.
+- The buttons are the same on every console; the printing on them is not. Eight are
+  shared, and the four above them — two shoulders, then the second pair of face buttons —
+  arrived with the machines that had them. What a machine calls each is `ButtonLabels` on
+  the core, and a `null` is a button it never had: the player leaves those off the pad
+  rather than drawing one the hardware has no wire for. A button that lives above the
+  eighth bit is why a netplay input message carries two bytes of buttons.
 - The netplay server relays and understands nothing. It stamps which seat a message came
   from — a client says what it pressed, never who pressed it — and forwards it. How many
   seats a room has is the console's answer, not the server's. Don't teach it the game.
@@ -213,10 +232,19 @@ fresh DI scope via `Services/AppOperations`.
   API endpoint is authenticated unless it says `.AllowAnonymous()`, and no write ever does.
 - `INodeAuthorizer.VisibleTo` is the only door for visibility. Never spell the rule again
   in a query — widening the seam is what makes a change correct everywhere at once.
-- No JavaScript beyond `wwwroot/js/gatherum.js` and the pager `EpubChapterHtml`
-  injects into the chapters it renders (a sandboxed frame has no Blazor to lean on;
-  the CSP admits that script by hash and nothing else). Nothing goes in either that
-  Blazor can do natively.
+- No hand-written JavaScript beyond `wwwroot/js/gatherum.js` and the pager
+  `EpubChapterHtml` injects into the chapters it renders (a sandboxed frame has no Blazor
+  to lean on; the CSP admits that script by hash and nothing else). Nothing goes in either
+  that Blazor can do natively, and no JavaScript library — vendored or fetched — goes
+  anywhere near the wiki itself. **The rule is about the crucial features**: the tree,
+  the editor, search, sharing, auth. Those are what a person keeps their life's notes in,
+  and they are C# end to end so that the whole of what runs in a browser is code this
+  project can account for. Playing a cartridge is not one of those, and it is scoped so it
+  cannot become one: a console appears on a ROM's page and nowhere else, and a build with
+  no core at all serves a download link while everything else works as before. So the ROM
+  player may take whatever JavaScript a vendored core's toolchain emits — the owner's
+  call, and what puts every libretro core within reach rather than only the few that
+  happen to compile against WASI. It buys a console; it does not buy a jQuery.
 - Every Markdown ⇄ document conversion goes through `GatherumMarkdown` — never
   `MarkdownSerializer` directly. A page read without the extension set writes the wiki's
   own syntax back out as prose.
@@ -282,16 +310,45 @@ second icon set, and don't hand-draw a path when the pack has one.
    One frame per `RunFrame`, an ARGB `Frame` the player pins once, and audio drained
    through `ReadAudio`; the player owns the clock.
 2. Teach `Emulation/Emulator.Load` to recognise it — by the bytes first, the extension
-   second — and `MediaTypes` its extension.
+   second — `MediaTypes` its extension, and `FileView.IsRom` both. That last one is a
+   second copy on purpose: Gatherum.Client does not reference Core, so the extension
+   list is spelled twice or the page renders a download link instead of a console.
 3. Teach `Core/Roms/RomHeader` to read its header, so a cartridge is findable by what it
-   says it is, and add the row to the extraction table in `Docs/pages-and-files.md`.
-4. Implement `SaveState`/`LoadState` over `StateWriter`/`StateReader` — positional and
+   says it is, and add the row to the extraction table in `Docs/pages-and-files.md`. A
+   header is not always at the start of the file — Sega's is at the end of the first
+   bank — and `RomTextExtractor.HeaderBytes` bounds how far the search goes.
+4. Name its plastic in `ButtonLabels`. The eight bits are the same on every machine, but
+   what they are printed as is not, and a `null` is a button the console never had.
+5. Implement `SaveState`/`LoadState` over `StateWriter`/`StateReader` — positional and
    untagged, so both sides must walk the same fields in the same order; the four-byte tag
    at the head is what refuses somebody else's state. Leave the audio queue out.
-5. Add tests beside `Nes6502Tests`/`GameBoyTests`: hand-assembled programs in
+6. Add tests beside `Nes6502Tests`/`GameBoyTests`/`Z80Tests`: hand-assembled programs in
    `RomFixtures`, never a real game — a checked-in ROM is somebody's copyrighted work.
    A console that reports more than one player also needs the determinism tests in
    `EmulatorStateTests` pointed at it, or netplay on it is a coin toss.
+
+**Add a vendored console** (a machine too big to write from scratch):
+1. Read `native/README.md` first — it carries the licence table, and a core whose licence
+   does not fit AGPL-3.0 cannot be added whatever else is true of it.
+2. Pin it in `native/build-core.sh` beside the two there. Plain C with no threads, no
+   coroutines and no exceptions goes to WASI and comes out glue-free; anything else goes
+   to Emscripten. Link it against `core-shim` unchanged: the shim is not specific to any
+   core, and on the WASI side anything the built module imports beyond WASI is a source
+   file you meant to compile and did not.
+3. Never let it learn the time. mGBA asks WASI for `clock_time_get` and the host answers
+   with a frame counter; bsnes calls `clock()` and `libco-extras.c` answers zero. Find
+   which it does before trusting anything it says about two machines agreeing.
+4. Give it a row in `VendoredCore.Machines` — module URL, pad labels, player count, and
+   any core option that changes what the machine *does* rather than how it looks. Teach
+   `Emulator.Identify` its bytes; `MediaTypes` and `FileView.IsRom` as for any console.
+5. Report `PlayerCount` 1 until you have **measured** two of it in step: same cartridge,
+   scripted two-player input, `retro_serialize` compared every sixty frames over several
+   hundred, plus a control run proving different buttons still diverge. Netplay is two
+   machines that must agree frame for frame; a vendored core's determinism is somebody
+   else's claim, and the answer to a claim is a measurement, not an assumption either way.
+6. If it swaps coroutines under Asyncify, remember that a value returned across a swap is
+   lost. Park the answer in a static and fetch it with a second call, the way the shim's
+   state calls already do.
 
 **Add a text extractor**:
 1. Implement `ITextExtractor` in `src/Gatherum.Infrastructure/Extraction/` (cf.
@@ -362,6 +419,7 @@ identity, or the access model.
 ## What not to do
 
 - No new projects without a real boundary that demands one.
-- No third-party state/MVVM libraries; no JS libraries, vendored or fetched.
+- No third-party state/MVVM libraries; no JS libraries, vendored or fetched — the ROM
+  player's vendored cores are the one exception, and they are confined to a ROM's page.
 - No speculative abstractions, no repository layer over EF.
 - No features beyond `PLAN.md` scope without asking.

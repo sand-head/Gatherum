@@ -1,3 +1,16 @@
+# Stage 0: the vendored emulator cores, in a stage of their own so that the toolchain they
+# needs — a WASI clang, an Emscripten SDK and a Rust cross-compiler — never reaches the
+# image that ships, and so editing C# does not rebuild four megabytes of emulator. What
+# comes out is what native/dist/ holds; see native/README.md.
+FROM rust:1-bookworm AS core
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl git make python3 xz-utils ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+RUN rustup target add wasm32-wasip1 wasm32-unknown-emscripten
+WORKDIR /native
+COPY native ./
+RUN ./build-core.sh
+
 # Stage 1: compile and publish. The editor's Interactive Auto island relinks the
 # WebAssembly runtime with SkiaSharp's native library — that needs the wasm-tools
 # workload, and emscripten shells out to python.
@@ -16,6 +29,9 @@ RUN dotnet restore src/Gatherum.Web
 # twenty-three megabytes of weights. The publish below finds them already fetched.
 RUN dotnet msbuild src/Gatherum.Infrastructure/Gatherum.Infrastructure.csproj \
     -t:FetchEmbeddingModel
+# Where the web project's build looks for it, and the only thing carried over from the
+# stage above: not the source it was built from, and not the compiler that built it.
+COPY --from=core /native/dist/ ./native/dist/
 COPY src ./src
 # Published for one architecture on purpose. ONNX Runtime ships native libraries for
 # every platform it supports, and a portable publish carries all of them — most of a

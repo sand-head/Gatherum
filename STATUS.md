@@ -1,9 +1,16 @@
 # Status
 
-As of playing together — two people open the same NES cartridge and take a controller
-each, with nothing but a byte of buttons a frame crossing the network because both
-browsers are running the same deterministic console. Before that: a `.nes`, `.gb` or
-`.gbc` upload has a console on its page, written in C# and running in the reader's own
+As of a Super Nintendo two people can play together on: bsnes, the second console here
+whose emulator Gatherum did not write, and the first one from elsewhere that has been
+*measured* to stay in step with a copy of itself rather than merely claimed to. Before
+that: a Game Boy Advance, the first such console — mGBA, built to one glue-free
+WebAssembly module at image-build time and driven through the same seam as the rest.
+Before that: a third console — a Master System and the Game Gear that is the same machine in a
+smaller case, joining the Nintendo Entertainment System and the Game Boy. Before that:
+two people open the same cartridge and take a controller each, with nothing but a byte of
+buttons a frame crossing the network because both browsers are running the same
+deterministic console; and a `.nes`, `.gb`, `.gbc`, `.sms` or `.gg`
+upload has a console on its page, written in C# and running in the reader's own
 browser rather than borrowed from anybody's JavaScript. Before that: a `:::collection` fence makes a list something a group works rather
 than reads, with each person's answers a page of their own, and the same grid answers who
 can make which night as readily as who has which sprite. Before that:
@@ -135,23 +142,46 @@ browser sessions — including against the built container).
   description, categories, referenced-by, per-version download; extraction: text verbatim,
   PDF (PdfPig), image metadata (MetadataExtractor); media types resolved sensibly
   when browsers upload code as octet-stream.
-- **Cartridges play** — upload a `.nes`, `.gb` or `.gbc` and its page has a console on
-  it. `RomPlayer` is an Interactive Auto island over `Emulation/`: a Nintendo
+- **Cartridges play** — upload a `.nes`, `.gb`, `.gbc`, `.sms`, `.gg`, `.gba`, `.sfc` or
+  `.smc` and its page has a console on it. `RomPlayer` is an Interactive Auto island over `Emulation/`: a Nintendo
   Entertainment System (6502 with a dot-accurate picture chip, five sound channels,
-  and the NROM/MMC1/UxROM/CNROM/MMC3/AxROM/GxROM boards) and a Game Boy that becomes a
+  and the NROM/MMC1/UxROM/CNROM/MMC3/AxROM/GxROM boards), a Game Boy that becomes a
   Game Boy Color when the cartridge asks (SM83, the picture chip's mode timing and
-  colour palettes, four sound channels, MBC1 through MBC5), both behind one
-  `IEmulatorCore`. Keyboard or an on-screen pad, sound through Web Audio, and
-  battery saves kept by the reader's own browser with a `.sav` download and upload
-  beside them. It runs only in WebAssembly and says so on the first visit while the
-  runtime lands — sixty frames a second over a circuit is not a game. Verified in a
-  scripted browser session against the running app: both consoles boot and paint, a
-  keypress reaches the game and changes what is on screen, sound buffers are scheduled,
-  and a cartridge's battery memory round-trips through storage and out as a file.
-  A cartridge's header is extraction text, so a ROM is findable by console, title
-  and board.
-- **Playing together** — a second person opens the same NES cartridge and takes the
-  second controller. Both browsers run the same console; identical machines given
+  colour palettes, four sound channels, MBC1 through MBC5), and a Master System that is
+  a Game Gear when the header says so (Z80, the mode 4 picture chip with sprites and
+  line interrupts, the SN76489's three tones and noise, Sega's paging hardware and
+  Codemasters' board), and — on a core fetched rather than written, see below — a Game
+  Boy Advance and a Super Nintendo, all behind one `IEmulatorCore`. Keyboard or an on-screen pad
+  labelled the way that console's own plastic was, sound through Web Audio in mono or
+  stereo as the machine had it, and battery saves kept by the reader's own browser with
+  a `.sav` download and upload beside them. It runs only in WebAssembly and says so on
+  the first visit while the runtime lands — sixty frames a second over a circuit is not
+  a game. Verified in a scripted browser session against the running app: the consoles
+  boot and paint, a keypress reaches the game and changes what is on screen, sound
+  buffers are scheduled, and a cartridge's battery memory round-trips through storage
+  and out as a file. A cartridge's header is extraction text, so a ROM is findable by
+  console, title and board — or, on a Sega cartridge, by the catalogue number that is
+  all its header carries.
+- **Cores from elsewhere** — a machine too big to write from scratch plays on somebody
+  else's emulator, behind the same `IEmulatorCore` as the rest. `native/build-core.sh`
+  fetches mGBA and bsnes at pinned commits and builds each against the toolchain its own
+  shape demands: mGBA is plain C and comes out as one WASI module importing fourteen
+  system calls, while bsnes runs its chips as coroutines and throws exceptions, so it
+  goes through Emscripten and arrives with the loader that emits. Both link the same
+  `core-shim`, a `no_std` Rust staticlib that gives libretro's function pointers a flat
+  surface JavaScript can call — unchanged between them, which is the claim the shim was
+  written on. Nothing is committed and nothing is fetched at run time; a tree that has
+  never run the script offers a download where those cartridges would have a console.
+  Two things a vendored core must be denied: the time (a frame counter answers mGBA's
+  `clock_time_get`, and zero answers bsnes's `clock()`) and a random power-on state
+  (`bsnes_entropy=None`). Verified in a scripted browser session against the running app
+  and, for bsnes, by running two of it against six hundred frames of scripted two-player
+  input and comparing `retro_serialize` every sixty — byte-identical at all ten
+  checkpoints, with a control run proving different buttons still diverge. That
+  measurement is the whole reason the Super Nintendo reports two players and the Game
+  Boy Advance reports one.
+- **Playing together** — on a console with two ports, a second person opens the same
+  cartridge and takes the second controller. Both browsers run the same console; identical machines given
   identical buttons stay identical, so what crosses the wire is one byte of buttons per
   player per frame and nothing else. `PlayEndpoints` is the app's one WebSocket and
   relays without understanding: it stamps which seat a message came from and forwards
@@ -248,7 +278,8 @@ browser sessions — including against the built container).
   two consoles fed the same scripted two-player input for 240 frames reaching identical
   states, a muted one matching an unmuted one, a state that rewinds and replays to the
   same picture, one that carries across to a fresh console, and states from the wrong
-  console or half a file refused rather than half-loaded), the netplay wire format and
+  console or half a file refused rather than half-loaded — run against the NES and the
+  Master System, the two machines netplay can be played on), the netplay wire format and
   the room itself against a booted app over real sockets (two players seated and their
   buttons relayed, a machine handed to a late arrival, a third turned away, a mismatched
   cartridge refused, and a stranger who cannot see the node refused the room too),
@@ -299,6 +330,11 @@ browser sessions — including against the built container).
 
 ## Known gaps
 
+- The Master System's picture chip only draws mode 4. The four older modes it inherited
+  from the TMS9918 are not implemented, so the handful of early cartridges written for
+  mode 2 draw wrongly rather than refuse. Mode 4 is what the library was written for.
+- The FM sound board sold for the Master System in Japan is not emulated: a game with an
+  FM soundtrack plays the ordinary one it also shipped with.
 - A `[[wiki link]]` naming a page the reader may not see inks red, not locked, and
   offers to write it. That is on purpose: a wiki link is a search by title, and
   answering "that one exists, it just isn't yours" would hand out the existence of a

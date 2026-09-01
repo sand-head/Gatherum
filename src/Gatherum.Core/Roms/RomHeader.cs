@@ -8,6 +8,10 @@ public enum RomSystem
 {
     Nes,
     GameBoy,
+    MasterSystem,
+    GameGear,
+    GameBoyAdvance,
+    SuperNintendo,
 }
 
 /// <summary>What a cartridge image says about itself before anything runs it: the
@@ -25,13 +29,14 @@ public sealed record RomHeader(
     int ProgramBytes,
     int GraphicsBytes,
     int SaveRamBytes,
-    bool Battery,
+    bool? Battery,
     string? Region)
 {
     /// <summary>Reads the header, or nothing when the bytes are not a cartridge this
     /// knows — a truncated download, or a `.gb` that is really something else.</summary>
     public static RomHeader? Read(ReadOnlySpan<byte> bytes) =>
-        ReadNes(bytes) ?? ReadGameBoy(bytes);
+        ReadNes(bytes) ?? ReadGameBoy(bytes) ?? ReadGameBoyAdvance(bytes)
+        ?? ReadSega(bytes) ?? ReadSuperNintendo(bytes);
 
     /// <summary>The header as lines a person — or a search index — can read.</summary>
     public string Describe()
@@ -46,7 +51,11 @@ public sealed record RomHeader(
             text.AppendLine($"Graphics: {Kilobytes(GraphicsBytes)}");
         if (SaveRamBytes > 0)
             text.AppendLine($"Save memory: {Kilobytes(SaveRamBytes)}");
-        text.AppendLine(Battery ? "Saves: battery-backed" : "Saves: none");
+        // A Game Boy Advance cartridge says nothing about saving anywhere in its
+        // header — the hardware is worked out by looking for a marker in the program
+        // itself — so the honest thing is to leave the line out rather than guess.
+        if (Battery is { } battery)
+            text.AppendLine(battery ? "Saves: battery-backed" : "Saves: none");
         if (Region is { Length: > 0 })
             text.AppendLine($"Region: {Region}");
         return text.ToString();
@@ -180,6 +189,239 @@ public sealed record RomHeader(
             GameBoyBattery(cartridgeType),
             bytes[0x14A] == 0 ? "Japan" : "Overseas");
     }
+
+    // ---- Game Boy Advance --------------------------------------------------------
+
+    /// <summary>The two bytes mGBA itself checks: the ARM branch every cartridge starts
+    /// with, and the fixed byte at $B2. There is a 156-byte logo in between that the
+    /// hardware also verifies, but these two are what an emulator settles for and what
+    /// tells a renamed download apart from a picture of one.</summary>
+    private static RomHeader? ReadGameBoyAdvance(ReadOnlySpan<byte> bytes)
+    {
+        if (bytes.Length < 0xC0 || bytes[3] != 0xEA || bytes[0xB2] != 0x96)
+            return null;
+
+        var titleBytes = bytes.Slice(0xA0, 12);
+        var end = titleBytes.IndexOf((byte)0);
+        var title = Encoding.ASCII
+            .GetString(end < 0 ? titleBytes : titleBytes[..end])
+            .Trim();
+
+        var code = Encoding.ASCII.GetString(bytes.Slice(0xAC, 4)).Trim();
+        var maker = Encoding.ASCII.GetString(bytes.Slice(0xB0, 2)).Trim();
+
+        // The fourth letter of the game code is the region the cartridge was sold in.
+        var region = code.Length == 4
+            ? code[3] switch
+            {
+                'J' => "Japan",
+                'E' => "North America",
+                'P' => "Europe",
+                'D' => "Germany",
+                'F' => "France",
+                'I' => "Italy",
+                'S' => "Spain",
+                _ => null,
+            }
+            : null;
+
+        return new RomHeader(RomSystem.GameBoyAdvance, "Game Boy Advance",
+            title.Length == 0 ? null : title,
+            code.Length == 0 ? "Cartridge" : $"Game code {code}, maker {maker}",
+            bytes.Length, 0, 0, null, region);
+    }
+
+    // ---- Super Nintendo --------------------------------------------------------
+
+    /// <summary>The Super Nintendo is the one machine here whose cartridges do not say
+    /// where their header is. It sits at the end of a bank, and which bank depends on how
+    /// the cartridge was wired — so both places are tried and the one whose checksum adds
+    /// up wins. A file copied off a cartridge by a 1990s copier carries 512 bytes of its
+    /// own in front, which shifts everything; that is looked past first.</summary>
+    private static RomHeader? ReadSuperNintendo(ReadOnlySpan<byte> bytes)
+    {
+        // A copier header is the only reason a cartridge image is not a whole number of
+        // kilobytes, which is how it is recognised without trusting the file's name.
+        var start = bytes.Length % 1024 == 512 ? 512 : 0;
+        var image = bytes[start..];
+
+        RomHeader? best = null;
+        var bestScore = -1;
+        foreach (var at in (ReadOnlySpan<int>)[0x7FC0, 0xFFC0])
+        {
+            if (image.Length < at + 32)
+                continue;
+            if (SuperNintendoScore(image.Slice(at, 32), at) is { } score && score > bestScore)
+            {
+                bestScore = score;
+                best = ReadSuperNintendoAt(image.Slice(at, 32), image.Length);
+            }
+        }
+        return best;
+    }
+
+    /// <summary>How much a candidate looks like the real header rather than the middle of
+    /// somebody's graphics — or nothing, when it plainly is not one.
+    ///
+    /// <para>The sixteen bits at the end are a checksum beside its own complement, and
+    /// that pair is the whole of what makes the header findable: without it a file of
+    /// zeroes reads as a cartridge. So it decides, and what follows only chooses between
+    /// the two places a real header could be.</para></summary>
+    private static int? SuperNintendoScore(ReadOnlySpan<byte> header, int at)
+    {
+        // The developer and the version sit between the country code and these, which is
+        // why the pair is at 28 rather than 26.
+        var complement = header[28] | header[29] << 8;
+        var checksum = header[30] | header[31] << 8;
+        if (checksum == 0 || (checksum ^ complement) != 0xFFFF)
+            return null;
+
+        // Bit 0 of the map mode says which half of memory the cartridge lives in, and it
+        // is the same bit that decides where this header had to be put.
+        var score = 0;
+        var mapMode = header[21];
+        if ((mapMode & 0x0F) is 0 or 1 or 2 or 3 or 5 && ((mapMode & 1) == 1) == (at == 0xFFC0))
+            score += 4;
+
+        // The name is fixed-width and space-padded, so every byte of it is printable.
+        foreach (var letter in header[..21])
+            if (letter is >= 0x20 and < 0x7F)
+                score++;
+        return score;
+    }
+
+    private static RomHeader ReadSuperNintendoAt(ReadOnlySpan<byte> header, int imageBytes)
+    {
+        var title = Encoding.ASCII.GetString(header[..21]).TrimEnd('\0', ' ');
+        var mapMode = header[21];
+        var type = header[22];
+        // Both sizes are written as a power of two in kilobytes. The program one is what
+        // the cartridge was wired for and can be rounded up from the file, so the file
+        // itself is the more honest answer; the save memory has no other source.
+        var saveRamBytes = header[24] == 0 ? 0 : 1024 << header[24];
+
+        var board = MapModeName(mapMode);
+        if (SuperNintendoChip(type) is { } chip)
+            board += $", {chip}";
+
+        // Types ending in 2, 5 or 6 are the ones with a battery behind the RAM; the rest
+        // forget everything when the console is switched off.
+        var battery = saveRamBytes > 0 && (type & 0x0F) is 2 or 5 or 6;
+
+        return new RomHeader(RomSystem.SuperNintendo, "Super Nintendo",
+            title.Length == 0 ? null : title, board,
+            imageBytes, 0, saveRamBytes, battery, SuperNintendoRegion(header[25]));
+    }
+
+    private static string MapModeName(byte mapMode) => (mapMode & 0x0F) switch
+    {
+        0 => "LoROM",
+        1 => "HiROM",
+        2 => "LoROM with S-DD1",
+        3 => "LoROM with SA-1",
+        5 => "ExHiROM",
+        _ => "Cartridge",
+    };
+
+    /// <summary>Super Nintendo cartridges often carried a second processor of their own,
+    /// and the top half of the type byte names it. Which of the custom chips a cartridge
+    /// used takes a further byte this does not read, so that one is left unnamed rather
+    /// than guessed at.</summary>
+    private static string? SuperNintendoChip(byte type) => type switch
+    {
+        // Nothing on the board but ROM, and perhaps RAM behind a battery.
+        0x00 or 0x01 or 0x02 => null,
+        _ => (type >> 4) switch
+        {
+            0 => "DSP",
+            1 => "Super FX",
+            2 => "OBC1",
+            3 => "SA-1",
+            4 => "S-DD1",
+            5 => "S-RTC",
+            0xE => "a Super Game Boy or Satellaview board",
+            _ => "a custom chip",
+        },
+    };
+
+    private static string? SuperNintendoRegion(byte code) => code switch
+    {
+        0x00 => "Japan",
+        0x01 => "North America",
+        0x02 or 0x03 or 0x06 or 0x08 or 0x09 or 0x0A or 0x0B or 0x0C or 0x11 => "Europe",
+        0x04 => "Finland",
+        0x05 => "Sweden",
+        0x07 => "Denmark",
+        0x0D => "South Korea",
+        0x0F => "Canada",
+        0x10 => "Brazil",
+        0x12 => "Australia",
+        _ => null,
+    };
+
+    // ---- Master System and Game Gear -------------------------------------------
+
+    /// <summary>Sega's header sits near the end of the first bank rather than at the
+    /// start of the file — at whichever of three places left room on the cartridge —
+    /// and it carries no title at all. What it does carry is the product code the game
+    /// was catalogued under and the region it was sold in, which together are what
+    /// makes one findable.</summary>
+    private static RomHeader? ReadSega(ReadOnlySpan<byte> bytes)
+    {
+        foreach (var at in (ReadOnlySpan<int>)[0x1FF0, 0x3FF0, 0x7FF0])
+        {
+            if (bytes.Length < at + 16 || !bytes.Slice(at, 8).SequenceEqual("TMR SEGA"u8))
+                continue;
+
+            var header = bytes.Slice(at, 16);
+            var region = header[15] >> 4;
+            var handheld = region >= 5;
+
+            // Five digits packed as binary-coded decimal, with the last one squeezed
+            // into the nibble above the version number.
+            var code = (header[14] >> 4) * 10000
+                + FromDecimal(header[13]) * 100
+                + FromDecimal(header[12]);
+
+            return new RomHeader(
+                handheld ? RomSystem.GameGear : RomSystem.MasterSystem,
+                handheld ? "Game Gear" : "Master System",
+                null,
+                // Nothing in the header names the board; the paging hardware is worked
+                // out from the file itself when a game is loaded, not from here.
+                $"Product {code:00000}, version {header[14] & 0x0F}",
+                SegaRomBytes(header[15] & 0x0F, bytes.Length),
+                0, 0, false,
+                region switch
+                {
+                    3 or 5 => "Japan",
+                    4 => "Export",
+                    6 => "Export",
+                    7 => "International",
+                    _ => null,
+                });
+        }
+        return null;
+    }
+
+    private static int FromDecimal(byte packed) => (packed >> 4) * 10 + (packed & 0x0F);
+
+    /// <summary>The size nibble stops being meaningful above a megabyte and several
+    /// cartridges lie about it outright, so the file's own length wins wherever the two
+    /// disagree.</summary>
+    private static int SegaRomBytes(int code, int fileLength) => code switch
+    {
+        0xA => 8 * 1024,
+        0xB => 16 * 1024,
+        0xC => 32 * 1024,
+        0xD => 48 * 1024,
+        0xE => 64 * 1024,
+        0xF => 128 * 1024,
+        0x0 => 256 * 1024,
+        0x1 => 512 * 1024,
+        0x2 => 1024 * 1024,
+        _ => fileLength,
+    };
 
     private static bool GameBoyBattery(byte type) => type is 0x03 or 0x06 or 0x09 or 0x0D
         or 0x0F or 0x10 or 0x13 or 0x1B or 0x1E or 0x22 or 0xFF;

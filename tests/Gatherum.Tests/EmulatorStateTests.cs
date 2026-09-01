@@ -1,5 +1,6 @@
 using Gatherum.Client.Emulation;
 using Gatherum.Client.Emulation.Nes;
+using Gatherum.Client.Emulation.Sega;
 
 namespace Gatherum.Tests;
 
@@ -245,5 +246,177 @@ public class EmulatorStateTests
         // The cartridge stores each pad's first bit — A — in its own byte.
         Assert.Equal(0x40, core.CpuRead(0x0300));
         Assert.Equal(0x41, core.CpuRead(0x0301));
+    }
+
+    // ---- Master System ---------------------------------------------------------
+
+    /// <summary>A cartridge that reads both pads every frame, keeps a counter, and lets
+    /// the first pad move the picture — so its state depends on input, on time, and on
+    /// the picture chip, the same three things the NES fixture above leans on.</summary>
+    private static byte[] SegaResponsive()
+    {
+        var code = new List<byte>();
+        void Register(int register, byte value) =>
+            code.AddRange([0x3E, value, 0xD3, 0xBF, 0x3E, (byte)(0x80 | register), 0xD3, 0xBF]);
+        void Address(int address, int mode) =>
+            code.AddRange([0x3E, (byte)address, 0xD3, 0xBF,
+                           0x3E, (byte)(mode << 6 | address >> 8 & 0x3F), 0xD3, 0xBF]);
+        void Data(params byte[] values)
+        {
+            foreach (var value in values)
+                code.AddRange([0x3E, value, 0xD3, 0xBE]);
+        }
+
+        Register(0, 0x04);
+        Register(1, 0xC0);
+        Register(2, 0xFF);
+        Register(5, 0xFF);
+        Register(6, 0xFB);
+        Address(0x0000, mode: 3);
+        Data(0x00, 0x03);
+        // Half the tile, not all of it: a screen of identical solid tiles looks the
+        // same however far it is scrolled, and would hide a picture that moved.
+        Address(0x0000, mode: 1);
+        for (var row = 0; row < 8; row++)
+            Data(0xF0, 0x00, 0x00, 0x00);
+
+        var loop = code.Count;
+        code.AddRange([
+            0xDB, 0xDC,                  // IN A,($DC)          -- the first pad
+            0x32, 0x00, 0xC0,            // LD ($C000),A
+            0xD3, 0xBF,                  // OUT ($BF),A         -- and it becomes the scroll
+            0x3E, 0x88, 0xD3, 0xBF,      // LD A,$88 : OUT ($BF),A
+            0xDB, 0xDD,                  // IN A,($DD)          -- the second pad
+            0x32, 0x01, 0xC0,            // LD ($C001),A
+            0x21, 0x02, 0xC0,            // LD HL,$C002
+            0x34,                        // INC (HL)            -- and a counter
+        ]);
+        code.AddRange([0x18, (byte)(loop - (code.Count + 2))]);
+        return RomFixtures.Sega([.. code]);
+    }
+
+    [Fact]
+    public void The_master_system_reaches_the_same_state_from_the_same_buttons()
+    {
+        var first = new MasterSystem(SegaResponsive(), gameGear: false);
+        var second = new MasterSystem(SegaResponsive(), gameGear: false);
+
+        for (var frame = 0; frame < 240; frame++)
+        {
+            foreach (var core in new[] { first, second })
+            {
+                core.SetButtons(0, ScriptedInput(frame, 0));
+                core.SetButtons(1, ScriptedInput(frame, 1));
+                core.RunFrame();
+            }
+        }
+
+        Assert.Equal(StateOf(first), StateOf(second));
+        Assert.Equal(first.Frame, second.Frame);
+    }
+
+    [Fact]
+    public void Different_buttons_reach_a_different_master_system()
+    {
+        var pressed = new MasterSystem(SegaResponsive(), gameGear: false);
+        var idle = new MasterSystem(SegaResponsive(), gameGear: false);
+
+        for (var frame = 0; frame < 60; frame++)
+        {
+            pressed.SetButtons(0, GamepadButtons.A | GamepadButtons.Left);
+            pressed.RunFrame();
+            idle.RunFrame();
+        }
+
+        Assert.NotEqual(StateOf(pressed), StateOf(idle));
+        Assert.NotEqual(pressed.Frame, idle.Frame);
+    }
+
+    [Fact]
+    public void Draining_a_master_system_of_sound_is_not_part_of_the_machine()
+    {
+        var listening = new MasterSystem(SegaResponsive(), gameGear: false);
+        var muted = new MasterSystem(SegaResponsive(), gameGear: false);
+        var samples = new short[4096];
+
+        for (var frame = 0; frame < 120; frame++)
+        {
+            listening.SetButtons(0, ScriptedInput(frame, 0));
+            listening.RunFrame();
+            listening.ReadAudio(samples);
+
+            muted.SetButtons(0, ScriptedInput(frame, 0));
+            muted.RunFrame();
+        }
+
+        Assert.Equal(StateOf(listening), StateOf(muted));
+    }
+
+    [Fact]
+    public void A_master_system_state_carries_across_to_a_fresh_console()
+    {
+        var host = new MasterSystem(SegaResponsive(), gameGear: false);
+        for (var frame = 0; frame < 75; frame++)
+        {
+            host.SetButtons(0, ScriptedInput(frame, 0));
+            host.RunFrame();
+        }
+
+        var joiner = new MasterSystem(SegaResponsive(), gameGear: false);
+        Assert.True(joiner.LoadState(StateOf(host)));
+
+        var theirs = Continue(host, from: 75, frames: 30);
+        var ours = Continue(joiner, from: 75, frames: 30);
+        Assert.Equal(theirs.State, ours.State);
+        Assert.Equal(theirs.Picture, ours.Picture);
+    }
+
+    [Fact]
+    public void A_master_system_state_rewinds_and_replays_the_same_way()
+    {
+        var core = new MasterSystem(SegaResponsive(), gameGear: false);
+        for (var frame = 0; frame < 90; frame++)
+        {
+            core.SetButtons(0, ScriptedInput(frame, 0));
+            core.RunFrame();
+        }
+
+        var snapshot = StateOf(core);
+        var expected = Continue(core, from: 90, frames: 45);
+        Assert.True(core.LoadState(snapshot));
+        var replayed = Continue(core, from: 90, frames: 45);
+
+        Assert.Equal(expected.State, replayed.State);
+        Assert.Equal(expected.Picture, replayed.Picture);
+    }
+
+    [Fact]
+    public void A_state_from_a_master_system_is_refused_by_the_others()
+    {
+        var sega = new MasterSystem(SegaResponsive(), gameGear: false);
+        var nes = new NesConsole(Responsive());
+        var gameBoy = Emulator.Load(RomFixtures.GameBoy([0x00]), "cart.gb");
+
+        Assert.False(nes.LoadState(StateOf(sega)));
+        Assert.False(gameBoy.LoadState(StateOf(sega)));
+        Assert.False(sega.LoadState(StateOf(nes)));
+        Assert.False(sega.LoadState(StateOf(gameBoy)));
+    }
+
+    [Fact]
+    public void A_truncated_master_system_state_is_refused_rather_than_half_loaded()
+    {
+        var core = new MasterSystem(SegaResponsive(), gameGear: false);
+        for (var frame = 0; frame < 30; frame++)
+            core.RunFrame();
+
+        var snapshot = StateOf(core);
+        Assert.False(core.LoadState(snapshot.AsSpan(0, snapshot.Length / 2)));
+
+        Assert.Equal(0x0000, core.Cpu.PC);
+        core.RunFrame();
+
+        Assert.True(core.LoadState(snapshot));
+        Assert.Equal(snapshot, StateOf(core));
     }
 }

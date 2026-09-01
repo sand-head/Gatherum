@@ -1,0 +1,109 @@
+using Gatherum.Client.Emulation;
+using Gatherum.Client.Emulation.Netplay;
+using Gatherum.Core.Domain;
+using Gatherum.Core.Roms;
+
+namespace Gatherum.Tests;
+
+/// <summary>What can be checked about a core Gatherum did not write, from outside a
+/// browser: that a cartridge for it is recognised, routed away from the consoles written
+/// in C#, and typed so its page offers a console rather than a download.
+///
+/// The core itself is not tested here and cannot be. It is fetched at build time and
+/// instantiated by the browser, so what it does once running is verified by driving the
+/// real app — see DECISIONS.md.</summary>
+public class VendoredCoreTests
+{
+    [Fact]
+    public void A_game_boy_advance_cartridge_is_recognised_by_its_bytes()
+    {
+        Assert.Equal(ConsoleKind.GameBoyAdvance,
+            Emulator.Identify(RomFixtures.GameBoyAdvance(), "misnamed.nes"));
+    }
+
+    [Fact]
+    public void A_cartridge_with_nothing_to_declare_falls_back_to_its_name()
+    {
+        Assert.Equal(ConsoleKind.GameBoyAdvance, Emulator.Identify(new byte[0x200], "game.gba"));
+        Assert.Null(Emulator.Identify(new byte[0x200], "notes.txt"));
+    }
+
+    [Fact]
+    public void It_is_routed_away_from_the_consoles_written_here()
+    {
+        var rom = RomFixtures.GameBoyAdvance();
+        Assert.True(Emulator.NeedsVendoredCore(rom, "game.gba"));
+        Assert.False(Emulator.NeedsVendoredCore(RomFixtures.Nes([0xEA]), "game.nes"));
+        Assert.False(Emulator.NeedsVendoredCore(RomFixtures.Sega([0x76]), "game.sms"));
+    }
+
+    [Fact]
+    public void Loading_one_as_a_console_written_here_says_why_it_cannot()
+    {
+        var problem = Assert.Throws<NotSupportedException>(
+            () => Emulator.Load(RomFixtures.GameBoyAdvance(), "game.gba"));
+        Assert.Contains("native/README.md", problem.Message);
+    }
+
+    [Fact]
+    public void Its_page_offers_a_console_rather_than_a_download()
+    {
+        Assert.True(MediaTypes.IsRom(MediaTypes.GameBoyAdvanceRom, "game.gba"));
+        Assert.True(MediaTypes.IsRom(MediaTypes.Binary, "game.gba"));
+        Assert.Equal(MediaTypes.GameBoyAdvanceRom, MediaTypes.Resolve(null, "game.gba"));
+    }
+
+    [Fact]
+    public void A_super_nintendo_cartridge_is_recognised_by_its_bytes()
+    {
+        Assert.Equal(ConsoleKind.SuperNintendo,
+            Emulator.Identify(RomFixtures.SuperNintendo(), "misnamed.bin"));
+        Assert.Equal(ConsoleKind.SuperNintendo,
+            Emulator.Identify(RomFixtures.SuperNintendo(hiRom: true), "misnamed.bin"));
+    }
+
+    [Fact]
+    public void The_512_bytes_a_copier_wrote_do_not_hide_the_header()
+    {
+        Assert.Equal(ConsoleKind.SuperNintendo,
+            Emulator.Identify(RomFixtures.SuperNintendo(copierHeader: true), "misnamed.bin"));
+        var header = RomHeader.Read(RomFixtures.SuperNintendo("DEMO", copierHeader: true));
+        Assert.NotNull(header);
+        Assert.Equal("DEMO", header.Title);
+    }
+
+    [Fact]
+    public void A_super_nintendo_cartridge_goes_to_a_core_from_elsewhere()
+    {
+        Assert.True(Emulator.NeedsVendoredCore(RomFixtures.SuperNintendo(), "game.sfc"));
+        Assert.True(MediaTypes.IsRom(MediaTypes.SuperNintendoRom, "game.sfc"));
+        Assert.Equal(MediaTypes.SuperNintendoRom, MediaTypes.Resolve(null, "game.smc"));
+    }
+
+    [Fact]
+    public void The_two_shoulder_buttons_survive_the_wire()
+    {
+        // They live above the eighth bit, which is why netplay sends two bytes of
+        // buttons rather than one.
+        var pressed = GamepadButtons.LeftShoulder | GamepadButtons.RightShoulder
+            | GamepadButtons.A | GamepadButtons.Up;
+        var message = PlayProtocol.Input(slot: 1, frame: 4242, pressed);
+        var (slot, frame, buttons) = PlayProtocol.ReadInput(message);
+
+        Assert.Equal(1, slot);
+        Assert.Equal(4242, frame);
+        Assert.Equal(pressed, buttons);
+    }
+
+    [Fact]
+    public void So_do_the_second_pair_of_face_buttons()
+    {
+        // X and Y live above the shoulders, at bits ten and eleven, which is what the
+        // second byte of a netplay input message is for.
+        var pressed = GamepadButtons.X | GamepadButtons.Y | GamepadButtons.RightShoulder;
+        var (_, _, buttons) = PlayProtocol.ReadInput(
+            PlayProtocol.Input(slot: 0, frame: 1, pressed));
+
+        Assert.Equal(pressed, buttons);
+    }
+}

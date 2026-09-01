@@ -1,7 +1,10 @@
 namespace Gatherum.Client.Emulation;
 
-/// <summary>The eight buttons both consoles have, which is why one set serves both:
-/// a NES pad and a Game Boy pad differ in their plastic, not their bits.</summary>
+/// <summary>Every button any of these machines has. The first eight are the ones they
+/// all share — a NES pad and a Game Boy pad differ in their plastic, not their bits —
+/// and the rest were added as consoles arrived that had them: two shoulders, then the
+/// second pair of face buttons that turned a Super Nintendo's two into a diamond of
+/// four. A core simply ignores the bits its hardware never had.</summary>
 [Flags]
 public enum GamepadButtons
 {
@@ -14,7 +17,25 @@ public enum GamepadButtons
     Down = 32,
     Left = 64,
     Right = 128,
+    LeftShoulder = 256,
+    RightShoulder = 512,
+    X = 1024,
+    Y = 2048,
 }
+
+/// <summary>What a machine's plastic calls the bits above. The buttons are the same
+/// everywhere; the printing on them is not, and a Master System that told you to press
+/// Start would be naming a button its pad does not have. A label of null is a button the
+/// machine never had at all, and the player leaves it off the pad.</summary>
+public readonly record struct ButtonLabels(
+    string A,
+    string B,
+    string? Start,
+    string? Select,
+    string? LeftShoulder = null,
+    string? RightShoulder = null,
+    string? X = null,
+    string? Y = null);
 
 /// <summary>A console, running. The player component owns the clock — it decides when a
 /// frame is due, because only the browser knows when the display will take one — and a
@@ -52,9 +73,17 @@ public interface IEmulatorCore
     /// whatever its own output is running at.</summary>
     int SampleRate { get; }
 
+    /// <summary>How many channels <see cref="ReadAudio"/> interleaves. One on a console
+    /// with a single speaker; two where the hardware could put a sound in one ear, which
+    /// on a Game Gear is a register a game writes to.</summary>
+    int AudioChannels { get; }
+
     /// <summary>The last completed frame, one 0xAARRGGBB pixel per element, row by
     /// row. Owned by the core and overwritten by the next <see cref="RunFrame"/>.</summary>
     uint[] Frame { get; }
+
+    /// <summary>What this machine's own pad calls its buttons.</summary>
+    ButtonLabels Buttons { get; }
 
     /// <summary>How many pads the machine has ports for. One is a machine nobody can
     /// play together on without emulating a cable, which is a different feature.</summary>
@@ -77,8 +106,9 @@ public interface IEmulatorCore
     /// of, filling <see cref="Frame"/> and queueing the sound that went with it.</summary>
     void RunFrame();
 
-    /// <summary>Drains queued sound into the buffer, in samples; the return is how many
-    /// were written. What is not taken is kept for the next call.</summary>
+    /// <summary>Drains queued sound into the buffer; the return is how many values were
+    /// written, which on a stereo core is <see cref="AudioChannels"/> per frame of
+    /// sound. What is not taken is kept for the next call.</summary>
     int ReadAudio(short[] destination);
 
     void Reset();

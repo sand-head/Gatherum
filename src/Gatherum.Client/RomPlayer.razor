@@ -149,28 +149,76 @@ else
                         @onpointercancel="() => Release(GamepadButtons.Down)"
                         aria-label="Down"></button>
             </div>
-            <div class="rom-face">
-                <button type="button" class="round" @onpointerdown="() => Hold(GamepadButtons.B)"
+            @if (core.Buttons.LeftShoulder is { } leftShoulder
+                 && core.Buttons.RightShoulder is { } rightShoulder)
+            {
+                <div class="rom-shoulders">
+                    <button type="button" @onpointerdown="() => Hold(GamepadButtons.LeftShoulder)"
+                            @onpointerup="() => Release(GamepadButtons.LeftShoulder)"
+                            @onpointercancel="() => Release(GamepadButtons.LeftShoulder)">@leftShoulder</button>
+                    <button type="button" @onpointerdown="() => Hold(GamepadButtons.RightShoulder)"
+                            @onpointerup="() => Release(GamepadButtons.RightShoulder)"
+                            @onpointercancel="() => Release(GamepadButtons.RightShoulder)">@rightShoulder</button>
+                </div>
+            }
+            @* Two face buttons sit side by side; four sit in the diamond the console
+               printed them in, which is the only arrangement that makes their names
+               mean anything. *@
+            <div class="rom-face @(core.Buttons.X is null ? "" : "diamond")">
+                @if (core.Buttons.Y is { } y)
+                {
+                    <button type="button" class="round y" @onpointerdown="() => Hold(GamepadButtons.Y)"
+                            @onpointerup="() => Release(GamepadButtons.Y)"
+                            @onpointerleave="() => Release(GamepadButtons.Y)"
+                            @onpointercancel="() => Release(GamepadButtons.Y)">@y</button>
+                }
+                @if (core.Buttons.X is { } x)
+                {
+                    <button type="button" class="round x" @onpointerdown="() => Hold(GamepadButtons.X)"
+                            @onpointerup="() => Release(GamepadButtons.X)"
+                            @onpointerleave="() => Release(GamepadButtons.X)"
+                            @onpointercancel="() => Release(GamepadButtons.X)">@x</button>
+                }
+                <button type="button" class="round b" @onpointerdown="() => Hold(GamepadButtons.B)"
                         @onpointerup="() => Release(GamepadButtons.B)"
                         @onpointerleave="() => Release(GamepadButtons.B)"
-                        @onpointercancel="() => Release(GamepadButtons.B)">B</button>
-                <button type="button" class="round" @onpointerdown="() => Hold(GamepadButtons.A)"
+                        @onpointercancel="() => Release(GamepadButtons.B)">@core.Buttons.B</button>
+                <button type="button" class="round a" @onpointerdown="() => Hold(GamepadButtons.A)"
                         @onpointerup="() => Release(GamepadButtons.A)"
                         @onpointerleave="() => Release(GamepadButtons.A)"
-                        @onpointercancel="() => Release(GamepadButtons.A)">A</button>
+                        @onpointercancel="() => Release(GamepadButtons.A)">@core.Buttons.A</button>
             </div>
             <div class="rom-menu">
-                <button type="button" @onpointerdown="() => Hold(GamepadButtons.Select)"
-                        @onpointerup="() => Release(GamepadButtons.Select)"
-                        @onpointercancel="() => Release(GamepadButtons.Select)">Select</button>
-                <button type="button" @onpointerdown="() => Hold(GamepadButtons.Start)"
-                        @onpointerup="() => Release(GamepadButtons.Start)"
-                        @onpointercancel="() => Release(GamepadButtons.Start)">Start</button>
+                @if (core.Buttons.Select is { } select)
+                {
+                    <button type="button" @onpointerdown="() => Hold(GamepadButtons.Select)"
+                            @onpointerup="() => Release(GamepadButtons.Select)"
+                            @onpointercancel="() => Release(GamepadButtons.Select)">@select</button>
+                }
+                @if (core.Buttons.Start is { } start)
+                {
+                    <button type="button" @onpointerdown="() => Hold(GamepadButtons.Start)"
+                            @onpointerup="() => Release(GamepadButtons.Start)"
+                            @onpointercancel="() => Release(GamepadButtons.Start)">@start</button>
+                }
             </div>
         </div>
 
-        <p class="rom-keys">Arrow keys move, <kbd>Z</kbd> and <kbd>X</kbd> are B and A,
-            <kbd>Enter</kbd> is Start and <kbd>Shift</kbd> is Select.
+        <p class="rom-keys">Arrow keys move, <kbd>Z</kbd> and <kbd>X</kbd> are
+            @core.Buttons.B and @core.Buttons.A@if (core.Buttons.Start is { } startKey)
+            {
+                <text>, <kbd>Enter</kbd> is @startKey</text>
+            }@if (core.Buttons.Select is { } selectKey)
+            {
+                <text> and <kbd>Shift</kbd> is @selectKey</text>
+            }@if (core.Buttons.Y is { } yKey && core.Buttons.X is { } xKey)
+            {
+                <text>; <kbd>A</kbd> and <kbd>S</kbd>, above them, are @yKey and @xKey</text>
+            }@if (core.Buttons.LeftShoulder is { } leftKey
+                  && core.Buttons.RightShoulder is { } rightKey)
+            {
+                <text>; <kbd>Q</kbd> and <kbd>E</kbd> are @leftKey and @rightKey</text>
+            }.
             @if (core.BatteryBacked)
             {
                 <text>This cartridge saves, and its save is kept in this browser —
@@ -186,6 +234,10 @@ else
 
     private IEmulatorCore? core;
     private Guid loaded;
+
+    /// <summary>The cartridge whose save has been put back and whose first frame has
+    /// been painted, so that work happens once per cartridge rather than once ever.</summary>
+    private Guid restored;
     private string? failure;
     private bool running, started, sound = true;
 
@@ -256,7 +308,21 @@ else
             // The same spelling the server stores, so a room can refuse two people who
             // are not holding the same cartridge.
             romHash = Convert.ToHexStringLower(SHA256.HashData(rom));
-            core = Emulator.Load(rom, FileName);
+            if (Emulator.Identify(rom, FileName) is { } kind && VendoredCore.Handles(kind))
+            {
+                // A core from elsewhere is fetched and instantiated rather than
+                // constructed, so the module has to be in hand before the first render.
+                module ??= await Js.InvokeAsync<IJSObjectReference>("import", "./js/gatherum.js");
+                directModule = module as IJSInProcessObjectReference;
+                core = await VendoredCore.CreateAsync(module, kind, rom)
+                    ?? throw new NotSupportedException(
+                        "This Gatherum was built without a core for this machine, so the " +
+                        "cartridge can be downloaded but not played.");
+            }
+            else
+            {
+                core = Emulator.Load(rom, FileName);
+            }
             stateBuffer = new byte[core.SaveStateSize];
             pinnedFrame = GCHandle.Alloc(core.Frame, GCHandleType.Pinned);
             picture = new SKBitmap();
@@ -277,9 +343,12 @@ else
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (core is null || module is not null)
+        // Once per cartridge, not once per component: a second cartridge loaded into the
+        // same player has its own save to put back and its own first frame to paint.
+        if (core is null || restored == loaded)
             return;
-        module = await Js.InvokeAsync<IJSObjectReference>("import", "./js/gatherum.js");
+        restored = loaded;
+        module ??= await Js.InvokeAsync<IJSObjectReference>("import", "./js/gatherum.js");
         directModule = module as IJSInProcessObjectReference;
         if (core.BatteryBacked)
         {
@@ -566,9 +635,9 @@ else
         // there is no per-frame array to allocate and collect.
         Buffer.BlockCopy(samples, 0, sampleBytes, 0, count * 2);
         if (directModule is not null)
-            directModule.InvokeVoid("queueEmulatorAudio", sampleBytes, count);
+            directModule.InvokeVoid("queueEmulatorAudio", sampleBytes, count, core.AudioChannels);
         else
-            _ = module.InvokeVoidAsync("queueEmulatorAudio", sampleBytes, count);
+            _ = module.InvokeVoidAsync("queueEmulatorAudio", sampleBytes, count, core.AudioChannels);
     }
 
     /// <summary>A save is written a couple of seconds after the game first touches its
@@ -655,19 +724,25 @@ else
             Release(button);
     }
 
-    /// <summary>Both consoles have the same eight buttons, so there is one mapping.
-    /// Z and X sit where a right hand rests on a keyboard, in the order the two face
-    /// buttons sit on both machines.</summary>
+    /// <summary>One mapping for every console, because the bits are the same on all of
+    /// them and only the printing differs. Z and X sit where a right hand rests on a
+    /// keyboard, in the order the two face buttons sit on every machine here; A and S sit
+    /// above and left of them, which is where Y and X sit relative to B and A on the one
+    /// pad that has four. A core simply never reads the bits its hardware never had.</summary>
     private static GamepadButtons? Map(string key) => key switch
     {
-        "ArrowUp" or "w" or "W" => GamepadButtons.Up,
-        "ArrowDown" or "s" or "S" => GamepadButtons.Down,
-        "ArrowLeft" or "a" or "A" => GamepadButtons.Left,
-        "ArrowRight" or "d" or "D" => GamepadButtons.Right,
+        "ArrowUp" => GamepadButtons.Up,
+        "ArrowDown" => GamepadButtons.Down,
+        "ArrowLeft" => GamepadButtons.Left,
+        "ArrowRight" => GamepadButtons.Right,
         "z" or "Z" => GamepadButtons.B,
         "x" or "X" => GamepadButtons.A,
+        "a" or "A" => GamepadButtons.Y,
+        "s" or "S" => GamepadButtons.X,
         "Enter" => GamepadButtons.Start,
         "Shift" => GamepadButtons.Select,
+        "q" or "Q" => GamepadButtons.LeftShoulder,
+        "e" or "E" => GamepadButtons.RightShoulder,
         _ => null,
     };
 
@@ -680,7 +755,11 @@ else
         picture = null;
         if (pinnedFrame.IsAllocated)
             pinnedFrame.Free();
+        // A vendored core holds a cartridge inside its own WebAssembly heap and pins
+        // arrays on this side; letting go of the reference would leak both.
+        (core as IDisposable)?.Dispose();
         core = null;
+        restored = Guid.Empty;
     }
 
     public async ValueTask DisposeAsync()

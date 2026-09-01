@@ -125,6 +125,22 @@
         gap: 12px;
         justify-content: flex-end;
 
+        /* Four buttons go in the diamond the console printed them in — Y left, X above,
+           B below, A right — because their names only mean anything in that arrangement.
+           Two stay side by side, which is how those consoles printed theirs. */
+        &.diamond {
+            display: grid;
+            grid-template-columns: repeat(3, auto);
+            grid-template-rows: repeat(3, auto);
+            gap: 6px;
+            justify-content: end;
+
+            & .x { grid-area: 1 / 2; }
+            & .y { grid-area: 2 / 1; }
+            & .a { grid-area: 2 / 3; }
+            & .b { grid-area: 3 / 2; }
+        }
+
         & .round {
             width: calc(var(--tap) * 1.2);
             height: calc(var(--tap) * 1.2);
@@ -135,6 +151,28 @@
         }
 
         & .round:active {
+            background: var(--hover-strong);
+        }
+    }
+
+    /* Shoulder buttons sit above the rest, where they sit on the console — and only
+       appear at all on a machine that had them. */
+    .rom-shoulders {
+        grid-column: 1 / -1;
+        display: flex;
+        gap: 12px;
+        justify-content: space-between;
+
+        & button {
+            min-width: 72px;
+            border-radius: var(--radius-s);
+            border: 1px solid var(--outline);
+            background: var(--surface-dim);
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        & button:active {
             background: var(--hover-strong);
         }
     }

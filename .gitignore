@@ -441,3 +441,12 @@ models/
 # system of record; it belongs in a backup, never in the repo.
 .env
 /data/
+
+# The vendored core: its source, the toolchain that builds it, and the module that
+# comes out. Fetched and built by native/build-core.sh, pinned by hash, never committed
+# — the same bargain as models/ above.
+native/build/
+native/dist/
+native/core-shim/target/
+# Staged into wwwroot by the build from native/dist; not a source file.
+src/Gatherum.Web/wwwroot/cores/
