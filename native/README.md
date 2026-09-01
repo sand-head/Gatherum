@@ -107,6 +107,13 @@ Needs `curl`, `git`, `make`, `clang`, and a Rust toolchain with both wasm target
 rustup target add wasm32-wasip1 wasm32-unknown-emscripten
 ```
 
+The Dockerfile runs the same script, one stage per core, each copying only the files
+that core is built from: `core-shim` for the two libretro cores, `bsnes-support` for
+bsnes, `gecko-host` for Gecko. So a change to one core's inputs rebuilds that core and
+no other, and a change anywhere else rebuilds none. Each stage deletes what it fetched
+and compiled in the same step that made it, so the layer CI caches is the few megabytes
+in `dist/` rather than the gigabytes behind them.
+
 The WASI SDK, the Emscripten SDK and wasm-bindgen it fetches itself, once each, into
 `build/`; the Rust that Gecko pins, rustup fetches from `gecko-host/rust-toolchain.toml`
 on the way past. `clang` is for zstd, which is what an RVZ disc is compressed with and

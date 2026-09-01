@@ -1,18 +1,38 @@
-# Stage 0: the vendored emulator cores, in a stage of their own so that the toolchain they
-# needs — a WASI clang, an Emscripten SDK and a Rust cross-compiler — never reaches the
-# image that ships, and so editing C# does not rebuild many megabytes of emulator. What
-# comes out is what native/dist/ holds; see native/README.md.
-# clang is for the Gecko host: RVZ discs are zstd, and its C source is compiled for the
-# browser by whatever clang the build finds. Gecko's own toolchain — a pinned Rust and
-# the plain WebAssembly target — rustup fetches from the pin in native/gecko-host.
-FROM rust:1-bookworm AS core
+# Stage 0: the vendored emulator cores, each in a stage of its own. The toolchains they
+# need — a WASI clang, an Emscripten SDK, a Rust cross-compiler — never reach the image
+# that ships, editing C# never rebuilds an emulator, and editing one emulator's inputs
+# never rebuilds the other two: each stage copies only what its core is built from, so
+# its cache key is those files and nothing else. What comes out is what native/dist/
+# holds; see native/README.md.
+#
+# Every stage ends by deleting what it fetched and compiled, in the same RUN that made
+# it. A layer keeps whatever the step left behind, and these steps leave behind an SDK
+# and a Rust target directory measured in gigabytes — which is what CI's layer cache
+# would have to hold to be any use, and it holds ten. The few megabytes in dist/ are
+# all the next stage takes.
+FROM rust:1-bookworm AS core-base
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl git make python3 xz-utils ca-certificates clang \
     && rm -rf /var/lib/apt/lists/*
-RUN rustup target add wasm32-wasip1 wasm32-unknown-emscripten
 WORKDIR /native
-COPY native ./
-RUN ./build-core.sh
+COPY native/build-core.sh ./
+
+FROM core-base AS core-mgba
+RUN rustup target add wasm32-wasip1
+COPY native/core-shim ./core-shim
+RUN ./build-core.sh mgba && rm -rf build core-shim/target /usr/local/cargo/registry
+
+FROM core-base AS core-bsnes
+RUN rustup target add wasm32-unknown-emscripten
+COPY native/core-shim ./core-shim
+COPY native/bsnes-support ./bsnes-support
+RUN ./build-core.sh bsnes && rm -rf build core-shim/target /usr/local/cargo/registry
+
+# Gecko's Rust and its wasm target rustup fetches from the pin in gecko-host; clang, in
+# the base, is what compiles zstd for the browser so RVZ discs read.
+FROM core-base AS core-gecko
+COPY native/gecko-host ./gecko-host
+RUN ./build-core.sh gecko && rm -rf build gecko-host/target /usr/local/cargo/registry
 
 # Stage 1: compile and publish. The editor's Interactive Auto island relinks the
 # WebAssembly runtime with SkiaSharp's native library — that needs the wasm-tools
@@ -32,9 +52,12 @@ RUN dotnet restore src/Gatherum.Web
 # twenty-three megabytes of weights. The publish below finds them already fetched.
 RUN dotnet msbuild src/Gatherum.Infrastructure/Gatherum.Infrastructure.csproj \
     -t:FetchEmbeddingModel
-# Where the web project's build looks for it, and the only thing carried over from the
-# stage above: not the source it was built from, and not the compiler that built it.
-COPY --from=core /native/dist/ ./native/dist/
+# Where the web project's build looks for them, and the only thing carried over from
+# the stages above: not the source they were built from, and not the compilers that
+# built them.
+COPY --from=core-mgba /native/dist/ ./native/dist/
+COPY --from=core-bsnes /native/dist/ ./native/dist/
+COPY --from=core-gecko /native/dist/ ./native/dist/
 COPY src ./src
 # Published for one architecture on purpose. ONNX Runtime ships native libraries for
 # every platform it supports, and a portable publish carries all of them — most of a

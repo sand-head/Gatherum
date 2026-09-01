@@ -2221,3 +2221,26 @@ from a submodule whose repository declares no licence at all. Gecko ships it, cr
 author, and has since it began; that is not a grant. It is recorded in `native/README.md`
 as a gap rather than resolved, because it is not this project's to resolve, and the owner
 should know before an image with this core goes to anyone who reads licence tables.
+
+## One Docker stage per core, and layers that keep only what they made
+
+Asked whether moving the emulator code into a library of its own would let the build
+cache more, the answer was no on both counts that a library could touch: the cores were
+already a stage of their own, keyed on `native/` and untouched by any C# change, and
+`dotnet publish` inside an image compiles every project from clean, so one project or
+five costs the same. The caching that was missing was *inside* `native/`: one `COPY
+native` and one `RUN` meant a line changed in `gecko-host` rebuilt bsnes, forty minutes
+of it. So the stage is now three, each copying only its own core's inputs.
+
+The second finding was worse than the first and had been there since bsnes. A layer keeps
+everything the step left behind, and the core step left behind the Emscripten SDK, three
+cores' sources and a Rust target directory that alone is close to a gigabyte — inside a
+layer that `cache-to: type=gha,mode=max` then exported to a cache with a ten-gigabyte
+ceiling. A cache that big is a cache that gets evicted, and an evicted core layer is
+every core rebuilt on every run, which is the opposite of what the stage was for. Each
+stage now deletes its build tree and the cargo registry in the same `RUN`, so what CI
+keeps is what the next stage copies: a few megabytes in `dist/`.
+
+Not done, and on purpose: a BuildKit cache mount for `obj/` and NuGet, which is the lever
+for the *C#* publish step. It would help every project equally and is unrelated to where
+the emulators live, and it is a different change with its own failure modes.
