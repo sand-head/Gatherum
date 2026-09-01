@@ -40,11 +40,21 @@
                                $(MSBuildThisFileDirectory)..\..\native\dist\*.mjs" />
   </ItemGroup>
 
-  <Target Name="StageEmulatorCores" BeforeTargets="ResolveStaticWebAssetsInputs;AssignTargetPaths"
+  <Target Name="StageEmulatorCores"
+          BeforeTargets="ResolveProjectStaticWebAssets;ResolveStaticWebAssetsInputs;AssignTargetPaths"
           Condition="'@(EmulatorCoreFile)' != ''">
     <Copy SourceFiles="@(EmulatorCoreFile)"
           DestinationFolder="$(MSBuildThisFileDirectory)wwwroot\cores\"
           SkipUnchangedFiles="true" />
+    <!-- Declared by hand because the wwwroot glob was evaluated before the copy above
+         ran: on a first build the staged files are otherwise invisible to static web
+         asset discovery, MapStaticAssets never learns their routes, and every request
+         for a core 404s. A dev machine rebuilds and heals; the Docker image is built
+         exactly once and stays broken. Exclude keeps the second build from declaring
+         them twice. -->
+    <ItemGroup>
+      <Content Include="wwwroot\cores\*.wasm;wwwroot\cores\*.mjs" Exclude="@(Content)" />
+    </ItemGroup>
   </Target>
 
 </Project>

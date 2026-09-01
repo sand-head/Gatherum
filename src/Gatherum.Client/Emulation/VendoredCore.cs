@@ -102,9 +102,13 @@ public sealed class VendoredCore : IEmulatorCore, IDisposable
     /// <summary>Whether this machine plays on a core from elsewhere.</summary>
     public static bool Handles(ConsoleKind kind) => Machines.ContainsKey(kind);
 
-    /// <summary>Fetches the core if it is not already here, hands it the cartridge, and
-    /// returns null when either fails — a deployment that did not build one is a player
-    /// that offers a download, not a page that breaks.</summary>
+    /// <summary>Fetches the core if it is not already here and hands it the cartridge.
+    /// Null means this build genuinely has no such core — a deployment that did not
+    /// build one is a player that offers a download, not a page that breaks. Everything
+    /// else that can go wrong throws with words the player shows, because a core that
+    /// is here and will not start is a bug to report, not an edition to accept — the
+    /// two were once one answer, and the player blamed the build for a serving
+    /// failure.</summary>
     public static async Task<VendoredCore?> CreateAsync(
         IJSObjectReference module, ConsoleKind kind, byte[] rom)
     {
@@ -112,12 +116,19 @@ public sealed class VendoredCore : IEmulatorCore, IDisposable
             return null;
         if (!Machines.TryGetValue(kind, out var machine))
             return null;
-        if (!await module.InvokeAsync<bool>("loadEmulatorCore", machine.ModuleUrl, machine.Settings))
+        var status = await module.InvokeAsync<string>(
+            "loadEmulatorCore", machine.ModuleUrl, machine.Settings);
+        if (status == "missing")
             return null;
+        if (status != "ok")
+            throw new NotSupportedException(
+                $"This Gatherum has a {machine.SystemName} core, but it would not " +
+                "start — the browser console has the details.");
 
         var facts = js.Invoke<CartridgeFacts?>("loadEmulatorCartridge", rom, machine.Extension);
         if (facts is null || facts.Width <= 0 || facts.Height <= 0)
-            return null;
+            throw new InvalidOperationException(
+                $"the {machine.SystemName} core did not accept it");
 
         var core = new VendoredCore(js, machine, facts);
         // Prove the picture can actually cross between the two heaps before handing the
@@ -126,7 +137,8 @@ public sealed class VendoredCore : IEmulatorCore, IDisposable
         if (core.CopyFrame() > 0)
             return core;
         core.Dispose();
-        return null;
+        throw new InvalidOperationException(
+            $"the {machine.SystemName} core's picture could not reach the app");
     }
 
     public string SystemName { get; }

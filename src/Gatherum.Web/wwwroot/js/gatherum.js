@@ -451,6 +451,11 @@ function flattened(source, prefix) {
 /// has one — the in-memory filesystem a core that opens its own cartridge will need.
 async function openCore(url) {
   if (url.endsWith(".mjs")) {
+    // A dynamic import cannot say whether it failed because the file is absent or
+    // because the module is bad, and the player tells the reader different things for
+    // those — so absence is asked about first, the way the bare-module branch's own
+    // fetch already answers it.
+    if (!(await fetch(url, { method: "HEAD" })).ok) return null;
     const module = await (await import(url)).default();
     // Emscripten replaces its heap rather than resizing it when it grows, so the view
     // has to be asked for again every time rather than kept.
@@ -482,24 +487,30 @@ function planted(text) {
 /// the ones that come through here are not. bsnes fills memory with noise at power-on
 /// unless told otherwise, which is faithful to the hardware and fatal to two people
 /// whose consoles have to start life identical.
+/// The answer is one of three words rather than a boolean, because two of the failures
+/// mean different things to the person reading them: "missing" is a build that never had
+/// this core — the player offers a download and nothing is wrong — while "broken" is a
+/// core that is *in* this build and would not start, which is a bug to report, not an
+/// edition to accept. Collapsing them once had the player blaming the build for a
+/// serving failure.
 export async function loadEmulatorCore(url, settings) {
-  if (core && coreUrl === url) return true;
+  if (core && coreUrl === url) return "ok";
   core = undefined;
   coreUrl = undefined;
   try {
     const opened = await openCore(url);
-    if (!opened) return false;
+    if (!opened) return "missing";
     core = opened;
     for (let at = 0; at + 1 < (settings?.length ?? 0); at += 2) {
       core.exports.gatherum_set_option(planted(settings[at]), planted(settings[at + 1]));
     }
     core.exports.gatherum_boot();
     coreUrl = url;
-    return true;
+    return "ok";
   } catch (error) {
     console.warn("The emulator core would not load:", error);
     core = undefined;
-    return false;
+    return "broken";
   }
 }
 
