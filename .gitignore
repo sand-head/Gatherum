@@ -448,5 +448,6 @@ models/
 native/build/
 native/dist/
 native/core-shim/target/
+native/gecko-host/target/
 # Staged into wwwroot by the build from native/dist; not a source file.
 src/Gatherum.Web/wwwroot/cores/

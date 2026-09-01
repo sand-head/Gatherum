@@ -106,4 +106,63 @@ public class VendoredCoreTests
 
         Assert.Equal(pressed, buttons);
     }
+
+    [Fact]
+    public void A_gamecube_disc_is_recognised_by_its_magic_word_in_either_container()
+    {
+        Assert.Equal(ConsoleKind.GameCube, Emulator.Identify(RomFixtures.Disc(), "misnamed.bin"));
+        Assert.Equal(ConsoleKind.GameCube, Emulator.Identify(RomFixtures.Rvz(), "misnamed.bin"));
+    }
+
+    [Fact]
+    public void A_disc_is_told_from_its_head_alone()
+    {
+        // The player reads this much of a file before deciding whether to fetch the
+        // rest, and a disc is decided there or not at all.
+        Assert.Equal(ConsoleKind.GameCube,
+            Emulator.Identify(RomFixtures.Disc().AsSpan(0, Emulator.HeadBytes), "game.iso"));
+        Assert.True(Emulator.IsDisc(ConsoleKind.GameCube));
+        Assert.True(Emulator.IsDisc(ConsoleKind.Wii));
+        Assert.False(Emulator.IsDisc(ConsoleKind.GameBoyAdvance));
+    }
+
+    [Fact]
+    public void A_disc_name_is_trusted_only_where_it_cannot_mean_anything_else()
+    {
+        Assert.Equal(ConsoleKind.GameCube, Emulator.Identify(new byte[0x200], "game.gcm"));
+        Assert.Equal(ConsoleKind.GameCube, Emulator.Identify(new byte[0x200], "game.rvz"));
+        // An .iso is any disc at all, so a header-less one is nothing.
+        Assert.Null(Emulator.Identify(new byte[0x200], "linux.iso"));
+        Assert.True(Emulator.NamedLikeADisc("linux.iso"));
+        Assert.False(Emulator.NamedLikeADisc("game.gba"));
+    }
+
+    [Fact]
+    public void A_wii_disc_is_recognised_and_refused_by_name()
+    {
+        Assert.Equal(ConsoleKind.Wii, Emulator.Identify(RomFixtures.Disc(wii: true), "game.iso"));
+        Assert.Equal(ConsoleKind.Wii, Emulator.Identify(RomFixtures.Rvz(wii: true), "game.rvz"));
+        Assert.False(VendoredCore.Handles(ConsoleKind.Wii));
+        var problem = Assert.Throws<NotSupportedException>(
+            () => Emulator.Load(RomFixtures.Disc(wii: true), "game.iso"));
+        Assert.Contains("Wii", problem.Message);
+    }
+
+    [Fact]
+    public void A_gamecube_disc_goes_to_the_core_by_address_rather_than_by_bytes()
+    {
+        Assert.True(Emulator.NeedsVendoredCore(RomFixtures.Disc(), "game.iso"));
+        Assert.True(VendoredCore.LoadsByUrl(ConsoleKind.GameCube));
+        Assert.False(VendoredCore.LoadsByUrl(ConsoleKind.GameBoyAdvance));
+        Assert.False(VendoredCore.LoadsByUrl(ConsoleKind.SuperNintendo));
+    }
+
+    [Fact]
+    public void A_disc_page_offers_a_console_rather_than_a_download()
+    {
+        Assert.True(MediaTypes.IsRom(MediaTypes.GameCubeRom, "game.iso"));
+        Assert.True(MediaTypes.IsRom(MediaTypes.Binary, "game.rvz"));
+        Assert.Equal(MediaTypes.GameCubeRom, MediaTypes.Resolve(null, "game.gcm"));
+        Assert.Equal(MediaTypes.GameCubeRom, MediaTypes.Resolve(null, "game.iso"));
+    }
 }

@@ -117,6 +117,44 @@ public static class RomFixtures
         return image;
     }
 
+    /// <summary>A GameCube disc's first block, or a Wii one's: the game code and maker,
+    /// the disc number, the console's magic word and the title. Nothing follows it —
+    /// no apploader, no filesystem — because nothing here boots one, and a real disc is
+    /// a gigabyte and a half of somebody's game.</summary>
+    public static byte[] Disc(string title = "GATHERUM TEST DISC", string code = "GTSE",
+        string maker = "01", byte disc = 0, byte revision = 0, bool wii = false)
+    {
+        var image = new byte[0x800];
+        foreach (var (character, index) in code.Take(4).Select((c, i) => (c, i)))
+            image[index] = (byte)character;
+        foreach (var (character, index) in maker.Take(2).Select((c, i) => (c, i)))
+            image[4 + index] = (byte)character;
+        image[6] = disc;
+        image[7] = revision;
+        if (wii)
+            new byte[] { 0x5D, 0x1C, 0x9E, 0xA3 }.CopyTo(image, 0x18);
+        else
+            new byte[] { 0xC2, 0x33, 0x9F, 0x3D }.CopyTo(image, 0x1C);
+        foreach (var (character, index) in title.Take(0x60).Select((c, i) => (c, i)))
+            image[0x20 + index] = (byte)character;
+        return image;
+    }
+
+    /// <summary>The same disc, as the head of an RVZ: the compressed container's own
+    /// header, which says which console at $48 and records the uncompressed size at
+    /// $24, followed by a copy of the disc's first 128 bytes at $58. The compressed data
+    /// that would follow is left out for the same reason the disc's is.</summary>
+    public static byte[] Rvz(string title = "GATHERUM TEST DISC", string code = "GTSE",
+        bool wii = false, ulong discBytes = 1_459_978_240)
+    {
+        var image = new byte[0x800];
+        "RVZ\u0001"u8.CopyTo(image);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt64BigEndian(image.AsSpan(0x24), discBytes);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(image.AsSpan(0x48), wii ? 2u : 1u);
+        Disc(title, code, wii: wii).AsSpan(0, 0x80).CopyTo(image.AsSpan(0x58));
+        return image;
+    }
+
     /// <summary>A Super Nintendo cartridge. Its header sits at the end of a bank rather
     /// than the start of the file — the low half of memory for a LoROM board, the high
     /// half for a HiROM one — and what makes it findable there at all is the checksum

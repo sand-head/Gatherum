@@ -9,13 +9,15 @@
 # by hand or let CI run it; either way the inputs are pinned by hash or commit and the
 # output is reproducible from them.
 #
-# Two cores, two toolchains, and the difference is the core's own doing rather than a
-# preference of ours. mGBA is plain C that wants no operating system underneath it, so it
-# compiles against WASI and comes out as one .wasm importing a handful of system calls
+# Three cores, three toolchains, and the difference is each core's own doing rather than
+# a preference of ours. mGBA is plain C that wants no operating system underneath it, so
+# it compiles against WASI and comes out as one .wasm importing a handful of system calls
 # and nothing else. bsnes runs its processor, sound and picture as coroutines and throws
 # C++ exceptions, neither of which WASI's libc++ can do, so it compiles against Emscripten
 # and comes out as a .wasm plus the loader Emscripten emits to drive it. Both link
 # against the same core-shim, unchanged: the shim knows libretro, not who implements it.
+# Gecko is Rust and not libretro at all, so it gets a host of its own (gecko-host/) built
+# with Rust's own WebAssembly target and wasm-bindgen's loader beside it.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -33,12 +35,31 @@ MGBA_COMMIT="1c61b54208ca6266129d0f2394c04bd8c44f98c5"
 BSNES_REPO="https://github.com/EmulatorJS/bsnes-libretro.git"
 BSNES_COMMIT="4b344745e3878e7c0675a60c624582935524b8f7"
 
+# Gecko, a GameCube emulator in Rust. Its web build wants WebGPU and wasm-bindgen, and
+# neither shim nor libretro comes into it.
+GECKO_REPO="https://github.com/ioncodes/gecko.git"
+GECKO_COMMIT="39e82205a0da154f23fd36b95e64a8029d468618"
+
+# Gecko's sound processor runs a boot ROM, and Nintendo's cannot be shipped. Dolphin wrote
+# a free one and keeps the assembled bytes in its tree; these are they, pinned to a commit
+# and to their hashes, and built into the Gecko host.
+DOLPHIN_COMMIT="a1e636d72c8469acf747ac6542f0b7ace7cea02f"
+DOLPHIN_RAW="https://raw.githubusercontent.com/dolphin-emu/dolphin/${DOLPHIN_COMMIT}/Data/Sys/GC"
+DSP_ROM_SHA256="4ea1fea6c649bcf9f627007bc9403d5437896c681d3e089b083263a7646cd3ae"
+DSP_COEF_SHA256="d7741279c2e8ec5c5fb318f8fbdd6de6bf583520d288e836a5383233a4238179"
+
 WASI_SDK_VERSION="25"
 WASI_SDK_URL="https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-${WASI_SDK_VERSION}/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux.tar.gz"
 WASI_SDK_SHA256="52640dde13599bf127a95499e61d6d640256119456d1af8897ab6725bcf3d89c"
 
 EMSDK_REPO="https://github.com/emscripten-core/emsdk.git"
 EMSDK_VERSION="3.1.74"
+
+# The same version as the wasm-bindgen crate the Gecko host depends on: the tool and the
+# crate check each other and refuse to work across a mismatch.
+WASM_BINDGEN_VERSION="0.2.118"
+WASM_BINDGEN_URL="https://github.com/wasm-bindgen/wasm-bindgen/releases/download/${WASM_BINDGEN_VERSION}/wasm-bindgen-${WASM_BINDGEN_VERSION}-x86_64-unknown-linux-musl.tar.gz"
+WASM_BINDGEN_SHA256="00b519c9fc2d6e087265da1a00f29160bfcc6a823993482bc2e691910287427b"
 
 # The flat surface core-shim exports. Both cores get all of it; a core that has no use
 # for a call (mGBA reads its cartridge from memory and never asks for a path) simply
@@ -56,7 +77,7 @@ EXPORTS=(
 mkdir -p "$build" "$dist"
 
 wanted=("$@")
-if [ ${#wanted[@]} -eq 0 ]; then wanted=(mgba bsnes); fi
+if [ ${#wanted[@]} -eq 0 ]; then wanted=(mgba bsnes gecko); fi
 building() { for name in "${wanted[@]}"; do [ "$name" = "$1" ] && return 0; done; return 1; }
 
 # --- fetching --------------------------------------------------------------------
@@ -107,6 +128,29 @@ emscripten() {
     echo "Emscripten is $got, not the pinned $EMSDK_VERSION. Refusing to build." >&2
     exit 1
   fi
+}
+
+wasm_bindgen() {
+  bindgen="$build/wasm-bindgen-${WASM_BINDGEN_VERSION}-x86_64-unknown-linux-musl"
+  if [ ! -x "$bindgen/wasm-bindgen" ]; then
+    echo "==> fetching wasm-bindgen $WASM_BINDGEN_VERSION"
+    curl -sSL -o "$build/wasm-bindgen.tar.gz" "$WASM_BINDGEN_URL"
+    echo "${WASM_BINDGEN_SHA256}  $build/wasm-bindgen.tar.gz" | sha256sum -c -
+    tar xzf "$build/wasm-bindgen.tar.gz" -C "$build"
+    rm -f "$build/wasm-bindgen.tar.gz"
+  fi
+}
+
+# A file fetched by URL and refused unless it hashes to what was pinned.
+fetch_pinned() {
+  local url="$1" target="$2" sha256="$3"
+  if [ ! -f "$target" ]; then
+    curl -sSL -o "$target" "$url"
+  fi
+  echo "${sha256}  $target" | sha256sum -c - > /dev/null || {
+    echo "$target does not hash to the pinned $sha256. Refusing to build." >&2
+    exit 1
+  }
 }
 
 # The shim is target-agnostic C ABI, so each core gets it built for the toolchain that
@@ -233,6 +277,57 @@ build_bsnes() {
   report bsnes.mjs
 }
 
+# --- Gecko -----------------------------------------------------------------------
+
+build_gecko() {
+  wasm_bindgen
+  local src="$build/gecko"
+  clone_pinned "$GECKO_REPO" "$src" "$GECKO_COMMIT" "Gecko"
+  # Two of its submodules are compiled in: the IPL replacement it boots a disc with, and
+  # the instruction specs its decoder is generated from. The third is test data.
+  git -C "$src" submodule update --init --quiet submodules/solstice submodules/chipi-spec
+
+  # The one place a fetched core is changed, and every change is a file in the repo
+  # beside this script: Gecko keeps its memory card's contents to itself, and a browser
+  # that is to keep a save has to be able to read them. Applied once; a tree that
+  # already carries a patch is left alone rather than patched twice.
+  local patch
+  for patch in "$here"/gecko-host/patches/*.patch; do
+    if git -C "$src" apply --check --reverse "$patch" > /dev/null 2>&1; then
+      continue
+    fi
+    echo "==> applying $(basename "$patch")"
+    git -C "$src" apply "$patch"
+  done
+
+  echo "==> fetching Dolphin's free DSP ROM"
+  local dsp="$build/dsp"
+  mkdir -p "$dsp"
+  fetch_pinned "$DOLPHIN_RAW/dsp_rom.bin" "$dsp/dsp_rom.bin" "$DSP_ROM_SHA256"
+  fetch_pinned "$DOLPHIN_RAW/dsp_coef.bin" "$dsp/dsp_coef.bin" "$DSP_COEF_SHA256"
+
+  # The host crate pins its own toolchain in rust-toolchain.toml — the one Gecko pins
+  # for itself — and rustup fetches it on the way past. RVZ discs are zstd, whose C
+  # source cc compiles for this target with whatever clang it finds.
+  echo "==> compiling the Gecko host (this takes a while)"
+  (cd "$here/gecko-host" \
+    && GATHERUM_DSP_ROM="$dsp/dsp_rom.bin" GATHERUM_DSP_COEF="$dsp/dsp_coef.bin" \
+       cargo build --release --quiet --target wasm32-unknown-unknown)
+  local module="$here/gecko-host/target/wasm32-unknown-unknown/release/gatherum_gecko_host.wasm"
+
+  # wasm-bindgen rewrites the module for the browser and writes the loader beside it as
+  # gecko.js, which is renamed so the web project's build stages it as the module kind it
+  # is; the loader finds gecko_bg.wasm by its own URL, so the two ship as a pair.
+  echo "==> binding gecko.mjs"
+  local out="$build/gecko-out"
+  rm -rf "$out" && mkdir -p "$out"
+  "$bindgen/wasm-bindgen" --target web --out-dir "$out" --out-name gecko --no-typescript "$module"
+  cp "$out/gecko_bg.wasm" "$dist/gecko_bg.wasm"
+  cp "$out/gecko.js" "$dist/gecko.mjs"
+  report gecko_bg.wasm
+  report gecko.mjs
+}
+
 report() {
   local size
   size=$(stat -c%s "$dist/$1")
@@ -244,3 +339,4 @@ report() {
 
 if building mgba; then build_mgba; fi
 if building bsnes; then build_bsnes; fi
+if building gecko; then build_gecko; fi

@@ -18,21 +18,29 @@ namespace Gatherum.Client.Emulation;
 /// descriptor says how many players a core is trusted with, and the answer is one until
 /// somebody has <em>measured</em> otherwise — two copies of it, the same cartridge, the
 /// same buttons, byte-identical states. bsnes has been measured and mGBA has not, which
-/// is the whole of why one of them plays together and the other does not.</para></summary>
+/// is the whole of why one of them plays together and the other does not.</para>
+///
+/// <para>A disc is a cartridge too big to pass through here. A GameCube image is over a
+/// gigabyte, and the WebAssembly heap this runs in is not the place for it: a machine
+/// marked <see cref="Machine.LoadsByUrl"/> is handed the file's address instead, and
+/// gatherum.js streams it straight into the core's own memory.</para></summary>
 public sealed class VendoredCore : IEmulatorCore, IDisposable
 {
     /// <summary>What it takes to play one machine on somebody else's core: where the
     /// module is served from — the app's own origin, so no deployment reaches anybody
     /// else's server to play a game — what the cartridge file has to be called for a core
     /// that opens it itself, what the pad is printed with, how many can play, and
-    /// anything the core must be told before it powers on.</summary>
+    /// anything the core must be told before it powers on — and, for a machine whose
+    /// image is a disc, that the core fetches it itself and needs a GPU to draw with.</summary>
     private sealed record Machine(
         string SystemName,
         string ModuleUrl,
         string Extension,
         ButtonLabels Buttons,
         int PlayerCount,
-        string[] Settings);
+        string[] Settings,
+        bool LoadsByUrl = false,
+        bool NeedsWebGpu = false);
 
     private static readonly Dictionary<ConsoleKind, Machine> Machines = new()
     {
@@ -54,6 +62,16 @@ public sealed class VendoredCore : IEmulatorCore, IDisposable
             // power-on, faithfully to the hardware and fatally for two people whose
             // consoles have to start life identical.
             Settings: ["bsnes_entropy", "None"]),
+
+        [ConsoleKind.GameCube] = new(
+            "GameCube", "/cores/gecko.mjs", ".iso",
+            // The pad's four face buttons and two shoulders keep their own names; the
+            // button the seam calls Select is Z, the one GameCube button left over.
+            new("A", "B", "Start", "Z", "L", "R", X: "X", Y: "Y"),
+            // One. Gecko has no save state to hand a second player, and nobody has
+            // measured two of it agreeing.
+            PlayerCount: 1, Settings: [],
+            LoadsByUrl: true, NeedsWebGpu: true),
     };
 
     /// <summary>How often the cartridge's battery memory is checked for changes. Every
@@ -102,20 +120,38 @@ public sealed class VendoredCore : IEmulatorCore, IDisposable
     /// <summary>Whether this machine plays on a core from elsewhere.</summary>
     public static bool Handles(ConsoleKind kind) => Machines.ContainsKey(kind);
 
-    /// <summary>Fetches the core if it is not already here, hands it the cartridge, and
-    /// returns null when either fails — a deployment that did not build one is a player
-    /// that offers a download, not a page that breaks.</summary>
+    /// <summary>Whether the core fetches this machine's image itself, from a URL, rather
+    /// than being handed its bytes — the case for a disc that would not fit here.</summary>
+    public static bool LoadsByUrl(ConsoleKind kind) =>
+        Machines.TryGetValue(kind, out var machine) && machine.LoadsByUrl;
+
+    /// <summary>Fetches the core if it is not already here, hands it the cartridge —
+    /// the bytes, or for a disc the address the core fetches them from — and returns
+    /// null when the core cannot be had: a deployment that did not build one is a player
+    /// that offers a download, not a page that breaks. A core that <em>is</em> here and
+    /// still cannot play says why instead.</summary>
     public static async Task<VendoredCore?> CreateAsync(
-        IJSObjectReference module, ConsoleKind kind, byte[] rom)
+        IJSObjectReference module, ConsoleKind kind, byte[] rom, string? contentUrl = null)
     {
         if (module is not IJSInProcessObjectReference js)
             return null;
         if (!Machines.TryGetValue(kind, out var machine))
             return null;
+        if (machine.NeedsWebGpu && !await module.InvokeAsync<bool>("hasWebGpu"))
+            throw new NotSupportedException(
+                $"A {machine.SystemName} draws with WebGPU, which this browser does not " +
+                "offer. The disc can be downloaded but not played here.");
         if (!await module.InvokeAsync<bool>("loadEmulatorCore", machine.ModuleUrl, machine.Settings))
             return null;
 
-        var facts = js.Invoke<CartridgeFacts?>("loadEmulatorCartridge", rom, machine.Extension);
+        var facts = machine.LoadsByUrl
+            ? await module.InvokeAsync<CartridgeFacts?>(
+                "loadEmulatorCartridgeFromUrl", contentUrl, machine.Extension)
+            : js.Invoke<CartridgeFacts?>("loadEmulatorCartridge", rom, machine.Extension);
+        if (facts is null && machine.LoadsByUrl)
+            throw new NotSupportedException(
+                $"The {machine.SystemName} core would not boot this disc. It boots plain " +
+                "GameCube images (.iso, .gcm) and RVZ ones, and nothing else.");
         if (facts is null || facts.Width <= 0 || facts.Height <= 0)
             return null;
 
@@ -226,7 +262,9 @@ public sealed class VendoredCore : IEmulatorCore, IDisposable
 
     public bool SaveState(Span<byte> destination)
     {
-        if (disposed || destination.Length < stateSize)
+        // A core with no serializer measures its state at nothing, and nothing is not
+        // a state anybody can be handed.
+        if (disposed || stateSize == 0 || destination.Length < stateSize)
             return false;
         if (!js.Invoke<bool>("saveEmulatorCoreState", Address(pinnedScratch), stateSize))
             return false;
@@ -236,7 +274,7 @@ public sealed class VendoredCore : IEmulatorCore, IDisposable
 
     public bool LoadState(ReadOnlySpan<byte> source)
     {
-        if (disposed || source.Length < stateSize)
+        if (disposed || stateSize == 0 || source.Length < stateSize)
             return false;
         source[..stateSize].CopyTo(scratch);
         return js.Invoke<bool>("loadEmulatorCoreState", Address(pinnedScratch), stateSize);

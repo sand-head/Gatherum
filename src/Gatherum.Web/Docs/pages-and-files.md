@@ -102,14 +102,16 @@ stays in history either way.
 
 ## Playing a cartridge
 
-Upload a `.nes`, `.gb`, `.gbc`, `.sms`, `.gg` or `.gba` file and its page has a console
-on it. Press **Play** and the game runs.
+Upload a `.nes`, `.gb`, `.gbc`, `.sms`, `.gg`, `.gba`, `.sfc` or `.smc` cartridge — or a
+GameCube disc, as `.iso`, `.gcm` or `.rvz` — and its page has a console on it. Press
+**Play** and the game runs.
 
 The console is not a plug-in and not a download. For most of these machines the
 processor, the picture chip and the sound chip are all part of Gatherum itself; the Game
-Boy Advance is big enough that its emulator is a well-known one from elsewhere, built
-into Gatherum when Gatherum was built. Either way it runs in your browser, the cartridge
-is fetched once, and nothing about the game leaves your machine afterwards.
+Boy Advance, the Super Nintendo and the GameCube are big enough that their emulators are
+well-known ones from elsewhere, built into Gatherum when Gatherum was built. Either way it
+runs in your browser, the cartridge is fetched once, and nothing about the game leaves
+your machine afterwards.
 
 - **The controls** are the arrow keys, <kbd>Z</kbd> and <kbd>X</kbd> for the two face
   buttons, <kbd>Enter</kbd> and <kbd>Shift</kbd> for the other two. What those last two
@@ -169,6 +171,7 @@ playing the same game.
 | Game Gear | `.gg` | One |
 | Game Boy Advance | `.gba` | One |
 | Super Nintendo | `.sfc`, `.smc` | Two |
+| GameCube | `.iso`, `.gcm`, `.rvz` | One |
 
 Gatherum knows the Nintendo Entertainment System's common cartridge boards (NROM, MMC1,
 UxROM, CNROM, MMC3, AxROM and a few others), the Game Boy's (none, MBC1, MBC2, MBC3 with
@@ -176,11 +179,11 @@ its clock, and MBC5) and the Master System's (Sega's own paging hardware, and th
 board Codemasters built for their own games). A cartridge on a board it has not met says
 so by name instead of failing quietly.
 
-The Game Boy Advance and the Super Nintendo are the two machines here whose emulators
-Gatherum did not write, so which games run well on them is those emulators' business
-rather than Gatherum's. They are also the two that are fetched and built rather than
-shipped, so a Gatherum built without them offers a download where the others offer a
-console, and says so.
+The Game Boy Advance, the Super Nintendo and the GameCube are the three machines here
+whose emulators Gatherum did not write, so which games run well on them is those
+emulators' business rather than Gatherum's. They are also the three that are fetched and
+built rather than shipped, so a Gatherum built without them offers a download where the
+others offer a console, and says so.
 
 A Game Boy Advance cartridge's header says nothing about whether it saves, so the file's
 details do not either — the console works it out when the game starts. A Super Nintendo
@@ -191,6 +194,36 @@ wrote in front of it reads the same as a `.sfc` without them. The Super Nintendo
 has four face buttons rather than two, and they are drawn in the diamond the console
 printed them in: <kbd>Z</kbd> and <kbd>X</kbd> are B and A as everywhere else, and
 <kbd>A</kbd> and <kbd>S</kbd>, above them, are Y and X.
+
+### The GameCube
+
+A GameCube is a different order of machine from the rest, and a few things about playing
+one follow from that.
+
+- **It needs a GPU.** The console draws with WebGPU, which Chrome and Edge have had for
+  some time and Firefox and Safari have more recently. A browser without it is told so,
+  and offers the disc as a download instead.
+- **It is a disc, not a cartridge.** A GameCube disc is a gigabyte and a half as a plain
+  `.iso` or `.gcm`, and the console reads all of it into memory before it starts. Keep
+  discs as `.rvz` — Dolphin's compressed form, which is what most people already have —
+  and they are a fraction of that and load in a fraction of the time. The console
+  understands both; nothing needs converting on the way in.
+- **The controls** are the same keys as everywhere else, printed the GameCube's way: the
+  arrows push the analog stick all the way over, <kbd>X</kbd> and <kbd>Z</kbd> are A and
+  B, <kbd>S</kbd> and <kbd>A</kbd> are X and Y, <kbd>Q</kbd> and <kbd>E</kbd> pull the L
+  and R triggers all the way in, <kbd>Enter</kbd> is Start, and <kbd>Shift</kbd> is Z —
+  the one button the pad has that no other console here had. The C-stick and the
+  directional pad are not on a keyboard; a game that insists on either is one this
+  player cannot steer.
+- **Saving** is to a memory card in slot A — a 2 MB "Memory Card 251" that a game
+  formats the first time it wants one — and the card is what **Download save** gives
+  you: a raw card image, which Dolphin will read if you rename it `.raw`. It is kept by
+  your browser like every other save here.
+- **Wii discs** are recognised for what they are and not played: a Wii is a system a
+  GameCube core would have to invent, and it does not.
+- **Speed** is the emulator's business. It runs the console's processor an instruction
+  at a time, which is what a browser allows, so a game that was slow to draw on the real
+  machine is slower here.
 
 A Master System cartridge carries no title, only the catalogue number Sega sold it under,
 so that is what search has to go on for one. A Game Gear plays in colour on a screen a
@@ -243,6 +276,7 @@ Two different tempos, and they never share a path.
 | `.sms`, `.gg` | What Sega's header says: the console, the catalogue number the game was sold under, and the region |
 | `.gba` | The title and game code printed in the header, and the region its last letter names |
 | `.sfc`, `.smc` | The title printed in the header, the board and any second processor on it, the save memory, and the region |
+| `.iso`, `.gcm`, `.rvz` | What the disc's first block says: the console (GameCube or Wii), the title, the game code and maker, the disc number and revision, the region, and for an `.rvz` the size the disc would be uncompressed |
 
 **Analysis** asks a model, takes minutes, and runs on a background worker after the
 upload has already returned. It is off unless the instance's owner has configured

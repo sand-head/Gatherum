@@ -19,6 +19,7 @@ public static class MediaTypes
     public const string GameGearRom = "application/x-gamegear-rom";
     public const string GameBoyAdvanceRom = "application/x-gba-rom";
     public const string SuperNintendoRom = "application/x-snes-rom";
+    public const string GameCubeRom = "application/x-gamecube-rom";
 
     /// <summary>What a directory is, when it is only a place to keep things. A folder
     /// somebody made in their file manager is a node too.</summary>
@@ -49,6 +50,13 @@ public static class MediaTypes
         [".gba"] = GameBoyAdvanceRom,
         [".sfc"] = SuperNintendoRom,
         [".smc"] = SuperNintendoRom,
+        // `.iso` too, though it names every optical disc ever imaged: a GameCube disc
+        // is what one is called far more often than `.gcm`, and a file that turns out
+        // to be some other kind of disc gets a player that says so rather than a
+        // download that never explains why.
+        [".iso"] = GameCubeRom,
+        [".gcm"] = GameCubeRom,
+        [".rvz"] = GameCubeRom,
     };
 
     /// <summary>Extensions whose content is text even when the upload says otherwise —
@@ -93,12 +101,13 @@ public static class MediaTypes
     /// <summary>Whether this is a cartridge image the player can run.</summary>
     public static bool IsRom(string mediaType, string fileName) =>
         mediaType is NesRom or GameBoyRom or GameBoyColorRom
-            or MasterSystemRom or GameGearRom or GameBoyAdvanceRom or SuperNintendoRom ||
+            or MasterSystemRom or GameGearRom or GameBoyAdvanceRom or SuperNintendoRom
+            or GameCubeRom ||
         RomExtensions.Contains(Path.GetExtension(fileName));
 
     private static readonly HashSet<string> RomExtensions =
         new(StringComparer.OrdinalIgnoreCase)
-        { ".nes", ".gb", ".gbc", ".sms", ".gg", ".gba", ".sfc", ".smc" };
+        { ".nes", ".gb", ".gbc", ".sms", ".gg", ".gba", ".sfc", ".smc", ".iso", ".gcm", ".rvz" };
 
     public static bool IsText(string mediaType, string fileName) =>
         mediaType.StartsWith("text/", StringComparison.OrdinalIgnoreCase) ||

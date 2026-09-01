@@ -1,10 +1,13 @@
 # Stage 0: the vendored emulator cores, in a stage of their own so that the toolchain they
 # needs — a WASI clang, an Emscripten SDK and a Rust cross-compiler — never reaches the
-# image that ships, and so editing C# does not rebuild four megabytes of emulator. What
+# image that ships, and so editing C# does not rebuild many megabytes of emulator. What
 # comes out is what native/dist/ holds; see native/README.md.
+# clang is for the Gecko host: RVZ discs are zstd, and its C source is compiled for the
+# browser by whatever clang the build finds. Gecko's own toolchain — a pinned Rust and
+# the plain WebAssembly target — rustup fetches from the pin in native/gecko-host.
 FROM rust:1-bookworm AS core
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl git make python3 xz-utils ca-certificates \
+    curl git make python3 xz-utils ca-certificates clang \
     && rm -rf /var/lib/apt/lists/*
 RUN rustup target add wasm32-wasip1 wasm32-unknown-emscripten
 WORKDIR /native

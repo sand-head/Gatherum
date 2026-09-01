@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Text;
 
 namespace Gatherum.Core.Roms;
@@ -12,6 +13,8 @@ public enum RomSystem
     GameGear,
     GameBoyAdvance,
     SuperNintendo,
+    GameCube,
+    Wii,
 }
 
 /// <summary>What a cartridge image says about itself before anything runs it: the
@@ -36,7 +39,7 @@ public sealed record RomHeader(
     /// knows — a truncated download, or a `.gb` that is really something else.</summary>
     public static RomHeader? Read(ReadOnlySpan<byte> bytes) =>
         ReadNes(bytes) ?? ReadGameBoy(bytes) ?? ReadGameBoyAdvance(bytes)
-        ?? ReadSega(bytes) ?? ReadSuperNintendo(bytes);
+        ?? ReadSega(bytes) ?? ReadSuperNintendo(bytes) ?? ReadDisc(bytes);
 
     /// <summary>The header as lines a person — or a search index — can read.</summary>
     public string Describe()
@@ -211,24 +214,80 @@ public sealed record RomHeader(
         var maker = Encoding.ASCII.GetString(bytes.Slice(0xB0, 2)).Trim();
 
         // The fourth letter of the game code is the region the cartridge was sold in.
-        var region = code.Length == 4
-            ? code[3] switch
-            {
-                'J' => "Japan",
-                'E' => "North America",
-                'P' => "Europe",
-                'D' => "Germany",
-                'F' => "France",
-                'I' => "Italy",
-                'S' => "Spain",
-                _ => null,
-            }
-            : null;
+        var region = code.Length == 4 ? NintendoRegion(code[3]) : null;
 
         return new RomHeader(RomSystem.GameBoyAdvance, "Game Boy Advance",
             title.Length == 0 ? null : title,
             code.Length == 0 ? "Cartridge" : $"Game code {code}, maker {maker}",
             bytes.Length, 0, 0, null, region);
+    }
+
+    /// <summary>Nintendo's lettering for where a game was sold, the same on a Game Boy
+    /// Advance cartridge and a GameCube disc.</summary>
+    private static string? NintendoRegion(char letter) => letter switch
+    {
+        'J' => "Japan",
+        'E' => "North America",
+        'P' => "Europe",
+        'D' => "Germany",
+        'F' => "France",
+        'I' => "Italy",
+        'S' => "Spain",
+        'K' => "Korea",
+        _ => null,
+    };
+
+    // ---- GameCube and Wii discs -------------------------------------------------
+
+    private static ReadOnlySpan<byte> GameCubeMagic => [0xC2, 0x33, 0x9F, 0x3D];
+    private static ReadOnlySpan<byte> WiiMagic => [0x5D, 0x1C, 0x9E, 0xA3];
+
+    /// <summary>A disc's header is the first block of the disc: a six-character game
+    /// id, a disc number and revision, the console's magic word — at $1C for a GameCube,
+    /// $18 for a Wii — and the title from $20. An RVZ, the compressed form discs are
+    /// usually kept in, copies the first 128 bytes of that block to $58 of its own header
+    /// and says which console at $48, so the same reader is pointed there for one; the
+    /// uncompressed size it records at $24 is what a listing should call the disc's
+    /// size, not the size of the file.</summary>
+    private static RomHeader? ReadDisc(ReadOnlySpan<byte> bytes)
+    {
+        if (bytes.Length >= 0xD8 && bytes[..4].SequenceEqual("RVZ\x01"u8))
+        {
+            var discBytes = BinaryPrimitives.ReadUInt64BigEndian(bytes[0x24..]);
+            return ReadDiscAt(bytes[0x58..0xD8], (int)Math.Min(discBytes, int.MaxValue));
+        }
+        return bytes.Length >= 0x80 ? ReadDiscAt(bytes[..0x80], bytes.Length) : null;
+    }
+
+    private static RomHeader? ReadDiscAt(ReadOnlySpan<byte> header, int discBytes)
+    {
+        RomSystem system;
+        string systemName;
+        if (header.Slice(0x1C, 4).SequenceEqual(GameCubeMagic))
+            (system, systemName) = (RomSystem.GameCube, "GameCube");
+        else if (header.Slice(0x18, 4).SequenceEqual(WiiMagic))
+            (system, systemName) = (RomSystem.Wii, "Wii");
+        else
+            return null;
+
+        var titleBytes = header[0x20..];
+        var end = titleBytes.IndexOf((byte)0);
+        var title = Encoding.ASCII
+            .GetString(end < 0 ? titleBytes : titleBytes[..end])
+            .Trim();
+        var code = Encoding.ASCII.GetString(header[..4]).Trim();
+        var maker = Encoding.ASCII.GetString(header.Slice(4, 2)).Trim();
+        var disc = header[6] + 1;
+        var revision = header[7];
+        var region = code.Length == 4 ? NintendoRegion(code[3]) : null;
+
+        var cartridge = code.Length == 0
+            ? "Disc"
+            : $"Game code {code}, maker {maker}, disc {disc}, revision {revision}";
+        // A GameCube saves to a memory card rather than to anything on the disc, so
+        // the disc has no more to say about saving than a Game Boy Advance cartridge.
+        return new RomHeader(system, systemName, title.Length == 0 ? null : title,
+            cartridge, discBytes, 0, 0, null, region);
     }
 
     // ---- Super Nintendo --------------------------------------------------------
