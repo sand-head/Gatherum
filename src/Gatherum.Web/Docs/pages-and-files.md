@@ -114,9 +114,13 @@ is fetched once, and nothing about the game leaves your machine afterwards.
 - **The controls** are the arrow keys, <kbd>Z</kbd> and <kbd>X</kbd> for the two face
   buttons, <kbd>Enter</kbd> and <kbd>Shift</kbd> for the other two. What those last two
   are called depends on the machine — Start and Select on a Nintendo, Pause and Reset on
-  a Master System — and the player prints the names the console's own plastic used. On a
-  touchscreen a pad appears under the screen instead. Click the picture to give it the
-  keyboard again after clicking anything else.
+  a Master System — and the player prints the names the console's own plastic used. A
+  game controller plugged in or paired works as well, with nothing to set up: while the
+  game runs the player reads it directly, and its buttons land by where they sit on the
+  pad — the bottom and right face buttons are the console's B and A whatever your pad
+  prints on them. On a touchscreen a pad appears under the screen instead. Click the
+  picture to give it the keyboard again after clicking anything else — the controller
+  never needs that click.
 - **Sound** starts with the game — a browser will not make noise until someone has asked
   it to — and there is a button to turn it off.
 - **Saving.** A cartridge with a battery in it saves the way it always did, and the save

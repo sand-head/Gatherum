@@ -317,6 +317,34 @@ export function writeEmulatorSave(nodeId, base64) {
   }
 }
 
+// A real controller, when one is plugged in or paired. The Gamepad API is the one way a
+// browser sees it and has no Blazor binding, so the player polls this once per painted
+// frame. What goes back is the W3C standard mapping packed one button per bit — bit 0
+// is the bottom face button, bits 12–15 the d-pad — and saying *which position* rather
+// than which printing is the C# side's business. Every connected pad is read and OR-ed
+// together, so whichever controller a person picks up is the one that works. The left
+// stick is folded into the d-pad bits because a retro console has no stick to offer it
+// to — and because the common USB "retro" pads report a nonstandard mapping with their
+// d-pad on those same two axes, which is what makes exactly those pads work here.
+export function readEmulatorGamepad() {
+  if (!navigator.getGamepads) return 0;
+  let held = 0;
+  for (const pad of navigator.getGamepads()) {
+    if (!pad || !pad.connected) continue;
+    const count = Math.min(pad.buttons.length, 16);
+    for (let i = 0; i < count; i++) {
+      if (pad.buttons[i].pressed) held |= 1 << i;
+    }
+    const x = pad.axes[0] ?? 0;
+    const y = pad.axes[1] ?? 0;
+    if (y < -0.5) held |= 1 << 12;
+    if (y > 0.5) held |= 1 << 13;
+    if (x < -0.5) held |= 1 << 14;
+    if (x > 0.5) held |= 1 << 15;
+  }
+  return held;
+}
+
 // ---- A vendored emulator core ----------------------------------------------------
 //
 // Some machines are too big to write from scratch, so their core is somebody else's,

@@ -2145,3 +2145,31 @@ Supafaust's 2.3 MB and a harder build, which is not much of a cost.
 on and this is the evidence for it: a C core built against WASI and a C++ core built
 against Emscripten, sharing one Rust translation unit that knows libretro and nothing
 about either.
+
+## A controller is read as state, and mapped by position
+
+Real gamepads reach a browser only through the Gamepad API, which Blazor has no binding
+for — so the poll lives in `gatherum.js` beside the player's sound, the one place
+hand-written JavaScript is allowed and only for what Blazor cannot do natively. It is a
+poll rather than an event stream because that is what the API is: a snapshot per call.
+The player takes one synchronous in-process call per painted frame, and the JavaScript
+answers with the W3C standard layout packed one button per bit; deciding what those
+positions *mean* stays in C#, next to the keyboard map that already made the same kind
+of call.
+
+The mapping is positional, not lettered. A modern pad prints A on its bottom face button
+and every console here printed B there, so matching letters would cross the two buttons
+a game most cares about; the bottom-and-right pair land on B and A, left and top on Y
+and X, both shoulder rows on the one shoulder pair these machines had. The left stick is
+folded into the d-pad in the JavaScript — partly because a retro console has nothing
+else to give a stick to, and partly because the common USB "retro" pads report a
+nonstandard mapping with their d-pad on those same axes, so the fold is what makes
+exactly the pads people buy for these games work.
+
+Three consequences were chosen deliberately. A controller feeds the same bits the
+keyboard does, merged before the console or the netplay wire ever sees them, so playing
+together is untouched — the wire still carries buttons and never learns what held them.
+A controller needs no focus: blur releases the keys, whose key-ups would otherwise be
+lost, but not the pad, which cannot stick because it is re-read every frame. And every
+connected pad is OR-ed into player one — the second local port is netplay's job, and a
+machine for choosing seats among local pads is a feature nobody asked for yet.
