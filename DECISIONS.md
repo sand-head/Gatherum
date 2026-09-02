@@ -2523,11 +2523,16 @@ path; and a block that ends early where the interpreter would not have creates a
 interrupt point the interpreter never had. Both discs now match the interpreter frame
 for frame, registers, clock and RAM, over the whole run measured.
 
-**What it is worth, so far: less than the mechanism promised.** Super Monkey Ball 2's
-title screen went from 43 ms a frame to 39; Twilight Princess was never CPU-bound. The
-profile explains it: a quarter of the frame is the compiled code, a tenth the Rust loop
-that dispatches blocks, a further tenth the call stubs Firefox puts between two
-instances, and the GX decode and vertex uploads are as they were. Every one of those is
-its own piece of work — a register cache in locals, chaining blocks without returning to
-Rust, and the vertex decoder's JIT translated the same way — and each is measured
-against the same oracle before it lands.
+**What it is worth, so far: less than the mechanism promised.** With every register the
+interpreter's, Super Monkey Ball 2's title screen went from 43 ms a frame to 39. Keeping
+the registers a block touches in WebAssembly locals — read from the console once, written
+back before a handler, the bus in the interpreter's hands, or the way out, forgotten
+after a handler may have changed them, and the two arms of a quantized access merged
+through the console — took a same-session A/B to 50 against 35 on that screen, a quarter
+to a third off, and Twilight Princess was never CPU-bound. A dump of a typical block
+shows why the rest is still there: thirty-six WebAssembly operations per GameCube
+instruction, most of them the memory fast path's segment and range checks and byte swaps,
+and the condition-register updates that read and write the console for every `Rc` and
+compare. Those, the Rust loop that dispatches blocks (a tenth of the frame), and the GX
+decode and vertex uploads are each their own piece of work, and each is measured against
+the same oracle before it lands.
