@@ -26,10 +26,12 @@
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 
 use backend_wgpu::GxRenderer;
 use gecko::audio::AudioSink;
+use gecko::flipper::exi::macronix::{ExiMacronix, RTC_SECONDS};
 use gecko::flipper::si::pad::{self, PadStatus, STICK_CENTER, STICK_MAX, STICK_MIN, TRIGGER_MAX, TRIGGER_MIN};
 use gecko::flipper::vi::regs::RefreshRate;
 use gecko::host::{DrawVertex, GxAction, RenderSink};
@@ -48,6 +50,10 @@ const ROW_BYTES: u32 = FRAME_WIDTH * 4;
 /// at. A GameCube switches between 32 and 48 kHz per game, and the seam reads the rate
 /// once; so the sink resamples to this and the answer never changes.
 const SAMPLE_RATE: u32 = 48_000;
+
+/// The IPL mask ROM is 2 MB. What is on it cannot be shipped; its size still matters,
+/// because reads wrap at it.
+const IPL_ROM_SIZE: usize = 0x20_0000;
 
 /// A "Memory Card 251": 2 MB, the biggest official card, in slot A.
 const MEMORY_CARD_BLOCKS: u32 = 256;
@@ -204,6 +210,11 @@ impl Gpu {
             .await
             .ok()?;
         let (device, queue) = adapter.request_device(&wgpu::DeviceDescriptor::default()).await.ok()?;
+        // A validation error would otherwise vanish: the picture is read back rather than
+        // presented, so nothing on the page ever shows the GPU refusing a command.
+        device.on_uncaptured_error(std::sync::Arc::new(|error: wgpu::Error| {
+            web_sys::console::warn_1(&format!("GameCube core: {error}").into());
+        }));
         // BGRA, because a byte order of B, G, R, A read as a little-endian word is the
         // 0xAARRGGBB pixel the player wants, and the copy is then a copy.
         let renderer = GxRenderer::new(&device, &queue, wgpu::TextureFormat::Bgra8Unorm, 1);
@@ -231,6 +242,9 @@ impl Gpu {
             shared.epoch = shared.epoch.wrapping_add(1);
             std::mem::take(&mut shared.messages)
         };
+        // Draws are batched until a non-draw action arrives, and a batch left over from the
+        // previous frame indexes into the scratch about to be swapped out: flush it first.
+        self.renderer.flush_pending_draws(&self.device, &self.queue);
         let mut scratch = self.renderer.replace_vertex_scratch(Vec::new());
         scratch.clear();
         for message in messages {
@@ -313,6 +327,9 @@ struct Console {
     /// X, left Y, right X, right Y from the low byte up — positive meaning right and
     /// up, zero a stick at rest.
     sticks: u32,
+    /// Frames run since power-on: the console's clock, which counts these and never
+    /// the time, so that a cartridge saving the date reads the same date on any replay.
+    frames: u64,
 }
 
 impl Console {
@@ -321,6 +338,16 @@ impl Console {
         emulator.dsp.load_irom(DSP_ROM);
         emulator.dsp.load_coef(DSP_COEF);
         emulator.insert_memory_card(MEMORY_CARD_SLOT, None, MEMORY_CARD_BLOCKS);
+        // The device beside the memory card: the IPL mask ROM, the SRAM and the clock.
+        // Gecko's IPL-less boot leaves it off the bus, and a game that asks it for the
+        // console's settings, or waits on its clock, gets nothing back. The ROM itself
+        // cannot be shipped, so it is blank: a font read from it comes out empty, and
+        // the SRAM and clock behind it answer as a fresh console would.
+        emulator.exi.attach_device(
+            ExiMacronix::CHANNEL,
+            ExiMacronix::DEVICE,
+            Box::new(ExiMacronix::new(vec![0u8; IPL_ROM_SIZE])),
+        );
 
         let actions: ActionQueue = Arc::new(Mutex::new(QueueShared { messages: Vec::new(), epoch: 0 }));
         emulator.render_sink = Box::new(QueueSink::new(actions.clone()));
@@ -333,7 +360,7 @@ impl Console {
         }));
         emulator.audio_sink = Box::new(ResamplingSink(audio.clone()));
 
-        let mut console = Self { emulator, actions, audio, buttons: 0, sticks: 0 };
+        let mut console = Self { emulator, actions, audio, buttons: 0, sticks: 0, frames: 0 };
         console.apply_input();
         console
     }
@@ -477,6 +504,20 @@ pub fn gatherum_load_path(_path: u32) -> u32 {
 #[wasm_bindgen]
 pub async fn gatherum_boot() -> bool {
     console_error_panic_hook::set_once();
+    // Gecko says what it could not do through `tracing`; the browser console is where
+    // a person debugging a cartridge looks, the same place the WASI shim's cores print.
+    {
+        use tracing_subscriber::prelude::*;
+        let _ = tracing_subscriber::registry()
+            .with(tracing_subscriber::filter::LevelFilter::WARN)
+            .with(
+                tracing_subscriber::fmt::layer()
+                    .with_ansi(false)
+                    .without_time()
+                    .with_writer(tracing_web::MakeWebConsoleWriter::new()),
+            )
+            .try_init();
+    }
     if with_host(|host| host.gpu.is_some()) {
         return true;
     }
@@ -591,6 +632,8 @@ pub fn gatherum_run() {
         let Host { gpu, console, frame, audio_out, .. } = host;
         let (Some(gpu), Some(console)) = (gpu.as_mut(), console.as_mut()) else { return };
         gpu.collect(frame);
+        console.frames += 1;
+        RTC_SECONDS.store((console.frames as f64 / console.fps()) as u32, Ordering::Relaxed);
         console.emulator.run_until_vsync();
         gpu.process(&console.actions);
         gpu.capture();

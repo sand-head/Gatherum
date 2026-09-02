@@ -36,10 +36,19 @@ Gecko's renderer on it, and a staging buffer it reads the picture back through e
 frame; it resamples the sound to one rate, turns the pad mask into a GameCube pad, and
 exports the same `gatherum_*` names as the shim so that past `openCore` nothing can tell
 which it got. Its dependencies are path dependencies into `build/gecko`, the pinned
-checkout. It also carries `patches/`, the one place a fetched core is changed: Gecko
-keeps its memory card's contents to itself, and a browser that is to keep a save has to
-be able to read them. A patch is a file in the repository applied once at fetch time —
-never a fork, and small enough to read.
+checkout. It also carries `patches/`, the one place a fetched core is changed. A patch
+is a file in the repository applied once at fetch time — never a fork, and each small
+enough to read. There are five: the memory card's contents exposed, so a browser that is
+to keep a save can read them; the real-time clock fed from a counter the host advances,
+because a browser build has no wall clock to read and the determinism rule forbids
+wanting one; the bus and CPU clock speeds written into the boot block, which the IPL
+writes and Gecko's IPL-less boot left at zero, so that every SDK timeout was over before
+it began; the write-gather pipe draining into memory whether or not the command processor
+is linked to it, which is how a game running two FIFOs and swapping them each frame
+(Super Monkey Ball 2, for one) gets anything drawn at all; and the DSP's DMA-busy bit
+made the status it is — not writable, and not held high by the audio stream — because a
+sound driver that polls it before every ARAM transfer otherwise waits forever. Each is a
+hardware fact rather than a taste, and each is a candidate to send upstream.
 
 **The cores themselves are not here, and never will be.** `build-core.sh` fetches each at
 a pinned commit into `build/`, compiles it against a pinned toolchain, links the shim, and

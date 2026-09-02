@@ -2338,3 +2338,65 @@ and the server circuit still streams it straight to the service. The staging map
 memory on purpose — an upload cannot outlive the process it began in, and one that tries
 gets a 404 to retry from, which is what an interrupted upload is. The multipart endpoints
 stay as they were for the drop zone and for API clients, at the same 2 GB ceiling.
+
+## A GameCube that showed nothing, and the five reasons it did not
+
+Super Monkey Ball 2 played as a black screen in Firefox, with WebGPU on. The report named
+the browser, so the first question was whether Firefox's WebGPU was the difference, and
+the answer came from a harness that drives `gecko.mjs` exactly as `gatherum.js` does with
+no Blazor in the way: Chromium was black in the same way, at the same instruction. Neither
+the readback nor the page was at fault — the picture was crossing every frame, and it was
+black because the console had nothing to show. Gecko was silent about why, because the
+host had no `tracing` subscriber; it has one now, warnings and up into the browser
+console, which is the same place the WASI shim's cores print and where a person debugging
+a cartridge looks.
+
+What it was, in the order it was found, each one uncovering the next:
+
+- **The boot block's clock speeds were zero.** The IPL writes the bus and CPU clocks at
+  `0x800000F8` and `0x800000FC`; Gecko's IPL-less boot writes the RAM and ARAM sizes and
+  not those. The SDK derives every tick conversion from the bus clock, so
+  `OSMillisecondsToTicks` was zero and every timed wait built on it was over before it
+  started — the DVD library's post-reset settle among them, which put every thread to
+  sleep and left the CPU in the scheduler's idle loop. Patched into the boot, where the
+  other boot-block words are written.
+- **The IPL mask ROM, SRAM and clock were off the bus.** Gecko attaches that EXI device
+  when it boots from a real IPL and not otherwise, so a game reading the console's
+  settings got a stub. The host attaches it with a blank ROM — the real one cannot be
+  shipped, and a font read from it comes out empty — and the SRAM and clock behind it
+  answer as a fresh console would. The clock is the determinism rule's business: Gecko
+  read `SystemTime::now()`, which panics on `wasm32-unknown-unknown`, and a patch makes
+  the browser build read a counter the host sets from the frame count instead.
+- **The write-gather pipe dropped everything when the command processor was unlinked.**
+  Gecko landed a burst in memory and advanced the PI write pointer only under the CPU–GP
+  link. A game running two FIFOs — the CPU filling one while the GP reads the other, the
+  two swapped every frame, the way Amusement Vision's engine does it — fills the idle one
+  through that pointer alone, so nothing it drew ever reached memory, the GP never
+  finished, and the game printed "GP WAIT Timeout" to a port nobody was reading. Twilight
+  Princess stays linked and never noticed. The patch drains the pipe regardless and lets
+  the link govern only the CP's own pointer and distance, which is what the hardware does.
+- **The DSP's DMA-busy bit was writable and was the audio stream's.** Gecko copied bit 9
+  of the DSP control register from every CPU write, and set it for as long as the audio
+  DMA played. The SDK writes that register read-modify-write, and a sound driver that
+  polls `ARGetDMAStatus` before every ARAM transfer — which is that bit — therefore waited
+  on a bit that was never going to clear. Patched to be the ARAM DMA status it is.
+- **The renderer panicked on a batch left over from the previous frame.** Draws are
+  batched until a non-draw action arrives, and the host, following Gecko's own web build,
+  swapped the vertex scratch out at every frame boundary — so a batch still pending at
+  the boundary indexed into a buffer that was now empty, and Twilight Princess died on
+  frame nine with a slice out of range. The host now flushes pending draws before the
+  swap. Gecko's web page only ever loads a DOL and had not met this.
+
+Four of the five are patch files beside the memory-card one, each a hardware fact rather
+than a taste, each small enough to read, and each a candidate to send upstream. The
+question "is this one disc failing to initialise?" was the right one and the answer was
+no: the same disc stalled natively under Gecko's own headless benchmark, at the same
+place, and so would any game that reset its drive and waited, ran an unlinked FIFO, or
+polled the ARAM DMA — all of which are ordinary. Gecko's `dev` branch was checked and is
+seven commits of rendering and input work over the pin; none of it touches these paths.
+
+What was measured, in real Firefox 154 on Linux through the harness: Twilight Princess
+draws its health-and-safety screen with sound; Super Monkey Ball 2 boots through its
+publisher screens to its title screen with sound. Both run slowly — Gecko in a browser is
+its interpreters, and a heavy scene is eight frames a second — which the manual already
+says and this does not change.
