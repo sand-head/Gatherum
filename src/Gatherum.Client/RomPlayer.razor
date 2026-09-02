@@ -264,6 +264,10 @@ else
     /// the screen releases the keys and not these.</summary>
     private GamepadButtons padHeld;
 
+    /// <summary>Where that controller's sticks are leaning, for the console that steers
+    /// with one. Solo only — see the note in <see cref="PollGamepad"/>.</summary>
+    private StickState padSticks;
+
     /// <summary>Everything held right now, whichever hardware is holding it. The one
     /// value the console — and, playing together, the wire — ever sees.</summary>
     private GamepadButtons Held => pressed | padHeld;
@@ -757,10 +761,23 @@ else
         if (directModule is null)
             return;
         var now = MapPad(directModule.Invoke<int>("readEmulatorGamepad"));
-        if (now == padHeld)
+        if (now != padHeld)
+        {
+            padHeld = now;
+            core?.SetButtons(0, Held);
+        }
+
+        // The sticks stay out of a shared game on purpose: playing together exchanges
+        // buttons and nothing else, so an analog lean the wire never carried would be a
+        // frame the other machine never played. The one console with a stick seats one
+        // player; a stick console that plays together puts its sticks on the wire first.
+        if (session is not null)
             return;
-        padHeld = now;
-        core?.SetButtons(0, Held);
+        var sticks = StickState.Unpack(directModule.Invoke<int>("readEmulatorGamepadSticks"));
+        if (sticks == padSticks)
+            return;
+        padSticks = sticks;
+        core?.SetSticks(0, sticks);
     }
 
     /// <summary>The W3C standard gamepad layout, folded onto the console's bits by

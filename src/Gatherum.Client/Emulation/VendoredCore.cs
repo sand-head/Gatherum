@@ -90,6 +90,7 @@ public sealed class VendoredCore : IEmulatorCore, IDisposable
     private readonly byte[] scratch;
 
     private readonly GamepadButtons[] pads = new GamepadButtons[2];
+    private readonly StickState[] sticks = new StickState[2];
     private uint saveFingerprint;
     private int framesSinceSaveCheck;
     private bool disposed;
@@ -208,11 +209,18 @@ public sealed class VendoredCore : IEmulatorCore, IDisposable
         pads[player] = pressed;
     }
 
+    public void SetSticks(int player, StickState held)
+    {
+        if (player >= 0 && player < sticks.Length)
+            sticks[player] = held;
+    }
+
     public void RunFrame()
     {
         if (disposed)
             return;
-        js.InvokeVoid("runEmulatorCore", LibretroMask(pads[0]), LibretroMask(pads[1]));
+        js.InvokeVoid("runEmulatorCore", LibretroMask(pads[0]), LibretroMask(pads[1]),
+            sticks[0].Packed, sticks[1].Packed);
         CopyFrame();
 
         if (!BatteryBacked || ++framesSinceSaveCheck < SaveCheckInterval)

@@ -2272,3 +2272,33 @@ keeps is what the next stage copies: a few megabytes in `dist/`.
 Not done, and on purpose: a BuildKit cache mount for `obj/` and NuGet, which is the lever
 for the *C#* publish step. It would help every project equally and is unrelated to where
 the emulators live, and it is a different change with its own failure modes.
+
+## Sticks stay analog, in one packing spoken end to end
+
+The controller work above folded a pad's left stick into the d-pad, which is right for
+every console whose games think in eight directions and wrong for the one that walks or
+runs by how far the stick is pushed. So a stick now also travels as itself: four signed
+bytes in one integer — left X, left Y, right X, right Y from the low byte up, positive
+right and up — packed in `readEmulatorGamepadSticks`, spoken unchanged through
+`StickState`, `runEmulatorCore`, and a `gatherum_set_sticks` export on both core shapes,
+and unpacked last by the core that cares. One convention, tested where it is defined,
+because a byte-order disagreement here would read as a stick leaning somewhere nobody
+pushed. `IEmulatorCore.SetSticks` defaults to doing nothing — most of these machines
+have nowhere to plug a stick in, and the C# consoles say so by not mentioning it.
+
+The consumers differ by what their hardware was. The libretro shim answers
+`RETRO_DEVICE_ANALOG` queries with the values scaled to libretro's range (and Y flipped,
+because libretro says down is positive), which no current libretro core here reads — it
+is the shim staying core-agnostic rather than a feature for bsnes. The Gecko host maps
+them onto the main stick and the C-stick; the d-pad-as-stick fallback survives for
+keyboards, yielding whenever the real stick is off centre. Triggers stay digital — a
+shoulder press pulls the trigger all the way — because that is the existing behaviour
+and the games that read a half-pulled trigger are rare enough to wait.
+
+Two boundaries were drawn on purpose. Sticks never enter a shared game: netplay
+exchanges buttons and nothing else, so the player applies analog only when playing
+alone — the one stick console seats one player anyway, and a stick console that is ever
+to play together must first put its sticks on the wire. And `gatherum_set_sticks` is
+the one call `gatherum.js` treats as optional in a core module, so a `dist/` built
+before sticks existed still opens and plays; it just cannot be told where the stick is
+until it is rebuilt.

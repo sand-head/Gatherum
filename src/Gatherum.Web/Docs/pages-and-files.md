@@ -120,7 +120,8 @@ your machine afterwards.
   game controller plugged in or paired works as well, with nothing to set up: while the
   game runs the player reads it directly, and its buttons land by where they sit on the
   pad — the bottom and right face buttons are the console's B and A whatever your pad
-  prints on them. On a touchscreen a pad appears under the screen instead. Click the
+  prints on them, and on a console that steers with an analog stick, the sticks stay
+  analog. On a touchscreen a pad appears under the screen instead. Click the
   picture to give it the keyboard again after clicking anything else — the controller
   never needs that click.
 - **Sound** starts with the game — a browser will not make noise until someone has asked
@@ -216,9 +217,10 @@ one follow from that.
   arrows push the analog stick all the way over, <kbd>X</kbd> and <kbd>Z</kbd> are A and
   B, <kbd>S</kbd> and <kbd>A</kbd> are X and Y, <kbd>Q</kbd> and <kbd>E</kbd> pull the L
   and R triggers all the way in, <kbd>Enter</kbd> is Start, and <kbd>Shift</kbd> is Z —
-  the one button the pad has that no other console here had. The C-stick and the
-  directional pad are not on a keyboard; a game that insists on either is one this
-  player cannot steer.
+  the one button the pad has that no other console here had. This is the console to
+  plug a controller in for: its sticks stay analog — the main stick steers by how far
+  it is pushed, and the right stick is the C-stick, which a keyboard cannot offer at
+  all. A game that insists on the C-stick wants a controller.
 - **Saving** is to a memory card in slot A — a 2 MB "Memory Card 251" that a game
   formats the first time it wants one — and the card is what **Download save** gives
   you: a raw card image, which Dolphin will read if you rename it `.raw`. It is kept by

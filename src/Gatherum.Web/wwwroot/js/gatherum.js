@@ -345,6 +345,31 @@ export function readEmulatorGamepad() {
   return held;
 }
 
+// The same controllers' sticks, kept analog for the one kind of console that steers
+// with one. Four signed bytes in one integer — left X, left Y, right X, right Y from
+// the low byte up — where positive is right and up (the Gamepad API says down, so Y
+// flips here and nowhere else). A drift-sized lean is zeroed so a pad at rest reads as
+// exactly nothing, and where several pads are connected each axis follows whichever is
+// pushed furthest — the same "pick it up and it works" the buttons have.
+export function readEmulatorGamepadSticks() {
+  if (!navigator.getGamepads) return 0;
+  const axes = [0, 0, 0, 0];
+  for (const pad of navigator.getGamepads()) {
+    if (!pad || !pad.connected) continue;
+    [pad.axes[0] ?? 0, -(pad.axes[1] ?? 0), pad.axes[2] ?? 0, -(pad.axes[3] ?? 0)]
+      .forEach((value, at) => {
+        if (Math.abs(value) > Math.abs(axes[at])) axes[at] = value;
+      });
+  }
+  let packed = 0;
+  axes.forEach((value, at) => {
+    const scaled = Math.abs(value) < 0.15 ? 0
+      : Math.max(-127, Math.min(127, Math.round(value * 127)));
+    packed |= (scaled & 0xff) << (at * 8);
+  });
+  return packed;
+}
+
 // ---- A vendored emulator core ----------------------------------------------------
 //
 // Some machines are too big to write from scratch, so their core is somebody else's,
@@ -436,15 +461,23 @@ const CORE_CALLS = [
   "gatherum_boot", "gatherum_reset", "gatherum_run",
   "gatherum_frame_ptr", "gatherum_frame_width", "gatherum_frame_height",
   "gatherum_audio_ptr", "gatherum_audio_len", "gatherum_set_buttons",
-  "gatherum_fps", "gatherum_sample_rate",
+  "gatherum_set_sticks", "gatherum_fps", "gatherum_sample_rate",
   "gatherum_measure_state", "gatherum_state_size", "gatherum_state_save",
   "gatherum_state_load", "gatherum_state_ok",
   "gatherum_sram_ptr", "gatherum_sram_len",
 ];
 
+/// Calls a core may lack without being broken: a module built before the call existed
+/// still plays, it just cannot be told the thing the call carries. Everything else
+/// missing is a build error worth failing loudly on.
+const OPTIONAL_CORE_CALLS = new Set(["gatherum_set_sticks"]);
+
 function flattened(source, prefix) {
   const calls = {};
-  for (const name of CORE_CALLS) calls[name] = source[prefix + name].bind(source);
+  for (const name of CORE_CALLS) {
+    if (OPTIONAL_CORE_CALLS.has(name) && !source[prefix + name]) continue;
+    calls[name] = source[prefix + name].bind(source);
+  }
   return calls;
 }
 
@@ -613,10 +646,14 @@ function startCartridge() {
   };
 }
 
-export function runEmulatorCore(first, second) {
+export function runEmulatorCore(first, second, firstSticks, secondSticks) {
   if (!core) return;
   core.exports.gatherum_set_buttons(0, first);
   core.exports.gatherum_set_buttons(1, second);
+  // Sticks arrive as a signed 32-bit value and cross into wasm as the unsigned packing
+  // the cores document; a core built before sticks existed has no call to hand them to.
+  core.exports.gatherum_set_sticks?.(0, firstSticks >>> 0);
+  core.exports.gatherum_set_sticks?.(1, secondSticks >>> 0);
   coreFrameClock += NANOSECONDS_PER_FRAME;
   core.exports.gatherum_run();
 }
