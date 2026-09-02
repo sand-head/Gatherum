@@ -45,13 +45,15 @@ page-turner.
   EPUB chapters in reading order, cartridge headers, image metadata) feeds search — and see **Multimedia** below for what a model adds to
   that on top.
 - **Cartridges play**: upload a `.nes`, `.gb`, `.gbc`, `.sms`, `.gg`, `.gba`, `.sfc` or
-  `.smc` and its page has a console on it — Nintendo Entertainment System, Game Boy and
-  Game Boy Color, Master System, Game Gear, Game Boy Advance and Super Nintendo — with
-  keyboard or on-screen pad, sound, and battery saves kept by your own browser with a
-  `.sav` download to take them anywhere. The first four emulators are C# in the app; the
-  Game Boy Advance is mGBA and the Super Nintendo is bsnes, both built to WebAssembly at
-  image-build time from pinned sources (see `native/README.md`). All of them run in
-  WebAssembly in your browser, and nothing about the game leaves your machine. **Two
+  `.smc` — or a GameCube disc as `.iso`, `.gcm` or `.rvz` — and its page has a console
+  on it — Nintendo Entertainment System, Game Boy and Game Boy Color, Master System,
+  Game Gear, Game Boy Advance, Super Nintendo and GameCube — with keyboard or on-screen
+  pad, sound, and battery saves kept by your own browser with a `.sav` download to take
+  them anywhere. The first four emulators are C# in the app; the Game Boy Advance is
+  mGBA, the Super Nintendo is bsnes and the GameCube is Gecko, all built to WebAssembly
+  at image-build time from pinned sources (see `native/README.md`; the GameCube draws
+  with WebGPU and wants its discs as `.rvz`). All of them run in WebAssembly in your
+  browser, and nothing about the game leaves your machine. **Two
   people can play one cartridge** on the machines that had two ports for it: whoever else
   can see the page takes the second controller, and because both browsers run the same
   deterministic console, all that crosses the network is two bytes of buttons a frame —

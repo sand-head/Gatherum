@@ -13,6 +13,11 @@ public enum ConsoleKind
     GameGear,
     GameBoyAdvance,
     SuperNintendo,
+    GameCube,
+    /// <summary>Recognised so that a Wii disc is told apart from a GameCube one and
+    /// said no to by name, rather than fed to a core that would boot it wrong or
+    /// fetched whole into a heap it cannot fit in. Nothing plays it.</summary>
+    Wii,
 }
 
 public static class Emulator
@@ -33,8 +38,11 @@ public static class Emulator
             return region >= 5 ? ConsoleKind.GameGear : ConsoleKind.MasterSystem;
         if (LooksLikeSuperNintendo(rom))
             return ConsoleKind.SuperNintendo;
+        if (DiscKind(rom) is { } disc)
+            return disc;
 
-        // Nothing declared itself, so the name gets the last word.
+        // Nothing declared itself, so the name gets the last word. Not `.iso`: that is
+        // every optical disc ever imaged, and a GameCube one has already said so above.
         return Path.GetExtension(fileName).ToLowerInvariant() switch
         {
             ".nes" => ConsoleKind.Nes,
@@ -43,9 +51,26 @@ public static class Emulator
             ".gg" => ConsoleKind.GameGear,
             ".gba" => ConsoleKind.GameBoyAdvance,
             ".sfc" or ".smc" => ConsoleKind.SuperNintendo,
+            ".gcm" or ".rvz" => ConsoleKind.GameCube,
             _ => null,
         };
     }
+
+    /// <summary>How much of a file's front is enough to tell a disc. A disc image is
+    /// too big to read whole just to look at its header, so the player reads this much
+    /// first and only fetches the rest of a cartridge — a disc goes straight to the core
+    /// without passing through this side at all.</summary>
+    public const int HeadBytes = 1024;
+
+    /// <summary>A machine whose image is a disc rather than a cartridge: gigabytes, and
+    /// handled by name and by URL rather than by bytes on this side.</summary>
+    public static bool IsDisc(ConsoleKind kind) => kind is ConsoleKind.GameCube or ConsoleKind.Wii;
+
+    /// <summary>Named the way a disc image is named, whatever its bytes turn out to
+    /// say. The player refuses to fetch one of these whole: a file that says it is a
+    /// disc and is not a GameCube one is not a cartridge either.</summary>
+    public static bool NamedLikeADisc(string fileName) =>
+        Path.GetExtension(fileName).ToLowerInvariant() is ".iso" or ".gcm" or ".rvz";
 
     /// <summary>Whether this cartridge needs a core Gatherum did not write. Those are
     /// fetched and instantiated rather than constructed, which cannot happen inside a
@@ -62,15 +87,19 @@ public static class Emulator
             ConsoleKind.GameBoy => new GameBoyConsole(rom),
             ConsoleKind.MasterSystem => new MasterSystem(rom, gameGear: false),
             ConsoleKind.GameGear => new MasterSystem(rom, gameGear: true),
-            ConsoleKind.GameBoyAdvance or ConsoleKind.SuperNintendo =>
+            ConsoleKind.GameBoyAdvance or ConsoleKind.SuperNintendo or ConsoleKind.GameCube =>
                 throw new NotSupportedException(
                     "This cartridge plays on a core this build did not fetch. " +
                     "See native/README.md."),
+            ConsoleKind.Wii => throw new NotSupportedException(
+                "This is a Wii disc. The GameCube core here boots GameCube discs only: " +
+                "a Wii needs a system it would have to invent, and does not."),
             _ => throw new NotSupportedException(
                 "This does not look like a cartridge image the player knows: it plays " +
                 "Nintendo Entertainment System (.nes), Game Boy (.gb, .gbc), " +
                 "Game Boy Advance (.gba), Super Nintendo (.sfc, .smc), " +
-                "Master System (.sms) and Game Gear (.gg) files."),
+                "Master System (.sms), Game Gear (.gg) and GameCube (.iso, .gcm, .rvz) " +
+                "files."),
         };
 
     /// <summary>The Super Nintendo is the one machine here that stamped nothing at a
@@ -97,6 +126,32 @@ public static class Emulator
         }
         return false;
     }
+
+    /// <summary>A GameCube disc carries a magic word at $1C and a Wii one at $18, and
+    /// an RVZ — the compressed form both are usually kept in — copies the first 128
+    /// bytes of that header to $58 and says which console at $48. So the two magic words
+    /// are looked for in both places, and either place is within the first kilobyte,
+    /// which is what makes a disc tellable from its head alone.</summary>
+    private static ConsoleKind? DiscKind(ReadOnlySpan<byte> rom)
+    {
+        if (rom.Length >= 0x20 && DiscMagic(rom) is { } plain)
+            return plain;
+        if (rom.Length >= 0xD8 && rom[..4].SequenceEqual("RVZ\x01"u8))
+            return DiscMagic(rom[0x58..]);
+        return null;
+    }
+
+    private static ConsoleKind? DiscMagic(ReadOnlySpan<byte> header)
+    {
+        if (header.Slice(0x1C, 4).SequenceEqual(GameCubeMagic))
+            return ConsoleKind.GameCube;
+        if (header.Slice(0x18, 4).SequenceEqual(WiiMagic))
+            return ConsoleKind.Wii;
+        return null;
+    }
+
+    private static ReadOnlySpan<byte> GameCubeMagic => [0xC2, 0x33, 0x9F, 0x3D];
+    private static ReadOnlySpan<byte> WiiMagic => [0x5D, 0x1C, 0x9E, 0xA3];
 
     private static bool LooksLikeNes(ReadOnlySpan<byte> rom) =>
         rom.Length >= 16 && rom[0] == 'N' && rom[1] == 'E' && rom[2] == 'S' && rom[3] == 0x1A;

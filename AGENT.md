@@ -77,7 +77,8 @@ auto-login. Migrations: `dotnet ef migrations add <Name> -p src/Gatherum.Infrast
   the foot of a page (`NodeCategories`), version panel, file view, settings keys, and
   the ROM player (`RomPlayer` over `Emulation/` — `IEmulatorCore` with a NES, a Game Boy
   and a Master System behind it, here because a console only ever runs in the reader's
-  own browser, plus `Emulation/Netplay/` where two of them keep in step) —
+  own browser, `VendoredCore` for the machines fetched at build time, plus
+  `Emulation/Netplay/` where two of them keep in step) —
   plus Gatherum's Markdown dialect, which lives
   here because it is the editor's word: `GatherumMarkdown` (the extension set and the
   only read/write door), `AsideExtension`/`CalloutExtension`/`BlockTags`,
@@ -88,15 +89,19 @@ auto-login. Migrations: `dotnet ef migrations add <Name> -p src/Gatherum.Infrast
   implemented by `ServerAppData` over the services on the server circuit and by
   `HttpAppData` over `/api` in WebAssembly.
 - `native/` — the second way a cartridge can play: an emulator somebody else wrote,
-  compiled to WebAssembly. `core-shim/` is Rust and is nearly all of what lives in the
+  compiled to WebAssembly. `core-shim/` is Rust and is most of what lives in the
   repo — a `no_std` staticlib giving libretro's function-pointer interface a flat surface
   JavaScript can call, because JavaScript cannot manufacture a wasm function pointer, and
-  the same one links both cores unchanged (`bsnes-support/libco-extras.c` is the small
-  exception, three functions bsnes's Emscripten backend leaves out). `build-core.sh`
-  fetches each core at a pinned commit and builds it — mGBA against WASI, bsnes against
-  Emscripten, because a core built out of coroutines and exceptions cannot use the first;
-  what it fetches and what it emits are both gitignored, the same bargain `models/`
-  strikes. See `native/README.md`, which also carries the licence table.
+  the same one links both libretro cores unchanged (`bsnes-support/libco-extras.c` is the
+  small exception, three functions bsnes's Emscripten backend leaves out). `gecko-host/`
+  is the same flat surface built over a core that is not libretro at all: Gecko is a Rust
+  crate, and the host owns its console, draws its picture through WebGPU and reads it
+  back, and carries the two-file patch that lets a browser reach the memory card.
+  `build-core.sh` fetches each core at a pinned commit and builds it — mGBA against WASI,
+  bsnes against Emscripten, because a core built out of coroutines and exceptions cannot
+  use the first, Gecko with Rust's own wasm target and wasm-bindgen; what it fetches and
+  what it emits are both gitignored, the same bargain `models/` strikes. See
+  `native/README.md`, which also carries the licence table.
 - `tests/Gatherum.Tests` — unit tests plus `AppIntegrationTests` booting the real app.
 
 Render modes: static SSR for pages and layout; every interactive component is an

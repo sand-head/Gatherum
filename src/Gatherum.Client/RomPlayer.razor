@@ -289,6 +289,14 @@ else
 
     private string SaveDataUrl => "data:application/octet-stream;base64," + savedData;
 
+    /// <summary>Where the file's bytes are served from, for a core that fetches its own
+    /// disc. The same address the file view hands a browser for a picture or a video.</summary>
+    private string ContentUrl => $"/api/files/{NodeId}/content";
+
+    private const string NoCoreMessage =
+        "This Gatherum was built without a core for this machine, so the " +
+        "cartridge can be downloaded but not played.";
+
     protected override async Task OnParametersSetAsync()
     {
         if (loaded == NodeId || !OperatingSystem.IsBrowser())
@@ -304,24 +312,46 @@ else
         savedData = "";
         try
         {
-            var rom = await Data.ReadBytesAsync(NodeId);
-            // The same spelling the server stores, so a room can refuse two people who
-            // are not holding the same cartridge.
-            romHash = Convert.ToHexStringLower(SHA256.HashData(rom));
-            if (Emulator.Identify(rom, FileName) is { } kind && VendoredCore.Handles(kind))
+            // The head first, because a disc is gigabytes and its header is in the first
+            // kilobyte: a disc never comes through this heap at all, and only a cartridge
+            // is fetched whole.
+            var head = await Data.ReadHeadAsync(NodeId, Emulator.HeadBytes);
+            if (Emulator.Identify(head, FileName) is { } discKind && Emulator.IsDisc(discKind))
             {
-                // A core from elsewhere is fetched and instantiated rather than
-                // constructed, so the module has to be in hand before the first render.
+                if (!VendoredCore.Handles(discKind))
+                    Emulator.Load(head, FileName);
+                // Nobody plays a disc together, so there is nothing for a room to compare.
+                romHash = "";
                 module ??= await Js.InvokeAsync<IJSObjectReference>("import", "./js/gatherum.js");
                 directModule = module as IJSInProcessObjectReference;
-                core = await VendoredCore.CreateAsync(module, kind, rom)
-                    ?? throw new NotSupportedException(
-                        "This Gatherum was built without a core for this machine, so the " +
-                        "cartridge can be downloaded but not played.");
+                core = await VendoredCore.CreateAsync(module, discKind, [], ContentUrl)
+                    ?? throw new NotSupportedException(NoCoreMessage);
+            }
+            else if (Emulator.NamedLikeADisc(FileName))
+            {
+                throw new NotSupportedException(
+                    "This is named like a disc image but does not carry a GameCube " +
+                    "disc's header, so it is not fetched whole.");
             }
             else
             {
-                core = Emulator.Load(rom, FileName);
+                var rom = await Data.ReadBytesAsync(NodeId);
+                // The same spelling the server stores, so a room can refuse two people
+                // who are not holding the same cartridge.
+                romHash = Convert.ToHexStringLower(SHA256.HashData(rom));
+                if (Emulator.Identify(rom, FileName) is { } kind && VendoredCore.Handles(kind))
+                {
+                    // A core from elsewhere is fetched and instantiated rather than
+                    // constructed, so the module has to be in hand before the first render.
+                    module ??= await Js.InvokeAsync<IJSObjectReference>("import", "./js/gatherum.js");
+                    directModule = module as IJSInProcessObjectReference;
+                    core = await VendoredCore.CreateAsync(module, kind, rom)
+                        ?? throw new NotSupportedException(NoCoreMessage);
+                }
+                else
+                {
+                    core = Emulator.Load(rom, FileName);
+                }
             }
             stateBuffer = new byte[core.SaveStateSize];
             pinnedFrame = GCHandle.Alloc(core.Frame, GCHandleType.Pinned);

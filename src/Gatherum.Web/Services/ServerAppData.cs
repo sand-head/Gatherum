@@ -81,6 +81,18 @@ public sealed class ServerAppData(
         }
     }
 
+    public async Task<byte[]> ReadHeadAsync(Guid nodeId, int bytes)
+    {
+        var userId = await ViewerIdAsync();
+        var content = await ops.Files(s => s.OpenContentAsync(userId, nodeId));
+        await using (content.Stream)
+        {
+            var head = new byte[bytes];
+            var read = await content.Stream.ReadAtLeastAsync(head, bytes, throwOnEndOfStream: false);
+            return read == bytes ? head : head[..read];
+        }
+    }
+
     public async Task<IReadOnlyList<SearchHit>> SearchAsync(string query, int limit)
     {
         var userId = await ViewerIdAsync();
