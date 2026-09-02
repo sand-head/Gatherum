@@ -219,6 +219,8 @@ else
             {
                 <text>; <kbd>Q</kbd> and <kbd>E</kbd> are @leftKey and @rightKey</text>
             }.
+            A plugged-in or paired controller works too — its buttons count by where
+            they sit on the pad, not by what is printed on them.
             @if (core.BatteryBacked)
             {
                 <text>This cartridge saves, and its save is kept in this browser —
@@ -255,6 +257,20 @@ else
     private GCHandle pinnedFrame;
 
     private GamepadButtons pressed;
+
+    /// <summary>What a real controller is holding down, polled once per painted frame.
+    /// Kept apart from <see cref="pressed"/> because keys arrive as events and a
+    /// controller is read as state — and a controller needs no focus, so focus leaving
+    /// the screen releases the keys and not these.</summary>
+    private GamepadButtons padHeld;
+
+    /// <summary>Where that controller's sticks are leaning, for the console that steers
+    /// with one. Solo only — see the note in <see cref="PollGamepad"/>.</summary>
+    private StickState padSticks;
+
+    /// <summary>Everything held right now, whichever hardware is holding it. The one
+    /// value the console — and, playing together, the wire — ever sees.</summary>
+    private GamepadButtons Held => pressed | padHeld;
 
     private readonly System.Diagnostics.Stopwatch clock = new();
     private double owed;
@@ -410,12 +426,13 @@ else
     }
 
     /// <summary>Focus leaving the screen means the key-up that would have released a
-    /// button will never arrive, so everything is let go at once — otherwise tabbing
-    /// away mid-jump leaves the character running into a wall.</summary>
+    /// button will never arrive, so every key is let go at once — otherwise tabbing
+    /// away mid-jump leaves the character running into a wall. A controller keeps what
+    /// it holds: it is re-read every frame, so it cannot stick the way a key can.</summary>
     private void ReleaseAll()
     {
         pressed = GamepadButtons.None;
-        core?.SetButtons(0, GamepadButtons.None);
+        core?.SetButtons(0, Held);
     }
 
     private async Task FocusAsync()
@@ -463,6 +480,7 @@ else
     {
         if (core is not null && running)
         {
+            PollGamepad();
             var frame = 1.0 / core.FramesPerSecond;
             owed += clock.Elapsed.TotalSeconds;
             clock.Restart();
@@ -525,7 +543,7 @@ else
     private bool AdvanceTogether()
     {
         var play = session!;
-        play.SendInput(netFrame + PlayProtocol.InputDelay, pressed);
+        play.SendInput(netFrame + PlayProtocol.InputDelay, Held);
         if (!play.TryCollect(netFrame, slotInputs))
         {
             Stalled(play.WaitingFor(netFrame));
@@ -724,13 +742,66 @@ else
     private void Hold(GamepadButtons button)
     {
         pressed |= button;
-        core?.SetButtons(0, pressed);
+        core?.SetButtons(0, Held);
     }
 
     private void Release(GamepadButtons button)
     {
         pressed &= ~button;
-        core?.SetButtons(0, pressed);
+        core?.SetButtons(0, Held);
+    }
+
+    /// <summary>The Gamepad API is polled, not evented, so the player asks once per
+    /// painted frame — synchronously, because the game only ever runs where the runtime
+    /// is the browser's own, and sixty awaited round trips a second buy nothing. A
+    /// controller feeds the same bits a keyboard does, so the console — and anybody
+    /// playing along over the wire — never knows which was held.</summary>
+    private void PollGamepad()
+    {
+        if (directModule is null)
+            return;
+        var now = MapPad(directModule.Invoke<int>("readEmulatorGamepad"));
+        if (now != padHeld)
+        {
+            padHeld = now;
+            core?.SetButtons(0, Held);
+        }
+
+        // The sticks stay out of a shared game on purpose: playing together exchanges
+        // buttons and nothing else, so an analog lean the wire never carried would be a
+        // frame the other machine never played. The one console with a stick seats one
+        // player; a stick console that plays together puts its sticks on the wire first.
+        if (session is not null)
+            return;
+        var sticks = StickState.Unpack(directModule.Invoke<int>("readEmulatorGamepadSticks"));
+        if (sticks == padSticks)
+            return;
+        padSticks = sticks;
+        core?.SetSticks(0, sticks);
+    }
+
+    /// <summary>The W3C standard gamepad layout, folded onto the console's bits by
+    /// position rather than printing: the bottom face button is B and the right one A,
+    /// because that is where every machine here put that pair — whatever a modern pad
+    /// prints on them — and the left and top land on Y and X the way the one diamond
+    /// pad printed its. Both shoulder rows reach the one pair these consoles had, so a
+    /// trigger works where a pad has them.</summary>
+    private static GamepadButtons MapPad(int held)
+    {
+        var buttons = GamepadButtons.None;
+        if ((held & 0x0001) != 0) buttons |= GamepadButtons.B;             // bottom face
+        if ((held & 0x0002) != 0) buttons |= GamepadButtons.A;             // right face
+        if ((held & 0x0004) != 0) buttons |= GamepadButtons.Y;             // left face
+        if ((held & 0x0008) != 0) buttons |= GamepadButtons.X;             // top face
+        if ((held & 0x0050) != 0) buttons |= GamepadButtons.LeftShoulder;  // L1, L2
+        if ((held & 0x00A0) != 0) buttons |= GamepadButtons.RightShoulder; // R1, R2
+        if ((held & 0x0100) != 0) buttons |= GamepadButtons.Select;
+        if ((held & 0x0200) != 0) buttons |= GamepadButtons.Start;
+        if ((held & 0x1000) != 0) buttons |= GamepadButtons.Up;
+        if ((held & 0x2000) != 0) buttons |= GamepadButtons.Down;
+        if ((held & 0x4000) != 0) buttons |= GamepadButtons.Left;
+        if ((held & 0x8000) != 0) buttons |= GamepadButtons.Right;
+        return buttons;
     }
 
     /// <summary>Keys are swallowed while the game is running — the arrow keys would

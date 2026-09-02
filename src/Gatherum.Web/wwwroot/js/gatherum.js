@@ -317,6 +317,59 @@ export function writeEmulatorSave(nodeId, base64) {
   }
 }
 
+// A real controller, when one is plugged in or paired. The Gamepad API is the one way a
+// browser sees it and has no Blazor binding, so the player polls this once per painted
+// frame. What goes back is the W3C standard mapping packed one button per bit — bit 0
+// is the bottom face button, bits 12–15 the d-pad — and saying *which position* rather
+// than which printing is the C# side's business. Every connected pad is read and OR-ed
+// together, so whichever controller a person picks up is the one that works. The left
+// stick is folded into the d-pad bits because a retro console has no stick to offer it
+// to — and because the common USB "retro" pads report a nonstandard mapping with their
+// d-pad on those same two axes, which is what makes exactly those pads work here.
+export function readEmulatorGamepad() {
+  if (!navigator.getGamepads) return 0;
+  let held = 0;
+  for (const pad of navigator.getGamepads()) {
+    if (!pad || !pad.connected) continue;
+    const count = Math.min(pad.buttons.length, 16);
+    for (let i = 0; i < count; i++) {
+      if (pad.buttons[i].pressed) held |= 1 << i;
+    }
+    const x = pad.axes[0] ?? 0;
+    const y = pad.axes[1] ?? 0;
+    if (y < -0.5) held |= 1 << 12;
+    if (y > 0.5) held |= 1 << 13;
+    if (x < -0.5) held |= 1 << 14;
+    if (x > 0.5) held |= 1 << 15;
+  }
+  return held;
+}
+
+// The same controllers' sticks, kept analog for the one kind of console that steers
+// with one. Four signed bytes in one integer — left X, left Y, right X, right Y from
+// the low byte up — where positive is right and up (the Gamepad API says down, so Y
+// flips here and nowhere else). A drift-sized lean is zeroed so a pad at rest reads as
+// exactly nothing, and where several pads are connected each axis follows whichever is
+// pushed furthest — the same "pick it up and it works" the buttons have.
+export function readEmulatorGamepadSticks() {
+  if (!navigator.getGamepads) return 0;
+  const axes = [0, 0, 0, 0];
+  for (const pad of navigator.getGamepads()) {
+    if (!pad || !pad.connected) continue;
+    [pad.axes[0] ?? 0, -(pad.axes[1] ?? 0), pad.axes[2] ?? 0, -(pad.axes[3] ?? 0)]
+      .forEach((value, at) => {
+        if (Math.abs(value) > Math.abs(axes[at])) axes[at] = value;
+      });
+  }
+  let packed = 0;
+  axes.forEach((value, at) => {
+    const scaled = Math.abs(value) < 0.15 ? 0
+      : Math.max(-127, Math.min(127, Math.round(value * 127)));
+    packed |= (scaled & 0xff) << (at * 8);
+  });
+  return packed;
+}
+
 // ---- A vendored emulator core ----------------------------------------------------
 //
 // Some machines are too big to write from scratch, so their core is somebody else's,
@@ -408,15 +461,23 @@ const CORE_CALLS = [
   "gatherum_boot", "gatherum_reset", "gatherum_run",
   "gatherum_frame_ptr", "gatherum_frame_width", "gatherum_frame_height",
   "gatherum_audio_ptr", "gatherum_audio_len", "gatherum_set_buttons",
-  "gatherum_fps", "gatherum_sample_rate",
+  "gatherum_set_sticks", "gatherum_fps", "gatherum_sample_rate",
   "gatherum_measure_state", "gatherum_state_size", "gatherum_state_save",
   "gatherum_state_load", "gatherum_state_ok",
   "gatherum_sram_ptr", "gatherum_sram_len",
 ];
 
+/// Calls a core may lack without being broken: a module built before the call existed
+/// still plays, it just cannot be told the thing the call carries. Everything else
+/// missing is a build error worth failing loudly on.
+const OPTIONAL_CORE_CALLS = new Set(["gatherum_set_sticks"]);
+
 function flattened(source, prefix) {
   const calls = {};
-  for (const name of CORE_CALLS) calls[name] = source[prefix + name].bind(source);
+  for (const name of CORE_CALLS) {
+    if (OPTIONAL_CORE_CALLS.has(name) && !source[prefix + name]) continue;
+    calls[name] = source[prefix + name].bind(source);
+  }
   return calls;
 }
 
@@ -425,6 +486,11 @@ function flattened(source, prefix) {
 /// has one — the in-memory filesystem a core that opens its own cartridge will need.
 async function openCore(url) {
   if (url.endsWith(".mjs")) {
+    // A dynamic import cannot say whether it failed because the file is absent or
+    // because the module is bad, and the player tells the reader different things for
+    // those — so absence is asked about first, the way the bare-module branch's own
+    // fetch already answers it.
+    if (!(await fetch(url, { method: "HEAD" })).ok) return null;
     const loader = await import(url);
     const started = await loader.default();
     if (started?.HEAPU8) {
@@ -462,13 +528,19 @@ function planted(text) {
 /// the ones that come through here are not. bsnes fills memory with noise at power-on
 /// unless told otherwise, which is faithful to the hardware and fatal to two people
 /// whose consoles have to start life identical.
+/// The answer is one of three words rather than a boolean, because two of the failures
+/// mean different things to the person reading them: "missing" is a build that never had
+/// this core — the player offers a download and nothing is wrong — while "broken" is a
+/// core that is *in* this build and would not start, which is a bug to report, not an
+/// edition to accept. Collapsing them once had the player blaming the build for a
+/// serving failure.
 export async function loadEmulatorCore(url, settings) {
-  if (core && coreUrl === url) return true;
+  if (core && coreUrl === url) return "ok";
   core = undefined;
   coreUrl = undefined;
   try {
     const opened = await openCore(url);
-    if (!opened) return false;
+    if (!opened) return "missing";
     core = opened;
     for (let at = 0; at + 1 < (settings?.length ?? 0); at += 2) {
       core.exports.gatherum_set_option(planted(settings[at]), planted(settings[at + 1]));
@@ -478,14 +550,14 @@ export async function loadEmulatorCore(url, settings) {
     const booted = await core.exports.gatherum_boot();
     if (booted === false || booted === 0) {
       core = undefined;
-      return false;
+      return "broken";
     }
     coreUrl = url;
-    return true;
+    return "ok";
   } catch (error) {
     console.warn("The emulator core would not load:", error);
     core = undefined;
-    return false;
+    return "broken";
   }
 }
 
@@ -574,10 +646,14 @@ function startCartridge() {
   };
 }
 
-export function runEmulatorCore(first, second) {
+export function runEmulatorCore(first, second, firstSticks, secondSticks) {
   if (!core) return;
   core.exports.gatherum_set_buttons(0, first);
   core.exports.gatherum_set_buttons(1, second);
+  // Sticks arrive as a signed 32-bit value and cross into wasm as the unsigned packing
+  // the cores document; a core built before sticks existed has no call to hand them to.
+  core.exports.gatherum_set_sticks?.(0, firstSticks >>> 0);
+  core.exports.gatherum_set_sticks?.(1, secondSticks >>> 0);
   coreFrameClock += NANOSECONDS_PER_FRAME;
   core.exports.gatherum_run();
 }

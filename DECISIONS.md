@@ -2146,6 +2146,34 @@ on and this is the evidence for it: a C core built against WASI and a C++ core b
 against Emscripten, sharing one Rust translation unit that knows libretro and nothing
 about either.
 
+## A controller is read as state, and mapped by position
+
+Real gamepads reach a browser only through the Gamepad API, which Blazor has no binding
+for — so the poll lives in `gatherum.js` beside the player's sound, the one place
+hand-written JavaScript is allowed and only for what Blazor cannot do natively. It is a
+poll rather than an event stream because that is what the API is: a snapshot per call.
+The player takes one synchronous in-process call per painted frame, and the JavaScript
+answers with the W3C standard layout packed one button per bit; deciding what those
+positions *mean* stays in C#, next to the keyboard map that already made the same kind
+of call.
+
+The mapping is positional, not lettered. A modern pad prints A on its bottom face button
+and every console here printed B there, so matching letters would cross the two buttons
+a game most cares about; the bottom-and-right pair land on B and A, left and top on Y
+and X, both shoulder rows on the one shoulder pair these machines had. The left stick is
+folded into the d-pad in the JavaScript — partly because a retro console has nothing
+else to give a stick to, and partly because the common USB "retro" pads report a
+nonstandard mapping with their d-pad on those same axes, so the fold is what makes
+exactly the pads people buy for these games work.
+
+Three consequences were chosen deliberately. A controller feeds the same bits the
+keyboard does, merged before the console or the netplay wire ever sees them, so playing
+together is untouched — the wire still carries buttons and never learns what held them.
+A controller needs no focus: blur releases the keys, whose key-ups would otherwise be
+lost, but not the pad, which cannot stick because it is re-read every frame. And every
+connected pad is OR-ed into player one — the second local port is netplay's job, and a
+machine for choosing seats among local pads is a feature nobody asked for yet.
+
 ## Gecko, a core that is not libretro, and a disc that is not a cartridge
 
 The owner asked for Gecko — the GameCube/Wii emulator with a web build — as a core, with
@@ -2244,3 +2272,33 @@ keeps is what the next stage copies: a few megabytes in `dist/`.
 Not done, and on purpose: a BuildKit cache mount for `obj/` and NuGet, which is the lever
 for the *C#* publish step. It would help every project equally and is unrelated to where
 the emulators live, and it is a different change with its own failure modes.
+
+## Sticks stay analog, in one packing spoken end to end
+
+The controller work above folded a pad's left stick into the d-pad, which is right for
+every console whose games think in eight directions and wrong for the one that walks or
+runs by how far the stick is pushed. So a stick now also travels as itself: four signed
+bytes in one integer — left X, left Y, right X, right Y from the low byte up, positive
+right and up — packed in `readEmulatorGamepadSticks`, spoken unchanged through
+`StickState`, `runEmulatorCore`, and a `gatherum_set_sticks` export on both core shapes,
+and unpacked last by the core that cares. One convention, tested where it is defined,
+because a byte-order disagreement here would read as a stick leaning somewhere nobody
+pushed. `IEmulatorCore.SetSticks` defaults to doing nothing — most of these machines
+have nowhere to plug a stick in, and the C# consoles say so by not mentioning it.
+
+The consumers differ by what their hardware was. The libretro shim answers
+`RETRO_DEVICE_ANALOG` queries with the values scaled to libretro's range (and Y flipped,
+because libretro says down is positive), which no current libretro core here reads — it
+is the shim staying core-agnostic rather than a feature for bsnes. The Gecko host maps
+them onto the main stick and the C-stick; the d-pad-as-stick fallback survives for
+keyboards, yielding whenever the real stick is off centre. Triggers stay digital — a
+shoulder press pulls the trigger all the way — because that is the existing behaviour
+and the games that read a half-pulled trigger are rare enough to wait.
+
+Two boundaries were drawn on purpose. Sticks never enter a shared game: netplay
+exchanges buttons and nothing else, so the player applies analog only when playing
+alone — the one stick console seats one player anyway, and a stick console that is ever
+to play together must first put its sticks on the wire. And `gatherum_set_sticks` is
+the one call `gatherum.js` treats as optional in a core module, so a `dist/` built
+before sticks existed still opens and plays; it just cannot be told where the stick is
+until it is rebuilt.

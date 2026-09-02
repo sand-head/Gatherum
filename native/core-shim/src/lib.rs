@@ -71,6 +71,12 @@ static AUDIO: Shared<[i16; AUDIO_CAPACITY]> = Shared::new([0; AUDIO_CAPACITY]);
 static AUDIO_LEN: Shared<usize> = Shared::new(0);
 static BUTTONS: Shared<[u16; 4]> = Shared::new([0; 4]);
 
+/// Each port's analog sticks, packed the way `gatherum_set_sticks` takes them: four
+/// signed bytes — left X, left Y, right X, right Y from the low byte up — where
+/// positive is right and up. Zero is a pad at rest, which is also what a port that was
+/// never told anything answers.
+static STICKS: Shared<[u32; 4]> = Shared::new([0; 4]);
+
 /// Answers parked where a second call can fetch them.
 ///
 /// A core whose chips are coroutines — bsnes runs its processor, sound and picture as
@@ -271,15 +277,42 @@ unsafe extern "C" fn on_audio(left: i16, right: i16) {
 
 unsafe extern "C" fn on_input_poll() {}
 
+const RETRO_DEVICE_JOYPAD: c_uint = 1;
+const RETRO_DEVICE_ANALOG: c_uint = 5;
+const ANALOG_INDEX_LEFT: c_uint = 0;
+const ANALOG_INDEX_RIGHT: c_uint = 1;
+const ANALOG_ID_X: c_uint = 0;
+const ANALOG_ID_Y: c_uint = 1;
+
 unsafe extern "C" fn on_input_state(
     port: c_uint,
-    _device: c_uint,
-    _index: c_uint,
+    device: c_uint,
+    index: c_uint,
     id: c_uint,
 ) -> i16 {
-    let held = BUTTONS.get();
-    match held.get(port as usize) {
-        Some(mask) if id < 16 => ((mask >> id) & 1) as i16,
+    match device {
+        RETRO_DEVICE_JOYPAD => {
+            let held = BUTTONS.get();
+            match held.get(port as usize) {
+                Some(mask) if id < 16 => ((mask >> id) & 1) as i16,
+                _ => 0,
+            }
+        }
+        RETRO_DEVICE_ANALOG => {
+            let Some(packed) = STICKS.get().get(port as usize) else { return 0 };
+            let byte = match (index, id) {
+                (ANALOG_INDEX_LEFT, ANALOG_ID_X) => *packed,
+                (ANALOG_INDEX_LEFT, ANALOG_ID_Y) => *packed >> 8,
+                (ANALOG_INDEX_RIGHT, ANALOG_ID_X) => *packed >> 16,
+                (ANALOG_INDEX_RIGHT, ANALOG_ID_Y) => *packed >> 24,
+                _ => return 0,
+            };
+            // A signed byte stretched over libretro's sixteen-bit range: ±127 becomes
+            // ±32766. The host says up is positive and libretro says down is, so Y
+            // flips on the way through.
+            let value = (byte as u8 as i8) as i16 * 258;
+            if id == ANALOG_ID_Y { -value } else { value }
+        }
         _ => 0,
     }
 }
@@ -470,6 +503,18 @@ pub extern "C" fn gatherum_set_buttons(port: u32, mask: u32) {
     unsafe {
         if let Some(held) = BUTTONS.get().get_mut(port as usize) {
             *held = mask as u16;
+        }
+    }
+}
+
+/// The port's analog sticks, four signed bytes in one integer — left X, left Y, right
+/// X, right Y from the low byte up, positive meaning right and up. A core without a
+/// stick never queries the analog device and the value sits here unread.
+#[no_mangle]
+pub extern "C" fn gatherum_set_sticks(port: u32, packed: u32) {
+    unsafe {
+        if let Some(sticks) = STICKS.get().get_mut(port as usize) {
+            *sticks = packed;
         }
     }
 }

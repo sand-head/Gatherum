@@ -90,6 +90,7 @@ public sealed class VendoredCore : IEmulatorCore, IDisposable
     private readonly byte[] scratch;
 
     private readonly GamepadButtons[] pads = new GamepadButtons[2];
+    private readonly StickState[] sticks = new StickState[2];
     private uint saveFingerprint;
     private int framesSinceSaveCheck;
     private bool disposed;
@@ -125,11 +126,13 @@ public sealed class VendoredCore : IEmulatorCore, IDisposable
     public static bool LoadsByUrl(ConsoleKind kind) =>
         Machines.TryGetValue(kind, out var machine) && machine.LoadsByUrl;
 
-    /// <summary>Fetches the core if it is not already here, hands it the cartridge —
-    /// the bytes, or for a disc the address the core fetches them from — and returns
-    /// null when the core cannot be had: a deployment that did not build one is a player
-    /// that offers a download, not a page that breaks. A core that <em>is</em> here and
-    /// still cannot play says why instead.</summary>
+    /// <summary>Fetches the core if it is not already here and hands it the cartridge —
+    /// the bytes, or for a disc the address the core fetches them from. Null means this
+    /// build genuinely has no such core — a deployment that did not build one is a
+    /// player that offers a download, not a page that breaks. Everything else that can
+    /// go wrong throws with words the player shows, because a core that is here and
+    /// will not start is a bug to report, not an edition to accept — the two were once
+    /// one answer, and the player blamed the build for a serving failure.</summary>
     public static async Task<VendoredCore?> CreateAsync(
         IJSObjectReference module, ConsoleKind kind, byte[] rom, string? contentUrl = null)
     {
@@ -141,8 +144,14 @@ public sealed class VendoredCore : IEmulatorCore, IDisposable
             throw new NotSupportedException(
                 $"A {machine.SystemName} draws with WebGPU, which this browser does not " +
                 "offer. The disc can be downloaded but not played here.");
-        if (!await module.InvokeAsync<bool>("loadEmulatorCore", machine.ModuleUrl, machine.Settings))
+        var status = await module.InvokeAsync<string>(
+            "loadEmulatorCore", machine.ModuleUrl, machine.Settings);
+        if (status == "missing")
             return null;
+        if (status != "ok")
+            throw new NotSupportedException(
+                $"This Gatherum has a {machine.SystemName} core, but it would not " +
+                "start — the browser console has the details.");
 
         var facts = machine.LoadsByUrl
             ? await module.InvokeAsync<CartridgeFacts?>(
@@ -153,7 +162,8 @@ public sealed class VendoredCore : IEmulatorCore, IDisposable
                 $"The {machine.SystemName} core would not boot this disc. It boots plain " +
                 "GameCube images (.iso, .gcm) and RVZ ones, and nothing else.");
         if (facts is null || facts.Width <= 0 || facts.Height <= 0)
-            return null;
+            throw new InvalidOperationException(
+                $"the {machine.SystemName} core did not accept it");
 
         var core = new VendoredCore(js, machine, facts);
         // Prove the picture can actually cross between the two heaps before handing the
@@ -162,7 +172,8 @@ public sealed class VendoredCore : IEmulatorCore, IDisposable
         if (core.CopyFrame() > 0)
             return core;
         core.Dispose();
-        return null;
+        throw new InvalidOperationException(
+            $"the {machine.SystemName} core's picture could not reach the app");
     }
 
     public string SystemName { get; }
@@ -198,11 +209,18 @@ public sealed class VendoredCore : IEmulatorCore, IDisposable
         pads[player] = pressed;
     }
 
+    public void SetSticks(int player, StickState held)
+    {
+        if (player >= 0 && player < sticks.Length)
+            sticks[player] = held;
+    }
+
     public void RunFrame()
     {
         if (disposed)
             return;
-        js.InvokeVoid("runEmulatorCore", LibretroMask(pads[0]), LibretroMask(pads[1]));
+        js.InvokeVoid("runEmulatorCore", LibretroMask(pads[0]), LibretroMask(pads[1]),
+            sticks[0].Packed, sticks[1].Packed);
         CopyFrame();
 
         if (!BatteryBacked || ++framesSinceSaveCheck < SaveCheckInterval)

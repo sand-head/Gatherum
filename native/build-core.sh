@@ -69,7 +69,7 @@ EXPORTS=(
   gatherum_needs_path gatherum_load gatherum_load_path gatherum_unload
   gatherum_reset gatherum_run gatherum_frame_ptr gatherum_frame_width
   gatherum_frame_height gatherum_audio_ptr gatherum_audio_len gatherum_set_buttons
-  gatherum_fps gatherum_sample_rate gatherum_measure_state gatherum_state_size
+  gatherum_set_sticks gatherum_fps gatherum_sample_rate gatherum_measure_state gatherum_state_size
   gatherum_state_save gatherum_state_load gatherum_state_ok
   gatherum_sram_ptr gatherum_sram_len
 )

@@ -309,6 +309,10 @@ struct Console {
     actions: ActionQueue,
     audio: Arc<Mutex<AudioShared>>,
     buttons: u32,
+    /// The analog sticks as `gatherum_set_sticks` packs them: four signed bytes — left
+    /// X, left Y, right X, right Y from the low byte up — positive meaning right and
+    /// up, zero a stick at rest.
+    sticks: u32,
 }
 
 impl Console {
@@ -329,18 +333,20 @@ impl Console {
         }));
         emulator.audio_sink = Box::new(ResamplingSink(audio.clone()));
 
-        let mut console = Self { emulator, actions, audio, buttons: 0 };
-        console.apply_buttons();
+        let mut console = Self { emulator, actions, audio, buttons: 0, sticks: 0 };
+        console.apply_input();
         console
     }
 
-    /// The pad, from the mask gatherum.js sends in libretro's bit order. The arrows push
-    /// the analog stick all the way, because that is what a GameCube game steers with;
-    /// the shoulder buttons pull their triggers all the way, because a game reads the
+    /// The pad, from the mask gatherum.js sends in libretro's bit order and the sticks
+    /// it packs beside it. A real stick beyond its dead zone steers the main stick and
+    /// the C-stick directly; the arrows push the main stick all the way, because that
+    /// is what a GameCube game steers with and a keyboard has nothing gentler to offer.
+    /// The shoulder buttons pull their triggers all the way, because a game reads the
     /// trigger and only sometimes the click at the end of it; and the button the seam
     /// calls Select is Z, the one button a GameCube pad has that the seam has no other
     /// name for.
-    fn apply_buttons(&mut self) {
+    fn apply_input(&mut self) {
         let held = |bit: u32| self.buttons & (1 << bit) != 0;
         let mut buttons = 0u16;
         if held(0) { buttons |= pad::B; }
@@ -357,12 +363,19 @@ impl Console {
             (false, true) => STICK_MAX,
             _ => STICK_CENTER,
         };
+        // A packed byte is ±127 around a centre of 128, which lands just inside the
+        // hardware's 0..=255 — a real pad never reaches its own extremes either.
+        let stick = |byte: u32| {
+            (STICK_CENTER as i32 + (byte as u8 as i8) as i32)
+                .clamp(STICK_MIN as i32, STICK_MAX as i32) as u8
+        };
+        let (left_x, left_y) = (stick(self.sticks), stick(self.sticks >> 8));
         let status = PadStatus {
             buttons,
-            stick_x: axis(held(6), held(7)),
-            stick_y: axis(held(5), held(4)),
-            substick_x: STICK_CENTER,
-            substick_y: STICK_CENTER,
+            stick_x: if left_x != STICK_CENTER { left_x } else { axis(held(6), held(7)) },
+            stick_y: if left_y != STICK_CENTER { left_y } else { axis(held(5), held(4)) },
+            substick_x: stick(self.sticks >> 16),
+            substick_y: stick(self.sticks >> 24),
             trigger_left: if left_trigger { TRIGGER_MAX } else { TRIGGER_MIN },
             trigger_right: if right_trigger { TRIGGER_MAX } else { TRIGGER_MIN },
             connected: true,
@@ -517,11 +530,13 @@ pub fn gatherum_reset() {
         let Some(mut console) = host.console.take() else { return };
         let Some(dvd) = console.emulator.di.dvd.take() else { return };
         let buttons = console.buttons;
+        let sticks = console.sticks;
         let card = console.memory_card().map(|data| data.to_vec());
         drop(console);
         let mut fresh = Console::boot(dvd);
         fresh.buttons = buttons;
-        fresh.apply_buttons();
+        fresh.sticks = sticks;
+        fresh.apply_input();
         if let (Some(kept), Some(data)) = (card, fresh.memory_card()) {
             let taken = kept.len().min(data.len());
             data[..taken].copy_from_slice(&kept[..taken]);
@@ -543,7 +558,27 @@ pub fn gatherum_set_buttons(port: u32, mask: u32) {
     with_host(|host| {
         if let Some(console) = host.console.as_mut() {
             console.buttons = mask;
-            console.apply_buttons();
+            console.apply_input();
+        }
+    });
+}
+
+/// The analog sticks, packed as core-shim's export of the same name takes them: four
+/// signed bytes — left X, left Y, right X, right Y from the low byte up — positive
+/// meaning right and up. This is the console the packing exists for: the main stick is
+/// how a GameCube game steers and the C-stick is its camera.
+#[wasm_bindgen]
+pub fn gatherum_set_sticks(port: u32, packed: u32) {
+    if port != 0 {
+        return;
+    }
+    with_host(|host| {
+        if let Some(console) = host.console.as_mut() {
+            if console.sticks == packed {
+                return;
+            }
+            console.sticks = packed;
+            console.apply_input();
         }
     });
 }

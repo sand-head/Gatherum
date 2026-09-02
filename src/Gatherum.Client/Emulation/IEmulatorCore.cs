@@ -23,6 +23,22 @@ public enum GamepadButtons
     Y = 2048,
 }
 
+/// <summary>A pad's two analog sticks, one signed byte per axis with positive meaning
+/// right and up; the default is both at rest. Buttons are the same twelve bits on every
+/// machine, but a stick is analog or it is pointless — a GameCube game walks or runs by
+/// how far it is pushed — so it travels beside the buttons rather than folded into
+/// them.</summary>
+public readonly record struct StickState(sbyte LeftX, sbyte LeftY, sbyte RightX, sbyte RightY)
+{
+    /// <summary>The four bytes in one integer, low byte first: the one packing every
+    /// layer below speaks, all the way down into the cores.</summary>
+    public int Packed =>
+        (byte)LeftX | ((byte)LeftY << 8) | ((byte)RightX << 16) | ((byte)RightY << 24);
+
+    public static StickState Unpack(int packed) => new(
+        (sbyte)packed, (sbyte)(packed >> 8), (sbyte)(packed >> 16), (sbyte)(packed >> 24));
+}
+
 /// <summary>What a machine's plastic calls the bits above. The buttons are the same
 /// everywhere; the printing on them is not, and a Master System that told you to press
 /// Start would be naming a button its pad does not have. A label of null is a button the
@@ -101,6 +117,13 @@ public interface IEmulatorCore
     int SaveStateSize { get; }
 
     void SetButtons(int player, GamepadButtons buttons);
+
+    /// <summary>The player's analog sticks. Most of these machines have nowhere to plug
+    /// one in, which is what the default answers — only a core whose hardware steers
+    /// with a stick overrides it.</summary>
+    void SetSticks(int player, StickState sticks)
+    {
+    }
 
     /// <summary>Runs the console until it has finished the frame it was in the middle
     /// of, filling <see cref="Frame"/> and queueing the sound that went with it.</summary>
