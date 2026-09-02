@@ -17,7 +17,8 @@
 # and comes out as a .wasm plus the loader Emscripten emits to drive it. Both link
 # against the same core-shim, unchanged: the shim knows libretro, not who implements it.
 # Gecko is Rust and not libretro at all, so it gets a host of its own (gecko-host/) built
-# with Rust's own WebAssembly target and wasm-bindgen's loader beside it.
+# with Rust's own WebAssembly target and wasm-bindgen's loader beside it; and it is the
+# one core kept as a submodule rather than fetched, because it is ours to change.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -35,10 +36,11 @@ MGBA_COMMIT="1c61b54208ca6266129d0f2394c04bd8c44f98c5"
 BSNES_REPO="https://github.com/EmulatorJS/bsnes-libretro.git"
 BSNES_COMMIT="4b344745e3878e7c0675a60c624582935524b8f7"
 
-# Gecko, a GameCube emulator in Rust. Its web build wants WebGPU and wasm-bindgen, and
-# neither shim nor libretro comes into it.
-GECKO_REPO="https://github.com/ioncodes/gecko.git"
-GECKO_COMMIT="39e82205a0da154f23fd36b95e64a8029d468618"
+# Gecko, a GameCube emulator in Rust, is the one core that is not fetched here: it is the
+# submodule at native/gecko, a fork of ioncodes/gecko whose `gatherum` branch carries the
+# fixes this project needed, each a commit meant for upstream. What is built is whatever
+# commit the submodule points at, which is the pin.
+GECKO_DIR="$here/gecko"
 
 # Gecko's sound processor runs a boot ROM, and Nintendo's cannot be shipped. Dolphin wrote
 # a free one and keeps the assembled bytes in its tree; these are they, pinned to a commit
@@ -281,24 +283,23 @@ build_bsnes() {
 
 build_gecko() {
   wasm_bindgen
-  local src="$build/gecko"
-  clone_pinned "$GECKO_REPO" "$src" "$GECKO_COMMIT" "Gecko"
+  local src="$GECKO_DIR"
+  if [ ! -f "$src/Cargo.toml" ]; then
+    echo "native/gecko is empty: clone with --recurse-submodules, or run" >&2
+    echo "  git submodule update --init native/gecko" >&2
+    exit 1
+  fi
   # Two of its submodules are compiled in: the IPL replacement it boots a disc with, and
-  # the instruction specs its decoder is generated from. The third is test data.
-  git -C "$src" submodule update --init --quiet submodules/solstice submodules/chipi-spec
-
-  # The one place a fetched core is changed, and every change is a file in the repo
-  # beside this script: Gecko keeps its memory card's contents to itself, and a browser
-  # that is to keep a save has to be able to read them. Applied once; a tree that
-  # already carries a patch is left alone rather than patched twice.
-  local patch
-  for patch in "$here"/gecko-host/patches/*.patch; do
-    if git -C "$src" apply --check --reverse "$patch" > /dev/null 2>&1; then
-      continue
-    fi
-    echo "==> applying $(basename "$patch")"
-    git -C "$src" apply "$patch"
-  done
+  # the instruction specs its decoder is generated from. The third is test data. With a
+  # .git to hand they are fetched here; a Docker context has none and must carry them.
+  if [ -e "$src/.git" ]; then
+    git -C "$src" submodule update --init --quiet submodules/solstice submodules/chipi-spec
+  fi
+  if [ ! -f "$src/submodules/solstice/Cargo.toml" ] || [ ! -d "$src/submodules/chipi-spec" ]; then
+    echo "native/gecko's own submodules are missing: run" >&2
+    echo "  git -C native/gecko submodule update --init submodules/solstice submodules/chipi-spec" >&2
+    exit 1
+  fi
 
   echo "==> fetching Dolphin's free DSP ROM"
   local dsp="$build/dsp"

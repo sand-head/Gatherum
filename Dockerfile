@@ -28,11 +28,14 @@ COPY native/core-shim ./core-shim
 COPY native/bsnes-support ./bsnes-support
 RUN ./build-core.sh bsnes && rm -rf build core-shim/target /usr/local/cargo/registry
 
-# Gecko's Rust and its wasm target rustup fetches from the pin in gecko-host; clang, in
-# the base, is what compiles zstd for the browser so RVZ discs read.
+# Gecko is the submodule at native/gecko, our fork, and the context must carry it with
+# its own two compiled-in submodules already checked out — there is no .git in here to
+# fetch them with. Its Rust and wasm target rustup fetches from the pin in gecko-host;
+# clang, in the base, is what compiles zstd for the browser so RVZ discs read.
 FROM core-base AS core-gecko
+COPY native/gecko ./gecko
 COPY native/gecko-host ./gecko-host
-RUN ./build-core.sh gecko && rm -rf build gecko-host/target /usr/local/cargo/registry
+RUN ./build-core.sh gecko && rm -rf build gecko gecko-host/target /usr/local/cargo/registry
 
 # Stage 1: compile and publish. The editor's Interactive Auto island relinks the
 # WebAssembly runtime with SkiaSharp's native library — that needs the wasm-tools

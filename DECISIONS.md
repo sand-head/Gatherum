@@ -2400,3 +2400,25 @@ draws its health-and-safety screen with sound; Super Monkey Ball 2 boots through
 publisher screens to its title screen with sound. Both run slowly — Gecko in a browser is
 its interpreters, and a heavy scene is eight frames a second — which the manual already
 says and this does not change.
+
+## Gecko becomes a fork and a submodule
+
+Five patch files applied with `git apply` at fetch time were a fork with worse tooling:
+no history, no path upstream, and every new fix written against a throwaway clone under
+`native/build/`. So Gecko is now `sand-head/gecko`, whose `gatherum` branch sits on
+upstream's `dev` — the owner's call, since an emulator this young moves fastest there and
+the seven commits it had over `master` were all rendering and input work that built and
+played unchanged — and carries each fix as one commit in upstream's own voice, terse and
+lowercase, with no co-author trailer, so that any of them can be offered back as it is.
+The `patches/` directory is gone.
+
+Gatherum holds it as a submodule at `native/gecko` rather than fetching the fork at a
+pinned commit, because the whole point is that it is ours to change: a fix is edited,
+built and tested in place, committed in the submodule, pushed, and the pointer bumped.
+The README's "the cores are not here" keeps its spirit — a submodule is a pointer, not a
+copy, and Gatherum's history carries none of Gecko's — and loses a little of its letter:
+a clone now wants `--recurse-submodules`, CI's checkout fetches the submodule and then
+only the two of Gecko's own that are compiled in (the third is test data), and the Docker
+context carries the checkout because the core stage has no `.git` to fetch with.
+`build-core.sh` refuses, with the command to run, when either is missing. mGBA and bsnes
+are unchanged: fetched, pinned by commit, never patched.

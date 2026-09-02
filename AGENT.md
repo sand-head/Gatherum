@@ -98,12 +98,15 @@ auto-login. Migrations: `dotnet ef migrations add <Name> -p src/Gatherum.Infrast
   small exception, three functions bsnes's Emscripten backend leaves out). `gecko-host/`
   is the same flat surface built over a core that is not libretro at all: Gecko is a Rust
   crate, and the host owns its console, draws its picture through WebGPU and reads it
-  back, and carries the two-file patch that lets a browser reach the memory card.
-  `build-core.sh` fetches each core at a pinned commit and builds it — mGBA against WASI,
-  bsnes against Emscripten, because a core built out of coroutines and exceptions cannot
-  use the first, Gecko with Rust's own wasm target and wasm-bindgen; what it fetches and
-  what it emits are both gitignored, the same bargain `models/` strikes. See
-  `native/README.md`, which also carries the licence table.
+  back. Gecko itself is the submodule at `native/gecko` — our fork, whose `gatherum`
+  branch rides upstream's `dev` and carries the fixes this project needed as commits
+  meant for upstream; the commit the submodule points at is the pin, and a clone needs
+  `--recurse-submodules` (or `git submodule update --init native/gecko`) to have it.
+  `build-core.sh` fetches the other two at a pinned commit and builds all three — mGBA
+  against WASI, bsnes against Emscripten, because a core built out of coroutines and
+  exceptions cannot use the first, Gecko with Rust's own wasm target and wasm-bindgen;
+  what it fetches and what it emits are both gitignored, the same bargain `models/`
+  strikes. See `native/README.md`, which also carries the licence table.
 - `tests/Gatherum.Tests` — unit tests plus `AppIntegrationTests` booting the real app.
 
 Render modes: static SSR for pages and layout; every interactive component is an
