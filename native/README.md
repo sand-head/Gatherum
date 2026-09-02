@@ -35,17 +35,34 @@ rather than into a buffer. The host owns a console, an offscreen WebGPU device w
 Gecko's renderer on it, and a staging buffer it reads the picture back through every
 frame; it resamples the sound to one rate, turns the pad mask into a GameCube pad, and
 exports the same `gatherum_*` names as the shim so that past `openCore` nothing can tell
-which it got. Its dependencies are path dependencies into `build/gecko`, the pinned
-checkout. It also carries `patches/`, the one place a fetched core is changed: Gecko
-keeps its memory card's contents to itself, and a browser that is to keep a save has to
-be able to read them. A patch is a file in the repository applied once at fetch time —
-never a fork, and small enough to read.
+which it got. Its dependencies are path dependencies into `gecko/`, which is not a
+fetched checkout but a submodule: a fork of upstream (`sand-head/gecko`) whose
+`gatherum` branch sits on upstream's `dev` and carries what this project found it
+needed: the memory card's contents exposed, so a browser that is to keep a save can read
+them; the real-time clock fed from a counter the host advances, because a browser build
+has no wall clock and the determinism rule forbids wanting one; the bus and CPU clock
+speeds written into the boot block, which the IPL writes and Gecko's IPL-less boot left
+at zero, so that every SDK timeout was over before it began; the write-gather pipe
+draining into memory whether or not the command processor is linked to it, which is how
+a game running two FIFOs and swapping them each frame (Super Monkey Ball 2, for one)
+gets anything drawn at all; and the DSP's DMA-busy bit made the status it is — not
+writable, and not held high by the audio stream — because a sound driver that polls it
+before every ARAM transfer otherwise waits forever; and, for speed, the interpreter
+running blocks decoded once through a generated `match`, skipping idle loops the way the
+JIT already did, and the DSP parking in the Zelda microcode's idle loops as it did in
+AX's. Each is one commit, in upstream's own voice, and each is meant to go back
+upstream; the fork exists so that they have somewhere to live while they wait, and so
+that the next one can be written, built and tested in place rather than as a patch file
+applied to a clone.
 
-**The cores themselves are not here, and never will be.** `build-core.sh` fetches each at
-a pinned commit into `build/`, compiles it against a pinned toolchain, links the shim, and
-leaves the result in `dist/`. Both directories are gitignored. That is the same bargain
-`models/` already strikes for the embedding model: fetched by the build, verified against
-a known hash or commit, never committed, and never downloaded at run time.
+**The cores themselves are not in this repository's history.** `build-core.sh` fetches
+mGBA and bsnes at a pinned commit into `build/`, compiles each against a pinned
+toolchain, links the shim, and leaves the result in `dist/`. Both directories are
+gitignored. That is the same bargain `models/` already strikes for the embedding model:
+fetched by the build, verified against a known hash or commit, never committed, and
+never downloaded at run time. Gecko's source arrives as a submodule instead, which is a
+pointer to a commit in the fork rather than a copy — the pin is the pointer, and `git
+submodule update --init` is the fetch.
 
 ## Three toolchains, because the cores differ
 
@@ -85,8 +102,14 @@ job, and Gecko has no software rasterizer — so a browser without WebGPU gets a
 link, and the host reads the picture back from the GPU every frame to hand the player the
 pixel array the seam asks for. That readback completes on a later JavaScript task, so the
 frame handed over is always the one before: a lag of one, invisible, rather than a stall
-every frame. Gecko also cannot compile its just-in-time compilers for the browser, so it
-interprets, and its speed is what an interpreter's is.
+every frame. Gecko's own just-in-time compiler emits machine code, which a page cannot
+run, so the fork carries a second one for this target: a hot block is compiled to a
+WebAssembly module of one function, the host instantiates it over its own memory and
+function table and puts the function in a table slot — which is what a function pointer
+is to Rust on wasm32 — and the interpreter's handler is called by its slot for whatever
+the emitter does not translate. The host's half is `TableCompiler` in `gecko-host`; the
+emitter, and the validator that holds it to the interpreter bit for bit, is
+`gekko::wasmjit` in the fork.
 
 One consequence of Asyncify leaks into the shim and is worth knowing before reading it:
 **a value returned across a fiber swap does not survive the trip.** The function body runs
@@ -177,8 +200,9 @@ permits linking works under the other. The copy built here is the libretro port 
 EmulatorJS, who wrote libco's Emscripten fiber backend.
 
 The obligation both bring back is the same: keep their notices intact and make their
-source available. Pinning the exact upstream commit in `build-core.sh`, and never patching
-what is fetched, is how that is met.
+source available. Pinning the exact upstream commit in `build-core.sh` and never patching
+what is fetched is how that is met for the two that are fetched; for Gecko it is the
+public fork, whose every change is a commit anyone can read.
 
 Not every core is so obliging. Before adding one, read its licence rather than its README:
 
@@ -218,8 +242,9 @@ Most of the work is already done, because the shim is not specific to any core.
    not a reason to give up on the core. Check the module's imports either way: on the
    WASI side, anything beyond WASI is a source file you meant to compile and did not.
    A core that is not libretro — Rust, say — gets a host crate of its own beside
-   `gecko-host`, exporting the shim's names; and if it must change upstream, the change
-   is a patch file in that crate's `patches/`, applied once at fetch time.
+   `gecko-host`, exporting the shim's names; and if it must change upstream, fork it the
+   way Gecko is forked, one commit per fix in upstream's voice, and point a submodule at
+   the fork.
 4. Answer its clock with a counter, never the time.
 5. Teach `Emulator.Identify` its bytes and `VendoredCore` its descriptor. Report one
    player unless you have *measured* that two copies of it stay in step — same cartridge,

@@ -1,0 +1,3 @@
+[submodule "native/gecko"]
+	path = native/gecko
+	url = https://github.com/sand-head/gecko.git

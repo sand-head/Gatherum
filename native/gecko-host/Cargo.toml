@@ -2,8 +2,8 @@
 # so core-shim cannot drive it. This crate is the piece that does: it owns the console,
 # a WebGPU device to draw its picture on, and the flat surface gatherum.js expects.
 #
-# Its dependencies point into native/build/gecko, which build-core.sh fetches at a pinned
-# commit and which is not committed. See native/README.md.
+# Its dependencies point into native/gecko, the submodule holding our fork of Gecko; the
+# commit it is checked out at is the pin. See native/README.md.
 [package]
 name = "gatherum-gecko-host"
 version = "0.1.0"
@@ -14,14 +14,20 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-gecko = { path = "../build/gecko/crates/gecko", default-features = false }
-image = { path = "../build/gecko/crates/image", default-features = false, features = ["rvz"] }
-backend-wgpu = { path = "../build/gecko/crates/backend-wgpu" }
+gecko = { path = "../gecko/crates/gecko", default-features = false, features = ["wasm-jit"] }
+image = { path = "../gecko/crates/image", default-features = false, features = ["rvz"] }
+backend-wgpu = { path = "../gecko/crates/backend-wgpu" }
 wgpu = "29.0.3"
 wasm-bindgen = "0.2.118"
 wasm-bindgen-futures = "0.4.67"
+js-sys = "0.3.95"
 console_error_panic_hook = "0.1.7"
 getrandom = { version = "0.3.4", features = ["wasm_js"] }
+# Gecko reports through `tracing`; its warnings go to the browser console.
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "registry", "std"] }
+tracing-web = "0.1"
+web-sys = { version = "0.3", features = ["console"] }
 
 [profile.release]
 codegen-units = 1

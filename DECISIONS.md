@@ -2338,3 +2338,201 @@ and the server circuit still streams it straight to the service. The staging map
 memory on purpose — an upload cannot outlive the process it began in, and one that tries
 gets a 404 to retry from, which is what an interrupted upload is. The multipart endpoints
 stay as they were for the drop zone and for API clients, at the same 2 GB ceiling.
+
+## A GameCube that showed nothing, and the five reasons it did not
+
+Super Monkey Ball 2 played as a black screen in Firefox, with WebGPU on. The report named
+the browser, so the first question was whether Firefox's WebGPU was the difference, and
+the answer came from a harness that drives `gecko.mjs` exactly as `gatherum.js` does with
+no Blazor in the way: Chromium was black in the same way, at the same instruction. Neither
+the readback nor the page was at fault — the picture was crossing every frame, and it was
+black because the console had nothing to show. Gecko was silent about why, because the
+host had no `tracing` subscriber; it has one now, warnings and up into the browser
+console, which is the same place the WASI shim's cores print and where a person debugging
+a cartridge looks.
+
+What it was, in the order it was found, each one uncovering the next:
+
+- **The boot block's clock speeds were zero.** The IPL writes the bus and CPU clocks at
+  `0x800000F8` and `0x800000FC`; Gecko's IPL-less boot writes the RAM and ARAM sizes and
+  not those. The SDK derives every tick conversion from the bus clock, so
+  `OSMillisecondsToTicks` was zero and every timed wait built on it was over before it
+  started — the DVD library's post-reset settle among them, which put every thread to
+  sleep and left the CPU in the scheduler's idle loop. Patched into the boot, where the
+  other boot-block words are written.
+- **The IPL mask ROM, SRAM and clock were off the bus.** Gecko attaches that EXI device
+  when it boots from a real IPL and not otherwise, so a game reading the console's
+  settings got a stub. The host attaches it with a blank ROM — the real one cannot be
+  shipped, and a font read from it comes out empty — and the SRAM and clock behind it
+  answer as a fresh console would. The clock is the determinism rule's business: Gecko
+  read `SystemTime::now()`, which panics on `wasm32-unknown-unknown`, and a patch makes
+  the browser build read a counter the host sets from the frame count instead.
+- **The write-gather pipe dropped everything when the command processor was unlinked.**
+  Gecko landed a burst in memory and advanced the PI write pointer only under the CPU–GP
+  link. A game running two FIFOs — the CPU filling one while the GP reads the other, the
+  two swapped every frame, the way Amusement Vision's engine does it — fills the idle one
+  through that pointer alone, so nothing it drew ever reached memory, the GP never
+  finished, and the game printed "GP WAIT Timeout" to a port nobody was reading. Twilight
+  Princess stays linked and never noticed. The patch drains the pipe regardless and lets
+  the link govern only the CP's own pointer and distance, which is what the hardware does.
+- **The DSP's DMA-busy bit was writable and was the audio stream's.** Gecko copied bit 9
+  of the DSP control register from every CPU write, and set it for as long as the audio
+  DMA played. The SDK writes that register read-modify-write, and a sound driver that
+  polls `ARGetDMAStatus` before every ARAM transfer — which is that bit — therefore waited
+  on a bit that was never going to clear. Patched to be the ARAM DMA status it is.
+- **The renderer panicked on a batch left over from the previous frame.** Draws are
+  batched until a non-draw action arrives, and the host, following Gecko's own web build,
+  swapped the vertex scratch out at every frame boundary — so a batch still pending at
+  the boundary indexed into a buffer that was now empty, and Twilight Princess died on
+  frame nine with a slice out of range. The host now flushes pending draws before the
+  swap. Gecko's web page only ever loads a DOL and had not met this.
+
+Four of the five are patch files beside the memory-card one, each a hardware fact rather
+than a taste, each small enough to read, and each a candidate to send upstream. The
+question "is this one disc failing to initialise?" was the right one and the answer was
+no: the same disc stalled natively under Gecko's own headless benchmark, at the same
+place, and so would any game that reset its drive and waited, ran an unlinked FIFO, or
+polled the ARAM DMA — all of which are ordinary. Gecko's `dev` branch was checked and is
+seven commits of rendering and input work over the pin; none of it touches these paths.
+
+What was measured, in real Firefox 154 on Linux through the harness: Twilight Princess
+draws its health-and-safety screen with sound; Super Monkey Ball 2 boots through its
+publisher screens to its title screen with sound. Both run slowly — Gecko in a browser is
+its interpreters, and a heavy scene is eight frames a second — which the manual already
+says and this does not change.
+
+## Gecko becomes a fork and a submodule
+
+Five patch files applied with `git apply` at fetch time were a fork with worse tooling:
+no history, no path upstream, and every new fix written against a throwaway clone under
+`native/build/`. So Gecko is now `sand-head/gecko`, whose `gatherum` branch sits on
+upstream's `dev` — the owner's call, since an emulator this young moves fastest there and
+the seven commits it had over `master` were all rendering and input work that built and
+played unchanged — and carries each fix as one commit in upstream's own voice, terse and
+lowercase, with no co-author trailer, so that any of them can be offered back as it is.
+The `patches/` directory is gone.
+
+Gatherum holds it as a submodule at `native/gecko` rather than fetching the fork at a
+pinned commit, because the whole point is that it is ours to change: a fix is edited,
+built and tested in place, committed in the submodule, pushed, and the pointer bumped.
+The README's "the cores are not here" keeps its spirit — a submodule is a pointer, not a
+copy, and Gatherum's history carries none of Gecko's — and loses a little of its letter:
+a clone now wants `--recurse-submodules`, CI's checkout fetches the submodule and then
+only the two of Gecko's own that are compiled in (the third is test data), and the Docker
+context carries the checkout because the core stage has no `.git` to fetch with.
+`build-core.sh` refuses, with the command to run, when either is missing. mGBA and bsnes
+are unchanged: fetched, pinned by commit, never patched.
+
+## Where a GameCube frame's time went, and two idle loops
+
+Asked whether the frame rate was the integrated GPU's doing, the answer from the kernel's
+per-client DRM accounting was no on both counts: Firefox had put WebGPU on the discrete
+card, and that card was one percent busy. The Firefox Profiler on the thread running the
+console said where the time was instead, and it was not where the "interpreter is slow"
+story put it. Twilight Princess spent 57% of every frame in the DSP — the sound processor,
+emulated instruction by instruction — and a count of instructions per frame made the
+shape of it plain: five million DSP instructions a frame, on a chip that can execute 1.35
+million in that time, and eight million CPU instructions a frame on a game sitting at its
+health-and-safety screen doing nothing. Both were idle loops run in full. Gecko's JIT
+skips both kinds; its interpreters, which are what a browser gets, skipped neither.
+
+Two commits on the fork. The interpreter now classifies a backward branch the moment it
+closes a loop, with the JIT's own classifier moved to `gekko::idle` so both modes share
+one definition of "reads only what an interrupt or a DMA could change", and jumps the
+clock to the next scheduler deadline — the decrementer and time base are derived from
+that clock, so an alarm or a timed wait still lands where it would have. And the DSP's
+wait table learns the Zelda microcode's three idle loops beside the AX ones it knew: a
+flag in its own DRAM that its mail handler sets, a command ring whose read and write
+words have drawn level, and the `LR @CMBH` spelling of the mailbox poll; Dolphin's
+analyzer lists the same three. The parked condition reads the words the loop reads, and
+requires no interrupt pending, because only the handler can change them.
+
+Measured in Firefox on the same discs: Twilight Princess from 128 ms a frame to 8 —
+full speed with time to spare — and Super Monkey Ball 2 from 67 to 50, where a profile
+now shows no hot spot at all, only the work of a real 3D scene spread across the
+interpreter, the GX FIFO and the vertex uploads. That remainder is the price of no JIT,
+and no patch buys it back. Two things tried and found worthless are worth recording:
+`wasm-opt -O3` shrank the module by a quarter and changed the frame time by nothing, and
+the chip the WebGPU device lands on does not matter, because the picture is never waited
+for.
+
+## A cached interpreter, and what it was worth
+
+Asked for a JIT and told why a browser cannot have Gecko's — Cranelift emits machine
+code, and a page can only run WebAssembly — the owner asked for the cached interpreter
+instead. It is in the fork now: a block is scanned once with the JIT's own scanner
+(`gekko::block`, moved out from under the JIT so both can use it), every instruction in
+it resolved once to the number of its handler, and the block run to its end or to the
+first branch that leaves it, with interrupts taken at block boundaries as the JIT takes
+them and the JIT's idle classes skipping to the next deadline after one pass. The
+resolver is generated at build time from the text of the dispatch tables chipi writes,
+because chipi does not know about it: every `_dN` decoder gets an `_rN` twin returning a
+number, and `execute` is one `match` over those numbers. Blocks are keyed by pc through
+a direct-mapped table ahead of a map, register the RAM lines they span, and are dropped
+when a store or a DMA touches one — the same pending-line mechanism the JIT invalidates
+from, which is no longer the JIT's alone. The hooks the debugger builds with run at the
+same places they ran before.
+
+Measured in Firefox on the same two discs, against the idle-skipping build before it:
+Twilight Princess 7 to 5 ms a frame; Super Monkey Ball 2 49 to 43. Two findings shaped
+the second number. Resolving the handler once saved almost nothing — Firefox walks the
+table tree cheaply — and what saved the twelve percent was calling the handler through a
+`match` rather than through a function pointer, which in WebAssembly is a checked
+indirect call. And a count showed the cache doing exactly its job (400k blocks a frame,
+seven instructions each, no misses to speak of) while the frame stayed where it was,
+because a title screen's cost is now a third interpreter handlers, a third the block
+loop and a third GX: the FIFO decode and the vertex uploads through WebGPU's
+`writeBuffer`, which is Firefox's memcpy, not ours. From 67 ms a frame at the start of
+the day to 43 is the whole of what a browser gets from this core without a compiler.
+The block scanner and the numbered handlers are the front half of a WebAssembly-emitting
+JIT, should anyone build the back half.
+
+## The back half: a JIT that emits WebAssembly
+
+The owner asked for the back half, and it is built. A block the cached interpreter has run
+sixteen times is handed to `gekko::wasmjit`, which emits a WebAssembly module of one
+function — importing the host's memory and function table, so it reads the console where
+the interpreter does — and the host (`TableCompiler`, over js-sys, so no JavaScript text
+ships) instantiates it and puts its function in a slot of the host's own table. To Rust
+compiled for wasm32 a table slot *is* a function pointer, so the cache calls a compiled
+block the way it calls anything else, and the linker flag that makes the table growable
+is the only build change. What the emitter translates it translates inline: integer
+arithmetic, rotates, compares and the condition register, branches, loads and stores
+against RAM by the bus's own fast path (segment 8 or C, in range, and not a line the
+cache holds code on), and the floating-point and paired-single arithmetic a game spends
+its time in. Everything else calls the interpreter's handler by its own table slot,
+which the generated tables know by the `OP_*` constant it is specialised on — not by
+address, because a native test build has several copies of a generic function.
+
+**The interpreter is the oracle, and three tools hold the emitter to it.** A validation
+switch runs every compiled block twice, compiled and then interpreted from the same
+registers and — the compiled run's RAM stores having been noted and undone — the same
+memory, and reports the first blocks that disagree; a block that writes a device register
+and reads it back disagrees with itself, which is the one kind of noise it makes. A
+translation mask turns each class of translation off from the harness, for bisecting. And
+a native test runs emitted blocks in `wasmi` over an image of the console beside the
+handlers on the console itself, for every arithmetic instruction the emitter knows, from
+tables of awkward operands; it found the last bug in minutes after the browser had shown
+it only as a few floats off by a bit in vertex memory. Four things bit on the way and are
+worth writing down: a halfword store swaps bytes with a formula that is only right when
+the high half is already zero; the cycles a block owes must be settled before any call
+the bus might answer with the clock in hand, because the interpreter charges an
+instruction before it runs, and a device read that sees a clock five cycles behind is a
+timer that drifts; a `flush` inside a conditional branch loses the cycles on the other
+path; and a block that ends early where the interpreter would not have creates an
+interrupt point the interpreter never had. Both discs now match the interpreter frame
+for frame, registers, clock and RAM, over the whole run measured.
+
+**What it is worth, so far: less than the mechanism promised.** With every register the
+interpreter's, Super Monkey Ball 2's title screen went from 43 ms a frame to 39. Keeping
+the registers a block touches in WebAssembly locals — read from the console once, written
+back before a handler, the bus in the interpreter's hands, or the way out, forgotten
+after a handler may have changed them, and the two arms of a quantized access merged
+through the console — took a same-session A/B to 50 against 35 on that screen, a quarter
+to a third off, and Twilight Princess was never CPU-bound. A dump of a typical block
+shows why the rest is still there: thirty-six WebAssembly operations per GameCube
+instruction, most of them the memory fast path's segment and range checks and byte swaps,
+and the condition-register updates that read and write the console for every `Rc` and
+compare. Those, the Rust loop that dispatches blocks (a tenth of the frame), and the GX
+decode and vertex uploads are each their own piece of work, and each is measured against
+the same oracle before it lands.

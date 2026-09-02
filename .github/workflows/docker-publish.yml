@@ -31,6 +31,13 @@ jobs:
           # GitVersion counts commits back to the version source and reads release
           # tags. A shallow clone has neither.
           fetch-depth: 0
+          # Gecko is the submodule at native/gecko. Its own submodules — two of them
+          # compiled in — are fetched in the next step, and only those two, because
+          # recursion here would also pull its test data.
+          submodules: true
+
+      - name: Fetch what Gecko compiles in
+        run: git -C native/gecko submodule update --init submodules/solstice submodules/chipi-spec
 
       - name: Install GitVersion
         uses: gittools/actions/gitversion/setup@v4.7.0

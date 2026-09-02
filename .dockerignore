@@ -14,3 +14,5 @@ native/build/
 native/dist/
 native/core-shim/target/
 native/gecko-host/target/
+native/gecko/target/
+native/gecko/.git
