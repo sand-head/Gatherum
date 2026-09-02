@@ -1,0 +1,15 @@
+# A cartridge is a few megabytes and the console's memory is fixed, so the ceiling is
+# modest; the rest is what jgenesis's own web build compiles with, and the cfg that tells
+# getrandom it is in a browser.
+[target.wasm32-unknown-unknown]
+rustflags = [
+  "-C", "link-args=-z stack-size=8388608",
+  "-C", "link-args=--initial-memory=67108864",
+  "-C", "link-args=--max-memory=536870912",
+  "-C", "overflow-checks=false",
+  "-C", "target-feature=+bulk-memory",
+  "-C", "target-feature=+mutable-globals",
+  "-C", "target-feature=+sign-ext",
+  "-C", "target-feature=+simd128",
+  "--cfg", "getrandom_backend=\"wasm_js\"",
+]

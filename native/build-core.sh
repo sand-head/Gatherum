@@ -9,7 +9,7 @@
 # by hand or let CI run it; either way the inputs are pinned by hash or commit and the
 # output is reproducible from them.
 #
-# Three cores, three toolchains, and the difference is each core's own doing rather than
+# Five cores, three toolchains, and the difference is each core's own doing rather than
 # a preference of ours. mGBA is plain C that wants no operating system underneath it, so
 # it compiles against WASI and comes out as one .wasm importing a handful of system calls
 # and nothing else. bsnes runs its processor, sound and picture as coroutines and throws
@@ -17,7 +17,9 @@
 # and comes out as a .wasm plus the loader Emscripten emits to drive it. Both link
 # against the same core-shim, unchanged: the shim knows libretro, not who implements it.
 # Gecko is Rust and not libretro at all, so it gets a host of its own (gecko-host/) built
-# with Rust's own WebAssembly target and wasm-bindgen's loader beside it.
+# with Rust's own WebAssembly target and wasm-bindgen's loader beside it. Beetle VB is
+# mGBA's shape again — C and C++ with exceptions switched off — and jgenesis is Gecko's,
+# a Rust crate behind a host of its own (jgenesis-host/), minus the GPU.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -48,6 +50,18 @@ DOLPHIN_RAW="https://raw.githubusercontent.com/dolphin-emu/dolphin/${DOLPHIN_COM
 DSP_ROM_SHA256="4ea1fea6c649bcf9f627007bc9403d5437896c681d3e089b083263a7646cd3ae"
 DSP_COEF_SHA256="d7741279c2e8ec5c5fb318f8fbdd6de6bf583520d288e836a5383233a4238179"
 
+# Beetle VB, Mednafen's Virtual Boy module as libretro carries it. Plain C and C++
+# compiled without exceptions, so it takes the same road as mGBA.
+BEETLE_VB_REPO="https://github.com/libretro/beetle-vb-libretro.git"
+BEETLE_VB_COMMIT="83ed42608601fb7b01d41e4f8fb2007a37b8c84e"
+
+# jgenesis, a Mega Drive (and 32X) emulator in Rust, at its 0.14.1 release. Like Gecko
+# it is not libretro, and unlike Gecko it draws into a buffer, so its host is Gecko's
+# without the GPU.
+JGENESIS_REPO="https://github.com/jsgroth/jgenesis.git"
+JGENESIS_TAG="v0.14.1"
+JGENESIS_COMMIT="cbe7f129e3f5c805a2a2e4318981834192116e90"
+
 WASI_SDK_VERSION="25"
 WASI_SDK_URL="https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-${WASI_SDK_VERSION}/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux.tar.gz"
 WASI_SDK_SHA256="52640dde13599bf127a95499e61d6d640256119456d1af8897ab6725bcf3d89c"
@@ -77,7 +91,7 @@ EXPORTS=(
 mkdir -p "$build" "$dist"
 
 wanted=("$@")
-if [ ${#wanted[@]} -eq 0 ]; then wanted=(mgba bsnes gecko); fi
+if [ ${#wanted[@]} -eq 0 ]; then wanted=(mgba bsnes gecko beetlevb jgenesis); fi
 building() { for name in "${wanted[@]}"; do [ "$name" = "$1" ] && return 0; done; return 1; }
 
 # --- fetching --------------------------------------------------------------------
@@ -219,6 +233,74 @@ build_mgba() {
   report mgba.wasm
 }
 
+# --- Beetle VB -------------------------------------------------------------------
+
+build_beetlevb() {
+  wasi_sdk
+  local src="$build/beetle-vb"
+  clone_pinned "$BEETLE_VB_REPO" "$src" "$BEETLE_VB_COMMIT" "Beetle VB"
+
+  local cc="$sdk/bin/clang" cxx="$sdk/bin/clang++" sysroot="$sdk/share/wasi-sysroot"
+  local objects="$build/beetle-vb-objects"
+  rm -rf "$objects" && mkdir -p "$objects"
+
+  # The libretro Makefile's own flags for a plain unix build, minus the ones about
+  # shared objects. WANT_32BPP is the pixel format the shim reads; the rest is what
+  # Mednafen's code expects to find defined.
+  local includes=(
+    -I"$src" -I"$src/mednafen" -I"$src/mednafen/include" -I"$src/mednafen/hw_sound"
+    -I"$src/mednafen/hw_cpu" -I"$src/mednafen/hw_misc" -I"$src/libretro-common/include"
+  )
+  local defines=(
+    -DWANT_32BPP -D__LIBRETRO__ -DNDEBUG -DINLINE=inline
+    -DMEDNAFEN_VERSION='"0.9.31"' -DMEDNAFEN_VERSION_NUMERIC=931
+    -DSTDC_HEADERS -D__STDC_LIMIT_MACROS
+  )
+
+  # Makefile.common's list, spelled out: the V810, the four Virtual Boy chips and the
+  # software float they share, Blip_Buffer for sound, Mednafen's state and settings
+  # plumbing, the cheat engine the module calls into, and the libretro layer. strlcpy
+  # is not in wasi-libc, so libretro-common's copy comes too.
+  local sources=(
+    mednafen/hw_cpu/v810/v810_cpu.cpp
+    mednafen/vb/vsu.c mednafen/vb/input.c mednafen/vb/timer.c mednafen/vb/vip.c
+    mednafen/hw_cpu/v810/fpu-new/softfloat.c
+    mednafen/sound/Blip_Buffer.c
+    mednafen/mempatcher.cpp mednafen/state.c mednafen/settings.c
+    libretro-common/compat/compat_strl.c
+    libretro.cpp
+  )
+
+  echo "==> compiling ${#sources[@]} Beetle VB sources"
+  local file
+  for file in "${sources[@]}"; do
+    case "$file" in
+      *.cpp)
+        "$cxx" --target=wasm32-wasi --sysroot="$sysroot" -std=gnu++11 \
+          -fno-exceptions -fno-rtti "${includes[@]}" "${defines[@]}" -O2 \
+          -c "$src/$file" -o "$objects/$(echo "$file" | tr / _).o" ;;
+      *)
+        "$cc" --target=wasm32-wasi --sysroot="$sysroot" -std=gnu11 \
+          "${includes[@]}" "${defines[@]}" -O2 \
+          -c "$src/$file" -o "$objects/$(echo "$file" | tr / _).o" ;;
+    esac
+  done
+
+  echo "==> building the shim for WASI"
+  local shim
+  shim="$(shim_for wasm32-wasip1)"
+
+  local flags=()
+  local name
+  for name in "${EXPORTS[@]}"; do flags+=("-Wl,--export=$name"); done
+
+  echo "==> linking beetle-vb.wasm"
+  "$cxx" --target=wasm32-wasi --sysroot="$sysroot" -mexec-model=reactor -O2 \
+    -fno-exceptions "${flags[@]}" -Wl,--allow-undefined \
+    "$objects"/*.o "$shim" -o "$dist/beetle-vb.wasm"
+  report beetle-vb.wasm
+}
+
 # --- bsnes -----------------------------------------------------------------------
 
 build_bsnes() {
@@ -328,6 +410,39 @@ build_gecko() {
   report gecko.mjs
 }
 
+# --- jgenesis --------------------------------------------------------------------
+
+build_jgenesis() {
+  wasm_bindgen
+  local src="$build/jgenesis"
+  clone_pinned "$JGENESIS_REPO" "$src" "$JGENESIS_COMMIT" "jgenesis $JGENESIS_TAG"
+
+  # The same bargain as Gecko's: a change to what is fetched is a patch file beside
+  # this script, applied once. jgenesis keeps a cartridge's battery memory to itself,
+  # and a browser that is to keep a save has to be able to read it and write it back.
+  local patch
+  for patch in "$here"/jgenesis-host/patches/*.patch; do
+    if git -C "$src" apply --check --reverse "$patch" > /dev/null 2>&1; then
+      continue
+    fi
+    echo "==> applying $(basename "$patch")"
+    git -C "$src" apply "$patch"
+  done
+
+  echo "==> compiling the jgenesis host (this takes a while)"
+  (cd "$here/jgenesis-host" && cargo build --release --quiet --target wasm32-unknown-unknown)
+  local module="$here/jgenesis-host/target/wasm32-unknown-unknown/release/gatherum_jgenesis_host.wasm"
+
+  echo "==> binding jgenesis.mjs"
+  local out="$build/jgenesis-out"
+  rm -rf "$out" && mkdir -p "$out"
+  "$bindgen/wasm-bindgen" --target web --out-dir "$out" --out-name jgenesis --no-typescript "$module"
+  cp "$out/jgenesis_bg.wasm" "$dist/jgenesis_bg.wasm"
+  cp "$out/jgenesis.js" "$dist/jgenesis.mjs"
+  report jgenesis_bg.wasm
+  report jgenesis.mjs
+}
+
 report() {
   local size
   size=$(stat -c%s "$dist/$1")
@@ -340,3 +455,5 @@ report() {
 if building mgba; then build_mgba; fi
 if building bsnes; then build_bsnes; fi
 if building gecko; then build_gecko; fi
+if building beetlevb; then build_beetlevb; fi
+if building jgenesis; then build_jgenesis; fi

@@ -193,6 +193,79 @@ public class RomHeaderTests
     }
 
     [Fact]
+    public void A_mega_drive_header_names_the_game_the_serial_and_the_markets()
+    {
+        var header = RomHeader.Read(RomFixtures.MegaDrive(
+            title: "SONIC THE             HEDGEHOG", serial: "GM 00001009-00", region: "JUE"));
+
+        Assert.NotNull(header);
+        Assert.Equal(RomSystem.MegaDrive, header.System);
+        Assert.Equal("Mega Drive", header.SystemName);
+        Assert.Equal("SONIC THE HEDGEHOG", header.Title);
+        Assert.Equal("Product GM 00001009-00", header.Cartridge);
+        Assert.Equal(0x10000, header.ProgramBytes);
+        Assert.Equal("Japan, North America, Europe", header.Region);
+        Assert.False(header.Battery);
+    }
+
+    [Fact]
+    public void A_mega_drive_header_calls_the_console_what_its_market_did()
+    {
+        Assert.Equal("Genesis", RomHeader.Read(RomFixtures.MegaDrive(console: "SEGA GENESIS"))!.SystemName);
+        var thirtyTwoX = RomHeader.Read(RomFixtures.MegaDrive(console: "SEGA 32X"));
+        Assert.Equal(RomSystem.Sega32X, thirtyTwoX!.System);
+        Assert.Equal("32X", thirtyTwoX.SystemName);
+        // The newer one-digit region code: bit 2 is the Americas.
+        Assert.Equal("North America", RomHeader.Read(RomFixtures.MegaDrive(region: "4"))!.Region);
+    }
+
+    [Fact]
+    public void A_mega_drive_board_with_a_battery_says_how_much_it_keeps()
+    {
+        var header = RomHeader.Read(RomFixtures.MegaDrive(saveRamBytes: 8 * 1024, battery: true));
+
+        Assert.NotNull(header);
+        Assert.Equal(8 * 1024, header.SaveRamBytes);
+        Assert.True(header.Battery);
+        Assert.Contains("Save memory: 8 KB", header.Describe());
+    }
+
+    [Fact]
+    public void A_virtual_boy_header_is_read_from_the_tail_of_the_cartridge()
+    {
+        var image = RomFixtures.VirtualBoy(title: "MARIOS TENNIS", maker: "01", code: "VMTE", version: 1);
+
+        // The head knows nothing: the header is at the far end.
+        Assert.Null(RomHeader.Read(image));
+        var header = RomHeader.ReadVirtualBoy(image.AsSpan(^0x220..), image.Length);
+
+        Assert.NotNull(header);
+        Assert.Equal(RomSystem.VirtualBoy, header.System);
+        Assert.Equal("MARIOS TENNIS", header.Title);
+        Assert.Equal("Game code VMTE, maker 01, version 1.1", header.Cartridge);
+        Assert.Equal("North America", header.Region);
+        Assert.Null(header.Battery);
+        // A tail of nothing has no codes in it, and is not a cartridge.
+        Assert.Null(RomHeader.ReadVirtualBoy(new byte[0x220], 0x220));
+    }
+
+    [Fact]
+    public async Task The_extractor_seeks_to_the_tail_for_a_virtual_boy_and_nothing_else()
+    {
+        var extractor = new RomTextExtractor();
+        var image = RomFixtures.VirtualBoy(title: "WARIO LAND");
+
+        await using var cartridge = new MemoryStream(image);
+        var text = await extractor.ExtractAsync(cartridge, MediaTypes.VirtualBoyRom, "wario.vb");
+        Assert.Contains("System: Virtual Boy", text);
+        Assert.Contains("Title: WARIO LAND", text);
+
+        // The same bytes under another name are not asked about their tail.
+        await using var stranger = new MemoryStream(image);
+        Assert.Equal("", await extractor.ExtractAsync(stranger, MediaTypes.Binary, "wario.bin"));
+    }
+
+    [Fact]
     public void A_super_nintendo_header_is_found_at_whichever_end_of_a_bank_it_sits()
     {
         var low = RomHeader.Read(RomFixtures.SuperNintendo("ZELDA III"));

@@ -26,6 +26,28 @@ public class RomTextExtractor : ITextExtractor
         var head = new byte[HeaderBytes];
         var read = await content.ReadAtLeastAsync(head, HeaderBytes, throwOnEndOfStream: false,
             cancellationToken);
-        return RomHeader.Read(head.AsSpan(0, read))?.Describe() ?? "";
+        var header = RomHeader.Read(head.AsSpan(0, read));
+        if (header is null && NamedVirtualBoy(fileName))
+            header = await ReadTailAsync(content, cancellationToken);
+        return header?.Describe() ?? "";
     }
+
+    /// <summary>The one cartridge whose header is at the far end of the file. Still
+    /// cheap — a seek and half a kilobyte — and only ever asked of a file whose name
+    /// says so, because the tail of anything else is just its last bytes.</summary>
+    private static async Task<RomHeader?> ReadTailAsync(Stream content,
+        CancellationToken cancellationToken)
+    {
+        if (!content.CanSeek || content.Length < RomHeader.VirtualBoyHeaderBytes)
+            return null;
+        content.Seek(-RomHeader.VirtualBoyHeaderBytes, SeekOrigin.End);
+        var tail = new byte[RomHeader.VirtualBoyHeaderBytes];
+        var read = await content.ReadAtLeastAsync(tail, tail.Length, throwOnEndOfStream: false,
+            cancellationToken);
+        return RomHeader.ReadVirtualBoy(tail.AsSpan(0, read),
+            (int)Math.Min(content.Length, int.MaxValue));
+    }
+
+    private static bool NamedVirtualBoy(string fileName) =>
+        Path.GetExtension(fileName).ToLowerInvariant() is ".vb" or ".vboy";
 }

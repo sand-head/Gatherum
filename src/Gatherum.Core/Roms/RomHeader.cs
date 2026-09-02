@@ -15,6 +15,9 @@ public enum RomSystem
     SuperNintendo,
     GameCube,
     Wii,
+    MegaDrive,
+    Sega32X,
+    VirtualBoy,
 }
 
 /// <summary>What a cartridge image says about itself before anything runs it: the
@@ -39,7 +42,13 @@ public sealed record RomHeader(
     /// knows — a truncated download, or a `.gb` that is really something else.</summary>
     public static RomHeader? Read(ReadOnlySpan<byte> bytes) =>
         ReadNes(bytes) ?? ReadGameBoy(bytes) ?? ReadGameBoyAdvance(bytes)
-        ?? ReadSega(bytes) ?? ReadSuperNintendo(bytes) ?? ReadDisc(bytes);
+        ?? ReadSega(bytes) ?? ReadMegaDrive(bytes) ?? ReadSuperNintendo(bytes) ?? ReadDisc(bytes);
+
+    /// <summary>How much of a Virtual Boy cartridge's tail its header takes. The one
+    /// machine here that wrote its header at the end of the file rather than anywhere
+    /// near the front, which is why <see cref="Read"/> cannot find it and
+    /// <see cref="ReadVirtualBoy"/> is asked for the tail instead.</summary>
+    public const int VirtualBoyHeaderBytes = 0x220;
 
     /// <summary>The header as lines a person — or a search index — can read.</summary>
     public string Describe()
@@ -49,7 +58,8 @@ public sealed record RomHeader(
         if (Title is { Length: > 0 })
             text.AppendLine($"Title: {Title}");
         text.AppendLine($"Cartridge: {Cartridge}");
-        text.AppendLine($"Program: {Kilobytes(ProgramBytes)}");
+        if (ProgramBytes > 0)
+            text.AppendLine($"Program: {Kilobytes(ProgramBytes)}");
         if (GraphicsBytes > 0)
             text.AppendLine($"Graphics: {Kilobytes(GraphicsBytes)}");
         if (SaveRamBytes > 0)
@@ -289,6 +299,132 @@ public sealed record RomHeader(
         return new RomHeader(system, systemName, title.Length == 0 ? null : title,
             cartridge, discBytes, 0, 0, null, region);
     }
+
+    // ---- Mega Drive and 32X ----------------------------------------------------
+
+    /// <summary>Sega's 16-bit header sits at $100, and it is generous: the console's
+    /// name — "SEGA MEGA DRIVE" or "SEGA GENESIS" by where the cartridge was sold, and
+    /// "SEGA 32X" for the add-on's — a title in Japanese and one for everywhere else,
+    /// the serial number the game was catalogued under, where the program and any
+    /// battery memory sit, and the regions it was made for.</summary>
+    private static RomHeader? ReadMegaDrive(ReadOnlySpan<byte> bytes)
+    {
+        if (bytes.Length < 0x200 || !bytes.Slice(0x100, 4).SequenceEqual("SEGA"u8))
+            return null;
+
+        var console = Ascii(bytes.Slice(0x100, 16));
+        var (system, systemName) = console.StartsWith("SEGA 32X", StringComparison.Ordinal)
+            ? (RomSystem.Sega32X, "32X")
+            : console.Contains("GENESIS", StringComparison.Ordinal)
+                ? (RomSystem.MegaDrive, "Genesis")
+                : (RomSystem.MegaDrive, "Mega Drive");
+
+        // The overseas title first, since it is Latin script; the domestic one is
+        // what a Japan-only cartridge has, and usually Latin script too.
+        var title = Words(Ascii(bytes.Slice(0x150, 48)));
+        if (title.Length == 0)
+            title = Words(Ascii(bytes.Slice(0x120, 48)));
+        var serial = Words(Ascii(bytes.Slice(0x180, 14)));
+
+        var romEnd = BinaryPrimitives.ReadUInt32BigEndian(bytes[0x1A4..]);
+        var programBytes = romEnd is > 0 and < 32 * 1024 * 1024 ? (int)romEnd + 1 : bytes.Length;
+
+        // "RA" at $1B0 says the board has memory of its own; the byte after says how
+        // it is wired, and bit 6 of it whether a battery keeps it. The range that
+        // follows is in bus addresses, and a board that hangs its RAM on one half of
+        // the bus has half as many bytes as the range spans.
+        var saveRamBytes = 0;
+        bool? battery = false;
+        if (bytes.Slice(0x1B0, 2).SequenceEqual("RA"u8))
+        {
+            var wiring = bytes[0x1B2];
+            var start = BinaryPrimitives.ReadUInt32BigEndian(bytes[0x1B4..]);
+            var end = BinaryPrimitives.ReadUInt32BigEndian(bytes[0x1B8..]);
+            var span = (long)end - start + 1;
+            if (((wiring >> 3) & 3) != 0)
+                span = (span + 1) / 2;
+            if (span is > 0 and <= 1024 * 1024)
+                saveRamBytes = (int)span;
+            battery = (wiring & 0x40) != 0;
+        }
+
+        return new RomHeader(system, systemName, title.Length == 0 ? null : title,
+            serial.Length == 0 ? "Cartridge" : $"Product {serial}",
+            programBytes, 0, saveRamBytes, battery, MegaDriveRegion(bytes.Slice(0x1F0, 3)));
+    }
+
+    /// <summary>Three letters at $1F0 — J, U and E for the three markets — in the old
+    /// style; one hexadecimal digit with a bit per market in the new. Both are read,
+    /// because both were shipped.</summary>
+    private static string? MegaDriveRegion(ReadOnlySpan<byte> code)
+    {
+        var text = Ascii(code);
+        var japan = text.Contains('J');
+        var americas = text.Contains('U');
+        var europe = text.Contains('E');
+        if (!japan && !americas && !europe && text.Length > 0
+            && Uri.IsHexDigit(text[0]) && text[0] is not ('E' or 'e'))
+        {
+            var bits = Convert.ToInt32(text[..1], 16);
+            japan = (bits & 1) != 0;
+            americas = (bits & 4) != 0;
+            europe = (bits & 8) != 0;
+        }
+        var markets = new List<string>(3);
+        if (japan) markets.Add("Japan");
+        if (americas) markets.Add("North America");
+        if (europe) markets.Add("Europe");
+        return markets.Count == 0 ? null : string.Join(", ", markets);
+    }
+
+    // ---- Virtual Boy -----------------------------------------------------------
+
+    /// <summary>A Virtual Boy cartridge keeps its header in the last 544 bytes of the
+    /// ROM, beside the reset vector the processor starts from: a twenty-byte title,
+    /// then the maker's two letters, the game's four, and a version. There is no magic
+    /// word, so the two codes being printable is the whole of the check — which is why
+    /// a file is only asked about this way when its name says Virtual Boy.
+    /// <paramref name="romBytes"/> is the whole file's length, which the tail alone
+    /// cannot know.</summary>
+    public static RomHeader? ReadVirtualBoy(ReadOnlySpan<byte> tail, int romBytes)
+    {
+        if (tail.Length < VirtualBoyHeaderBytes)
+            return null;
+        var header = tail[^VirtualBoyHeaderBytes..];
+        var maker = header.Slice(0x19, 2);
+        var code = header.Slice(0x1B, 4);
+        if (!Printable(maker) || !Printable(code))
+            return null;
+
+        var title = Words(Ascii(header[..20]));
+        var gameCode = Ascii(code);
+        return new RomHeader(RomSystem.VirtualBoy, "Virtual Boy",
+            title.Length == 0 ? null : title,
+            $"Game code {gameCode}, maker {Ascii(maker)}, version 1.{header[0x1F]}",
+            romBytes, 0, 0, null, NintendoRegion(gameCode[3]));
+    }
+
+    private static bool Printable(ReadOnlySpan<byte> text)
+    {
+        foreach (var letter in text)
+            if (letter is < 0x21 or >= 0x7F)
+                return false;
+        return true;
+    }
+
+    /// <summary>Fixed-width fields are space-padded, and a Japanese title may carry
+    /// bytes outside ASCII; both are dropped rather than printed as noise.</summary>
+    private static string Ascii(ReadOnlySpan<byte> field)
+    {
+        var text = new StringBuilder(field.Length);
+        foreach (var letter in field)
+            if (letter is >= 0x20 and < 0x7F)
+                text.Append((char)letter);
+        return text.ToString();
+    }
+
+    private static string Words(string padded) =>
+        string.Join(' ', padded.Split(' ', StringSplitOptions.RemoveEmptyEntries));
 
     // ---- Super Nintendo --------------------------------------------------------
 

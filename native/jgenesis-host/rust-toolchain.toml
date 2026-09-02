@@ -1,0 +1,7 @@
+# jgenesis builds on nightly — it leans on library features stable Rust has not yet
+# shipped — so this pins one from the day after its 0.14.1 release rather than whatever
+# "nightly" means on the day the image is built.
+[toolchain]
+channel = "nightly-2026-08-23"
+components = ["rust-src"]
+targets = ["wasm32-unknown-unknown"]

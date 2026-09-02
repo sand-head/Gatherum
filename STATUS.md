@@ -1,6 +1,9 @@
 # Status
 
-As of a Super Nintendo two people can play together on: bsnes, the second console here
+As of three more consoles on cores from elsewhere: a Virtual Boy on Beetle VB, the
+cleanest case the shim has met — plain C and C++ compiled against WASI, three system
+calls, no glue — and a Mega Drive and its 32X on jgenesis, a Rust emulator behind a host
+of its own in the shape Gecko's took, without the GPU. Before that: a Super Nintendo two people can play together on: bsnes, the second console here
 whose emulator Gatherum did not write, and the first one from elsewhere that has been
 *measured* to stay in step with a copy of itself rather than merely claimed to. Before
 that: a Game Boy Advance, the first such console — mGBA, built to one glue-free
@@ -142,8 +145,8 @@ browser sessions — including against the built container).
   description, categories, referenced-by, per-version download; extraction: text verbatim,
   PDF (PdfPig), image metadata (MetadataExtractor); media types resolved sensibly
   when browsers upload code as octet-stream.
-- **Cartridges play** — upload a `.nes`, `.gb`, `.gbc`, `.sms`, `.gg`, `.gba`, `.sfc` or
-  `.smc` and its page has a console on it. `RomPlayer` is an Interactive Auto island over `Emulation/`: a Nintendo
+- **Cartridges play** — upload a `.nes`, `.gb`, `.gbc`, `.sms`, `.gg`, `.gba`, `.sfc`,
+  `.smc`, `.gen`, `.smd`, `.32x`, `.vb` or `.vboy` and its page has a console on it. `RomPlayer` is an Interactive Auto island over `Emulation/`: a Nintendo
   Entertainment System (6502 with a dot-accurate picture chip, five sound channels,
   and the NROM/MMC1/UxROM/CNROM/MMC3/AxROM/GxROM boards), a Game Boy that becomes a
   Game Boy Color when the cartridge asks (SM83, the picture chip's mode timing and
@@ -151,7 +154,8 @@ browser sessions — including against the built container).
   a Game Gear when the header says so (Z80, the mode 4 picture chip with sprites and
   line interrupts, the SN76489's three tones and noise, Sega's paging hardware and
   Codemasters' board), and — on a core fetched rather than written, see below — a Game
-  Boy Advance and a Super Nintendo, all behind one `IEmulatorCore`. Keyboard or an on-screen pad
+  Boy Advance, a Super Nintendo, a Virtual Boy, a Mega Drive and a 32X, all behind one
+  `IEmulatorCore`. Keyboard or an on-screen pad
   labelled the way that console's own plastic was, sound through Web Audio in mono or
   stereo as the machine had it, and battery saves kept by the reader's own browser with
   a `.sav` download and upload beside them. It runs only in WebAssembly and says so on
@@ -172,9 +176,15 @@ browser sessions — including against the built container).
   surface JavaScript can call — unchanged between them, which is the claim the shim was
   written on. Nothing is committed and nothing is fetched at run time; a tree that has
   never run the script offers a download where those cartridges would have a console.
-  Two things a vendored core must be denied: the time (a frame counter answers mGBA's
-  `clock_time_get`, and zero answers bsnes's `clock()`) and a random power-on state
-  (`bsnes_entropy=None`). Verified in a scripted browser session against the running app
+  Beetle VB (the Virtual Boy) takes mGBA's road and imports three calls; jgenesis (the
+  Mega Drive and the 32X, told apart by the cartridge's header) is Rust and not
+  libretro, so like Gecko it has a host crate of its own, `jgenesis-host`, and one
+  patch to reach a cartridge's battery memory. Two things a vendored core must be
+  denied: the time (a frame counter answers mGBA's `clock_time_get`, and zero answers
+  bsnes's `clock()`) and a random power-on state (`bsnes_entropy=None`). jgenesis's Mega
+  Drive has been measured the way bsnes was — two of it, six hundred frames of scripted
+  two-player input on a hand-assembled cartridge, states compared every sixty, a control
+  run diverging — by `jgenesis-host/measure.mjs`, which is why it seats two. Verified in a scripted browser session against the running app
   and, for bsnes, by running two of it against six hundred frames of scripted two-player
   input and comparing `retro_serialize` every sixty — byte-identical at all ten
   checkpoints, with a control run proving different buttons still diverge. That

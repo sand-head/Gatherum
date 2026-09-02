@@ -1,7 +1,7 @@
 # Stage 0: the vendored emulator cores, each in a stage of its own. The toolchains they
 # need — a WASI clang, an Emscripten SDK, a Rust cross-compiler — never reach the image
 # that ships, editing C# never rebuilds an emulator, and editing one emulator's inputs
-# never rebuilds the other two: each stage copies only what its core is built from, so
+# never rebuilds the others: each stage copies only what its core is built from, so
 # its cache key is those files and nothing else. What comes out is what native/dist/
 # holds; see native/README.md.
 #
@@ -34,6 +34,17 @@ FROM core-base AS core-gecko
 COPY native/gecko-host ./gecko-host
 RUN ./build-core.sh gecko && rm -rf build gecko-host/target /usr/local/cargo/registry
 
+# Beetle VB is mGBA's shape: plain C and C++ against WASI, linked with the shim.
+FROM core-base AS core-beetlevb
+RUN rustup target add wasm32-wasip1
+COPY native/core-shim ./core-shim
+RUN ./build-core.sh beetlevb && rm -rf build core-shim/target /usr/local/cargo/registry
+
+# jgenesis is Gecko's shape: a Rust host of its own, whose pin rustup fetches.
+FROM core-base AS core-jgenesis
+COPY native/jgenesis-host ./jgenesis-host
+RUN ./build-core.sh jgenesis && rm -rf build jgenesis-host/target /usr/local/cargo/registry
+
 # Stage 1: compile and publish. The editor's Interactive Auto island relinks the
 # WebAssembly runtime with SkiaSharp's native library — that needs the wasm-tools
 # workload, and emscripten shells out to python.
@@ -58,6 +69,8 @@ RUN dotnet msbuild src/Gatherum.Infrastructure/Gatherum.Infrastructure.csproj \
 COPY --from=core-mgba /native/dist/ ./native/dist/
 COPY --from=core-bsnes /native/dist/ ./native/dist/
 COPY --from=core-gecko /native/dist/ ./native/dist/
+COPY --from=core-beetlevb /native/dist/ ./native/dist/
+COPY --from=core-jgenesis /native/dist/ ./native/dist/
 COPY src ./src
 # Published for one architecture on purpose. ONNX Runtime ships native libraries for
 # every platform it supports, and a portable publish carries all of them — most of a

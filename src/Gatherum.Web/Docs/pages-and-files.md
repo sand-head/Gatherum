@@ -92,8 +92,8 @@ Pages, uploaded `.docx` documents, and any text file open in the editor.
   place: reopen the book on any device you're signed in on and it opens where you left
   off, and each reader keeps their own place. A visitor on a public book is never
   remembered by the server — their place is kept by their own browser instead, and
-  goes no further. A **game cartridge** — a `.nes`, `.gb`, `.gbc`, `.sms`, `.gg` or
-  `.gba` file — plays: see
+  goes no further. A **game cartridge** — a `.nes`, `.gb`, `.gbc`, `.sms`, `.gg`, `.gba`,
+  `.sfc`, `.gen` or `.vb` file, among others — plays: see
   [Playing a cartridge](#playing-a-cartridge) below. Anything else offers a download.
 
 Editing autosaves. Presence shows who else has the document open, and if someone saved
@@ -102,16 +102,16 @@ stays in history either way.
 
 ## Playing a cartridge
 
-Upload a `.nes`, `.gb`, `.gbc`, `.sms`, `.gg`, `.gba`, `.sfc` or `.smc` cartridge — or a
-GameCube disc, as `.iso`, `.gcm` or `.rvz` — and its page has a console on it. Press
-**Play** and the game runs.
+Upload a `.nes`, `.gb`, `.gbc`, `.sms`, `.gg`, `.gba`, `.sfc`, `.smc`, `.gen`, `.smd`,
+`.32x`, `.vb` or `.vboy` cartridge — or a GameCube disc, as `.iso`, `.gcm` or `.rvz` —
+and its page has a console on it. Press **Play** and the game runs.
 
-The console is not a plug-in and not a download. For most of these machines the
-processor, the picture chip and the sound chip are all part of Gatherum itself; the Game
-Boy Advance, the Super Nintendo and the GameCube are big enough that their emulators are
-well-known ones from elsewhere, built into Gatherum when Gatherum was built. Either way it
-runs in your browser, the cartridge is fetched once, and nothing about the game leaves
-your machine afterwards.
+The console is not a plug-in and not a download. For the older machines the processor,
+the picture chip and the sound chip are all part of Gatherum itself; the Game Boy
+Advance, the Super Nintendo, the Virtual Boy, the Mega Drive and the GameCube are big
+enough that their emulators are well-known ones from elsewhere, built into Gatherum when
+Gatherum was built. Either way it runs in your browser, the cartridge is fetched once,
+and nothing about the game leaves your machine afterwards.
 
 - **The controls** are the arrow keys, <kbd>Z</kbd> and <kbd>X</kbd> for the two face
   buttons, <kbd>Enter</kbd> and <kbd>Shift</kbd> for the other two. What those last two
@@ -158,13 +158,14 @@ playing the same game.
   simply reading.
 
 > [!NOTE]
-> The Game Boy, the Game Gear and the Game Boy Advance are one-player machines here. Two
-> people on either meant two consoles and a cable between them, which is a second machine
-> to emulate rather than a second port to read — it is not built. Playing together also
-> asks that both machines agree frame for frame; for a console Gatherum wrote that is a
-> promise it keeps, and for one it did not write it is a claim that has to be measured
-> before anybody relies on it. The Super Nintendo's has been, which is why it plays with
-> two, and the Game Boy Advance's has not.
+> The Game Boy, the Game Gear, the Game Boy Advance and the Virtual Boy are one-player
+> machines here. Two people on any of them meant two consoles and a cable between them,
+> which is a second machine to emulate rather than a second port to read — it is not
+> built. Playing together also asks that both machines agree frame for frame; for a
+> console Gatherum wrote that is a promise it keeps, and for one it did not write it is
+> a claim that has to be measured before anybody relies on it. The Super Nintendo's and
+> the Mega Drive's have been, which is why they play with two; the Game Boy Advance's has
+> not, and the 32X's second machine has not either, which is why it seats one.
 
 ### The consoles
 
@@ -176,6 +177,9 @@ playing the same game.
 | Game Gear | `.gg` | One |
 | Game Boy Advance | `.gba` | One |
 | Super Nintendo | `.sfc`, `.smc` | Two |
+| Virtual Boy | `.vb`, `.vboy` | One |
+| Mega Drive (Genesis) | `.gen`, `.smd` | Two |
+| 32X | `.32x` | One |
 | GameCube | `.iso`, `.gcm`, `.rvz` | One |
 
 Gatherum knows the Nintendo Entertainment System's common cartridge boards (NROM, MMC1,
@@ -184,11 +188,11 @@ its clock, and MBC5) and the Master System's (Sega's own paging hardware, and th
 board Codemasters built for their own games). A cartridge on a board it has not met says
 so by name instead of failing quietly.
 
-The Game Boy Advance, the Super Nintendo and the GameCube are the three machines here
-whose emulators Gatherum did not write, so which games run well on them is those
-emulators' business rather than Gatherum's. They are also the three that are fetched and
-built rather than shipped, so a Gatherum built without them offers a download where the
-others offer a console, and says so.
+The Game Boy Advance, the Super Nintendo, the Virtual Boy, the Mega Drive with its 32X,
+and the GameCube are the machines here whose emulators Gatherum did not write, so which
+games run well on them is those emulators' business rather than Gatherum's. They are
+also the ones that are fetched and built rather than shipped, so a Gatherum built
+without them offers a download where the others offer a console, and says so.
 
 A Game Boy Advance cartridge's header says nothing about whether it saves, so the file's
 details do not either — the console works it out when the game starts. A Super Nintendo
@@ -199,6 +203,37 @@ wrote in front of it reads the same as a `.sfc` without them. The Super Nintendo
 has four face buttons rather than two, and they are drawn in the diamond the console
 printed them in: <kbd>Z</kbd> and <kbd>X</kbd> are B and A as everywhere else, and
 <kbd>A</kbd> and <kbd>S</kbd>, above them, are Y and X.
+
+### The Mega Drive and the 32X
+
+A Mega Drive cartridge is usually called `.md`, and that is the one name Gatherum will
+not take it under: `.md` is a page here. Rename it `.gen` — or `.smd`, the older
+interleaved dumps, which the console reads just the same. A 32X cartridge is a `.32x`,
+and the same console plays it, with the second machine the 32X bolted into the cartridge
+slot built around it; the cartridge's own header says which it is. The Sega CD is not
+here: it boots from a BIOS that cannot be shipped.
+
+The Mega Drive's pad has three buttons in a row and, on the later one, three more above
+them, and they are printed the way every emulator prints them onto a pad with a diamond:
+<kbd>Z</kbd> and <kbd>X</kbd> are B and C, <kbd>A</kbd> and <kbd>S</kbd> above them are
+A and Y, <kbd>Q</kbd> and <kbd>E</kbd> are X and Z, <kbd>Enter</kbd> is Start and
+<kbd>Shift</kbd> is Mode. A cartridge whose header names the machine "SEGA GENESIS"
+rather than "SEGA MEGA DRIVE" is listed as a Genesis, since that is what it was sold as,
+and the console runs at the region's own speed — a shade under sixty frames a second, or
+fifty for a European cartridge. The picture is always drawn at 320 by 240: a game that
+draws narrower or shorter, as many did, sits centred in it with a border.
+
+### The Virtual Boy
+
+A Virtual Boy drew two pictures, one for each eye, in red on black. The one here is the
+left eye's alone, in that red, on a flat screen — which is what a flat screen can
+honestly show of it. Its controller had two d-pads: the left one is the arrow keys, and
+the right one, which few games used, is the right stick of a game controller, since a
+keyboard has no second set of arrows to offer. <kbd>Q</kbd> and <kbd>E</kbd> are its L
+and R. The cartridge's header is at the far end of the file and has no magic word in it,
+so a Virtual Boy cartridge is known by its name — `.vb` or `.vboy` — and by nothing
+else; and every cartridge is given the 64 KB of battery memory the console could address,
+whether or not the game keeps anything in it.
 
 ### The GameCube
 

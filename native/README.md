@@ -27,7 +27,9 @@ will do, and the two here were built against the same shim without a line change
 `bsnes-support/libco-extras.c` is the one exception, and it is small on purpose: two
 coroutine calls and a clock that bsnes needs and its Emscripten backend does not
 implement. It is a translation unit of its own rather than a patch, so the core's source
-stays byte-for-byte what its licence points at.
+stays byte-for-byte what its licence points at. Beetle VB, the Virtual Boy, is the third
+libretro core and needed nothing at all: it is the shim's happiest case, plain C and C++
+with exceptions switched off, and it links against the same staticlib as mGBA.
 
 **`gecko-host/` is the shim's shape over a core that is not libretro.** Gecko is a Rust
 crate with a constructor, a frame loop and two sink traits, and it draws with WebGPU
@@ -41,6 +43,15 @@ keeps its memory card's contents to itself, and a browser that is to keep a save
 be able to read them. A patch is a file in the repository applied once at fetch time —
 never a fork, and small enough to read.
 
+**`jgenesis-host/` is the same shape again, without the GPU.** jgenesis is a Mega Drive
+emulator in Rust — a constructor, a `tick`, and three sink traits for picture, sound and
+saves — and it draws into a buffer of colours rather than onto a device. Its host owns
+the console and a fixed 320-by-240 canvas the picture is centred in, resamples nothing
+(jgenesis resamples its own sound chips to the rate it is told), packs a save state into
+a fixed-size envelope, and reaches the cartridge's battery memory through the one patch
+in its `patches/`. The same core boots a 32X, which is a Mega Drive with a second console
+in its cartridge slot; the cartridge's header says which.
+
 **The cores themselves are not here, and never will be.** `build-core.sh` fetches each at
 a pinned commit into `build/`, compiles it against a pinned toolchain, links the shim, and
 leaves the result in `dist/`. Both directories are gitignored. That is the same bargain
@@ -49,12 +60,12 @@ a known hash or commit, never committed, and never downloaded at run time.
 
 ## Three toolchains, because the cores differ
 
-| | mGBA | bsnes | Gecko |
-| --- | --- | --- | --- |
-| Toolchain | WASI SDK 25 | Emscripten 3.1.74 | Rust 1.96.0 + wasm-bindgen 0.2.118 |
-| Output | `dist/mgba.wasm` (1.6 MB) | `dist/bsnes.wasm` (2.3 MB) + `dist/bsnes.mjs` (84 KB) | `dist/gecko_bg.wasm` + `dist/gecko.mjs` |
-| Imports | ~14 WASI calls | Emscripten's own | wasm-bindgen's, and WebGPU |
-| Machines | Game Boy Advance | Super Nintendo | GameCube |
+| | mGBA | Beetle VB | bsnes | Gecko | jgenesis |
+| --- | --- | --- | --- | --- | --- |
+| Toolchain | WASI SDK 25 | WASI SDK 25 | Emscripten 3.1.74 | Rust 1.96.0 + wasm-bindgen 0.2.118 | Rust nightly-2026-08-23 + wasm-bindgen 0.2.118 |
+| Output | `dist/mgba.wasm` (1.6 MB) | `dist/beetle-vb.wasm` (412 KB) | `dist/bsnes.wasm` (2.3 MB) + `dist/bsnes.mjs` (84 KB) | `dist/gecko_bg.wasm` + `dist/gecko.mjs` | `dist/jgenesis_bg.wasm` + `dist/jgenesis.mjs` |
+| Imports | ~14 WASI calls | 3 WASI calls | Emscripten's own | wasm-bindgen's, and WebGPU | wasm-bindgen's |
+| Machines | Game Boy Advance | Virtual Boy | Super Nintendo | GameCube | Mega Drive, 32X |
 
 mGBA is plain C, single-threaded, no exceptions, software-rendered. That profile compiles
 straight against WASI and comes out as one module importing a handful of system calls and
@@ -78,6 +89,12 @@ within reach rather than the few cores that compile against WASI. It is not lice
 reach for a JavaScript dependency anywhere else, and `wwwroot/js/gatherum.js` is still the
 only hand-written JavaScript in the project. See `DECISIONS.md`.
 
+Beetle VB is mGBA's case again, and a cleaner one: Mednafen's Virtual Boy module as
+libretro carries it is compiled with `-fno-exceptions`, spawns nothing, and asks the
+host for three system calls, all of which say "no file". Its picture is the left eye's
+image alone, in the red the hardware drew in — the core's anaglyph mode with no glasses
+preset, which is what a flat screen can honestly show of a stereoscope.
+
 Gecko is the third shape. It is Rust, so it compiles with Rust's own `wasm32-unknown-unknown`
 target and needs neither SDK, and it is not libretro, so the shim has nothing to say to
 it: `gecko-host` is what says it. It draws with WebGPU — a GameCube's picture is a GPU's
@@ -88,6 +105,13 @@ frame handed over is always the one before: a lag of one, invisible, rather than
 every frame. Gecko also cannot compile its just-in-time compilers for the browser, so it
 interprets, and its speed is what an interpreter's is.
 
+jgenesis is Gecko's shape without Gecko's difficulty: Rust, not libretro, and drawing
+into a buffer, so its host is Gecko's with the GPU taken out. It builds on a pinned
+nightly because jgenesis leans on library features stable Rust has not shipped, and it
+is the one core whose save state has no fixed size — bincode's does not, quite — so the
+host measures one at load and reports that plus room, writes a state with its own
+length in front and zeros behind, and refuses one that has outgrown the room.
+
 One consequence of Asyncify leaks into the shim and is worth knowing before reading it:
 **a value returned across a fiber swap does not survive the trip.** The function body runs
 to completion, every side effect happens, and the caller is handed a zero. So anything
@@ -97,8 +121,8 @@ a second call that cannot swap reads it back.
 ## Building
 
 ```sh
-./native/build-core.sh          # both cores
-./native/build-core.sh bsnes    # just one
+./native/build-core.sh          # every core
+./native/build-core.sh bsnes    # just one: mgba, bsnes, gecko, beetlevb or jgenesis
 ```
 
 Needs `curl`, `git`, `make`, `clang`, and a Rust toolchain with both wasm targets:
@@ -108,15 +132,15 @@ rustup target add wasm32-wasip1 wasm32-unknown-emscripten
 ```
 
 The Dockerfile runs the same script, one stage per core, each copying only the files
-that core is built from: `core-shim` for the two libretro cores, `bsnes-support` for
-bsnes, `gecko-host` for Gecko. So a change to one core's inputs rebuilds that core and
+that core is built from: `core-shim` for the three libretro cores, `bsnes-support` for
+bsnes, `gecko-host` for Gecko, `jgenesis-host` for jgenesis. So a change to one core's inputs rebuilds that core and
 no other, and a change anywhere else rebuilds none. Each stage deletes what it fetched
 and compiled in the same step that made it, so the layer CI caches is the few megabytes
 in `dist/` rather than the gigabytes behind them.
 
 The WASI SDK, the Emscripten SDK and wasm-bindgen it fetches itself, once each, into
-`build/`; the Rust that Gecko pins, rustup fetches from `gecko-host/rust-toolchain.toml`
-on the way past. `clang` is for zstd, which is what an RVZ disc is compressed with and
+`build/`; the Rust that Gecko and jgenesis each pin, rustup fetches from their
+`rust-toolchain.toml` on the way past. `clang` is for zstd, which is what an RVZ disc is compressed with and
 which `cc` compiles for the browser. Everything after the first run is incremental;
 delete `native/build/` to start over. bsnes and Gecko each take about twenty minutes
 from cold.
@@ -163,6 +187,18 @@ chip attached to a real IPL, and the host boots without one. Nobody has measured
 it agreeing, and it has no save state to hand a second player anyway, so it reports one
 player.
 
+Beetle VB reads no clock and takes no randomness; the three calls it imports are the
+ones a printf makes. jgenesis's Mega Drive touches neither on its emulation path — the
+`rand` its common crate carries is for the Super Nintendo's power-on memory and the Z80
+core's own unit tests, and the wall clock it can read is for the Super Nintendo's
+real-time chip. Two of its Mega Drives have been measured in step — `jgenesis-host/measure.mjs`
+runs a cartridge assembled by hand that reads both pads into its memory, its palette and
+its sound chip, and compares two consoles' states every sixty frames over six hundred,
+with a third console given different buttons as the control — so the Mega Drive reports
+two players. The 32X reports one: its two extra processors were not in that cartridge.
+The Sega CD is not offered: jgenesis boots one only from
+the console's BIOS, which cannot be shipped, and there is no free one to ship instead.
+
 ## Licences
 
 Gatherum is AGPL-3.0-or-later, so anything linked into it has to be compatible with that.
@@ -182,6 +218,11 @@ what is fetched, is how that is met.
 
 Not every core is so obliging. Before adding one, read its licence rather than its README:
 
+**Beetle VB is GPL-2.0-or-later** — Mednafen's headers say so, file by file, and the
+V810 core's offers a second, permissive licence beside it. "Or later" is what makes it
+fit: taken at version 3, it links the way bsnes does. **jgenesis is GPL-3.0**, the same
+case as bsnes and Gecko, and nothing it compiles in is under anything else.
+
 **Gecko is GPL-3.0**, the same case as bsnes. Two things it brings with it are worth
 knowing. Dolphin's free DSP ROM is GPL-2.0-or-later, upgraded to v3 here as the licence
 allows. The IPL replacement Gecko boots discs with comes from its `solstice` submodule,
@@ -196,8 +237,14 @@ anyone who will care about that line.
 | bsnes | GPL-3.0-or-later | Yes — built |
 | Gecko | GPL-3.0 | Yes — built; see the note above on what it carries |
 | Dolphin's free DSP ROM | GPL-2.0-or-later | Yes, upgraded to v3 — built into Gecko's host |
-| Beetle / Mednafen | GPL-2.0-or-later | Yes, upgraded to v3 |
-| Mupen64Plus-Next | GPL-2.0-or-later | Yes, upgraded to v3 |
+| Beetle VB (Mednafen) | GPL-2.0-or-later | Yes, upgraded to v3 — built |
+| jgenesis | GPL-3.0 | Yes — built |
+| Beetle / Mednafen, the rest | GPL-2.0-or-later | Yes, upgraded to v3 — Saturn needs a BIOS nobody may ship |
+| Mupen64Plus-Next | GPL-2.0-or-later | Yes, upgraded to v3 — but wants a GL context the shim has no words for |
+| DeSmuME, melonDS | GPL-2.0-or-later, GPL-3.0 | Yes — but two screens and a stylus, which the seam cannot carry |
+| Flycast | GPL-2.0 | Unclear whether "or later", and it wants a BIOS and a JIT either way |
+| PicoDrive | custom, non-commercial | No — not free software |
+| BlastEm | GPL-3.0 | Would be, but its processor cores are x86 machine code |
 | SameBoy | MIT | Yes |
 | Gambatte | GPL-2.0-**only** | No — incompatible with AGPL-3.0 |
 | Snes9x | custom, non-commercial | No — not free software |
@@ -211,7 +258,7 @@ Most of the work is already done, because the shim is not specific to any core.
    licence does not fit cannot be added whatever else is true of it. Read what it
    compiles in, too: a submodule with no licence is a gap, and the table says so.
 2. Pin its repository and commit at the top of `build-core.sh`, and give it a
-   `build_<name>` function beside the three there.
+   `build_<name>` function beside the five there.
 3. Decide which toolchain it needs. Plain C with no threads, no coroutines and no
    exceptions goes to WASI and comes out glue-free; anything else goes to Emscripten,
    which is fine — a core needing GL, threads or exceptions is a reason to reach for it,

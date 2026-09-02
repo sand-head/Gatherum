@@ -1,0 +1,86 @@
+diff --git a/backend/genesis-components/src/cartridge.rs b/backend/genesis-components/src/cartridge.rs
+index b0c7148..8a26752 100644
+--- a/backend/genesis-components/src/cartridge.rs
++++ b/backend/genesis-components/src/cartridge.rs
+@@ -621,6 +621,12 @@ impl Cartridge {
+         self.external.get_memory()
+     }
+ 
++    #[inline]
++    #[must_use]
++    pub fn external_ram_mut(&mut self) -> &mut [u8] {
++        self.external.get_memory_mut()
++    }
++
+     #[inline]
+     #[must_use]
+     pub fn is_ram_persistent(&self) -> bool {
+diff --git a/backend/genesis-components/src/cartridge/eeprom.rs b/backend/genesis-components/src/cartridge/eeprom.rs
+index cc290d4..07ebe9e 100644
+--- a/backend/genesis-components/src/cartridge/eeprom.rs
++++ b/backend/genesis-components/src/cartridge/eeprom.rs
+@@ -462,6 +462,10 @@ impl<State: EepromState + Debug, const N: usize> EepromChip<State, N> {
+     pub fn get_memory(&self) -> &[u8] {
+         &self.memory
+     }
++
++    pub fn get_memory_mut(&mut self) -> &mut [u8] {
++        &mut self.memory
++    }
+ }
+ 
+ pub type X24C01Chip = EepromChip<X24C01State, 128>;
+diff --git a/backend/genesis-components/src/cartridge/external.rs b/backend/genesis-components/src/cartridge/external.rs
+index 940d7a3..4bac75f 100644
+--- a/backend/genesis-components/src/cartridge/external.rs
++++ b/backend/genesis-components/src/cartridge/external.rs
+@@ -257,6 +257,10 @@ impl Eeprom {
+     fn get_memory(&self) -> &[u8] {
+         match_each_eeprom!(self, chip => chip.get_memory())
+     }
++
++    fn get_memory_mut(&mut self) -> &mut [u8] {
++        match_each_eeprom!(self, chip => chip.get_memory_mut())
++    }
+ }
+ 
+ #[derive(Debug, Clone, Encode, Decode)]
+@@ -363,6 +367,15 @@ impl ExternalMemory {
+         }
+     }
+ 
++    #[must_use]
++    pub fn get_memory_mut(&mut self) -> &mut [u8] {
++        match self {
++            Self::None => &mut [],
++            Self::Ram(ram) => &mut ram.ram,
++            Self::Eeprom { chip, .. } => chip.get_memory_mut(),
++        }
++    }
++
+     #[must_use]
+     pub fn is_persistent(&self) -> bool {
+         match self {
+diff --git a/backend/genesis-core/src/api.rs b/backend/genesis-core/src/api.rs
+index ec54ff3..e470a75 100644
+--- a/backend/genesis-core/src/api.rs
++++ b/backend/genesis-core/src/api.rs
+@@ -184,6 +184,18 @@ impl GenesisEmulator {
+         self.bus.has_persistent_ram()
+     }
+ 
++    #[inline]
++    #[must_use]
++    pub fn external_ram(&self) -> &[u8] {
++        self.bus.cartridge().map_or(&[], Cartridge::external_ram)
++    }
++
++    #[inline]
++    #[must_use]
++    pub fn external_ram_mut(&mut self) -> &mut [u8] {
++        self.bus.cartridge_mut().map_or(&mut [], Cartridge::external_ram_mut)
++    }
++
+     #[inline]
+     #[must_use]
+     pub fn timing_mode(&self) -> TimingMode {

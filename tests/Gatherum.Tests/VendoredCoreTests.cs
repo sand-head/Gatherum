@@ -158,6 +158,57 @@ public class VendoredCoreTests
     }
 
     [Fact]
+    public void A_mega_drive_cartridge_is_recognised_by_the_word_at_the_head_of_its_header()
+    {
+        Assert.Equal(ConsoleKind.MegaDrive, Emulator.Identify(RomFixtures.MegaDrive(), "misnamed.bin"));
+        Assert.Equal(ConsoleKind.MegaDrive,
+            Emulator.Identify(RomFixtures.MegaDrive(console: "SEGA GENESIS"), "misnamed.bin"));
+        Assert.Equal(ConsoleKind.Sega32X,
+            Emulator.Identify(RomFixtures.MegaDrive(console: "SEGA 32X"), "misnamed.bin"));
+        // An interleaved dump spells the word differently, and is left to its name.
+        Assert.Equal(ConsoleKind.MegaDrive, Emulator.Identify(new byte[0x400], "game.smd"));
+        Assert.Equal(ConsoleKind.Sega32X, Emulator.Identify(new byte[0x400], "game.32x"));
+    }
+
+    [Fact]
+    public void A_virtual_boy_cartridge_is_known_by_its_name_alone()
+    {
+        // Its header is at the end of the file and carries no magic word, so the bytes
+        // say nothing and the extension has the last word.
+        Assert.Null(Emulator.Identify(RomFixtures.VirtualBoy(), "misnamed.bin"));
+        Assert.Equal(ConsoleKind.VirtualBoy, Emulator.Identify(RomFixtures.VirtualBoy(), "game.vb"));
+        Assert.Equal(ConsoleKind.VirtualBoy, Emulator.Identify(new byte[0x400], "game.vboy"));
+    }
+
+    [Fact]
+    public void The_three_go_to_cores_from_elsewhere_and_are_typed_for_a_console()
+    {
+        Assert.True(Emulator.NeedsVendoredCore(RomFixtures.MegaDrive(), "game.gen"));
+        Assert.True(Emulator.NeedsVendoredCore(RomFixtures.VirtualBoy(), "game.vb"));
+        Assert.True(VendoredCore.Handles(ConsoleKind.MegaDrive));
+        Assert.True(VendoredCore.Handles(ConsoleKind.Sega32X));
+        Assert.True(VendoredCore.Handles(ConsoleKind.VirtualBoy));
+        Assert.False(VendoredCore.LoadsByUrl(ConsoleKind.MegaDrive));
+
+        Assert.Equal(MediaTypes.MegaDriveRom, MediaTypes.Resolve(null, "game.gen"));
+        Assert.Equal(MediaTypes.MegaDriveRom, MediaTypes.Resolve(null, "game.smd"));
+        Assert.Equal(MediaTypes.Sega32XRom, MediaTypes.Resolve(null, "game.32x"));
+        Assert.Equal(MediaTypes.VirtualBoyRom, MediaTypes.Resolve(null, "game.vboy"));
+        Assert.True(MediaTypes.IsRom(MediaTypes.Binary, "game.vb"));
+        Assert.True(MediaTypes.IsRom(MediaTypes.MegaDriveRom, "game.gen"));
+    }
+
+    [Fact]
+    public void A_mega_drive_cartridge_named_md_is_still_a_page()
+    {
+        // The commonest name for a Mega Drive dump is the wiki's own name for a page,
+        // and a wiki that mistook its pages for cartridges would be no wiki at all.
+        Assert.Equal(MediaTypes.Markdown, MediaTypes.Resolve(null, "notes.md"));
+        Assert.False(MediaTypes.IsRom(MediaTypes.Markdown, "notes.md"));
+        Assert.Null(Emulator.Identify(new byte[0x400], "notes.md"));
+    }
+
+    [Fact]
     public void A_disc_page_offers_a_console_rather_than_a_download()
     {
         Assert.True(MediaTypes.IsRom(MediaTypes.GameCubeRom, "game.iso"));

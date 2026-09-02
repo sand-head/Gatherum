@@ -17,8 +17,9 @@ namespace Gatherum.Client.Emulation;
 /// promise: its determinism, its accuracy and its bugs are somebody else's. So a
 /// descriptor says how many players a core is trusted with, and the answer is one until
 /// somebody has <em>measured</em> otherwise — two copies of it, the same cartridge, the
-/// same buttons, byte-identical states. bsnes has been measured and mGBA has not, which
-/// is the whole of why one of them plays together and the other does not.</para>
+/// same buttons, byte-identical states. bsnes and jgenesis's Mega Drive have been
+/// measured and mGBA has not, which is the whole of why two of them play together and
+/// the other does not.</para>
 ///
 /// <para>A disc is a cartridge too big to pass through here. A GameCube image is over a
 /// gigabyte, and the WebAssembly heap this runs in is not the place for it: a machine
@@ -72,7 +73,50 @@ public sealed class VendoredCore : IEmulatorCore, IDisposable
             // measured two of it agreeing.
             PlayerCount: 1, Settings: [],
             LoadsByUrl: true, NeedsWebGpu: true),
+
+        // The Mega Drive and the 32X are one core with two machines in it, told apart
+        // by the cartridge's header; the descriptors differ in what they are called and
+        // in what has been measured.
+        [ConsoleKind.MegaDrive] = new(
+            "Mega Drive", "/cores/jgenesis.mjs", ".gen", MegaDrivePad,
+            // Two, and measured: two of these run six hundred frames of scripted
+            // two-player input on a cartridge that reads both pads into its memory,
+            // its palette and its sound chip, and come out byte for byte the same at
+            // every sixtieth frame, while a third given other buttons does not.
+            // native/jgenesis-host/measure.mjs is the measurement.
+            PlayerCount: 2, Settings: []),
+
+        [ConsoleKind.Sega32X] = new(
+            "32X", "/cores/jgenesis.mjs", ".32x", MegaDrivePad,
+            // One: the measurement above ran a Mega Drive cartridge, and the two
+            // processors the 32X adds have not been held to it.
+            PlayerCount: 1, Settings: []),
+
+        [ConsoleKind.VirtualBoy] = new(
+            "Virtual Boy", "/cores/beetle-vb.wasm", ".vb",
+            // Two of the eight are a second d-pad, on the right of the console's
+            // controller; the seam has no second d-pad, so a controller's right stick
+            // stands in for it below and a keyboard goes without.
+            new("A", "B", "Start", "Select", "L", "R"),
+            // A Virtual Boy had one player, and no cable to add another.
+            PlayerCount: 1,
+            // The flat picture: the left eye's image alone, in the red the hardware
+            // drew in, rather than two eyes overlaid for glasses nobody has on. And the
+            // right stick of a controller as the right d-pad, which is the only way the
+            // seam can reach it.
+            Settings:
+            [
+                "vb_3dmode", "anaglyph", "vb_anaglyph_preset", "disabled",
+                "vb_color_mode", "black & red", "vb_right_analog_to_digital", "enabled",
+            ]),
     };
+
+    /// <summary>A Mega Drive pad has three buttons in a row and, on the six-button one,
+    /// three more above: the seam's positions land on them the way every libretro
+    /// frontend lands them. B is B and the right face button is C; the two above are A
+    /// and Y; the shoulders are X and Z; and Mode sits where Select would.</summary>
+    private static readonly ButtonLabels MegaDrivePad =
+        new("C", "B", "Start", "Mode", "X", "Z", X: "Y", Y: "A");
 
     /// <summary>How often the cartridge's battery memory is checked for changes. Every
     /// frame would be a hash of a hundred kilobytes sixty times a second to answer a

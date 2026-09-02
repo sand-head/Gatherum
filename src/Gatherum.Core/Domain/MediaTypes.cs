@@ -20,6 +20,9 @@ public static class MediaTypes
     public const string GameBoyAdvanceRom = "application/x-gba-rom";
     public const string SuperNintendoRom = "application/x-snes-rom";
     public const string GameCubeRom = "application/x-gamecube-rom";
+    public const string MegaDriveRom = "application/x-genesis-rom";
+    public const string Sega32XRom = "application/x-sega-32x-rom";
+    public const string VirtualBoyRom = "application/x-virtual-boy-rom";
 
     /// <summary>What a directory is, when it is only a place to keep things. A folder
     /// somebody made in their file manager is a node too.</summary>
@@ -57,6 +60,15 @@ public static class MediaTypes
         [".iso"] = GameCubeRom,
         [".gcm"] = GameCubeRom,
         [".rvz"] = GameCubeRom,
+        // Not `.md`, though a Mega Drive cartridge is called that as often as anything:
+        // here that is a page, and a wiki that mistook its own pages for cartridges
+        // would be no wiki at all. `.bin` is left alone for the same reason it is on a
+        // disc — it names everything.
+        [".gen"] = MegaDriveRom,
+        [".smd"] = MegaDriveRom,
+        [".32x"] = Sega32XRom,
+        [".vb"] = VirtualBoyRom,
+        [".vboy"] = VirtualBoyRom,
     };
 
     /// <summary>Extensions whose content is text even when the upload says otherwise —
@@ -102,12 +114,15 @@ public static class MediaTypes
     public static bool IsRom(string mediaType, string fileName) =>
         mediaType is NesRom or GameBoyRom or GameBoyColorRom
             or MasterSystemRom or GameGearRom or GameBoyAdvanceRom or SuperNintendoRom
-            or GameCubeRom ||
+            or GameCubeRom or MegaDriveRom or Sega32XRom or VirtualBoyRom ||
         RomExtensions.Contains(Path.GetExtension(fileName));
 
     private static readonly HashSet<string> RomExtensions =
         new(StringComparer.OrdinalIgnoreCase)
-        { ".nes", ".gb", ".gbc", ".sms", ".gg", ".gba", ".sfc", ".smc", ".iso", ".gcm", ".rvz" };
+        {
+            ".nes", ".gb", ".gbc", ".sms", ".gg", ".gba", ".sfc", ".smc", ".iso", ".gcm", ".rvz",
+            ".gen", ".smd", ".32x", ".vb", ".vboy",
+        };
 
     public static bool IsText(string mediaType, string fileName) =>
         mediaType.StartsWith("text/", StringComparison.OrdinalIgnoreCase) ||

@@ -77,7 +77,8 @@ auto-login. Migrations: `dotnet ef migrations add <Name> -p src/Gatherum.Infrast
   the foot of a page (`NodeCategories`), version panel, file view, settings keys, and
   the ROM player (`RomPlayer` over `Emulation/` — `IEmulatorCore` with a NES, a Game Boy
   and a Master System behind it, here because a console only ever runs in the reader's
-  own browser, `VendoredCore` for the machines fetched at build time, plus
+  own browser, `VendoredCore` for the machines fetched at build time — a Game Boy
+  Advance, a Super Nintendo, a Virtual Boy, a Mega Drive and 32X, a GameCube — plus
   `Emulation/Netplay/` where two of them keep in step) —
   plus Gatherum's Markdown dialect, which lives
   here because it is the editor's word: `GatherumMarkdown` (the extension set and the
@@ -92,16 +93,18 @@ auto-login. Migrations: `dotnet ef migrations add <Name> -p src/Gatherum.Infrast
   compiled to WebAssembly. `core-shim/` is Rust and is most of what lives in the
   repo — a `no_std` staticlib giving libretro's function-pointer interface a flat surface
   JavaScript can call, because JavaScript cannot manufacture a wasm function pointer, and
-  the same one links both libretro cores unchanged (`bsnes-support/libco-extras.c` is the
-  small exception, three functions bsnes's Emscripten backend leaves out). `gecko-host/`
-  is the same flat surface built over a core that is not libretro at all: Gecko is a Rust
-  crate, and the host owns its console, draws its picture through WebGPU and reads it
-  back, and carries the two-file patch that lets a browser reach the memory card.
-  `build-core.sh` fetches each core at a pinned commit and builds it — mGBA against WASI,
+  the same one links all three libretro cores unchanged (`bsnes-support/libco-extras.c`
+  is the small exception, three functions bsnes's Emscripten backend leaves out).
+  `gecko-host/` is the same flat surface built over a core that is not libretro at all:
+  Gecko is a Rust crate, and the host owns its console, draws its picture through WebGPU
+  and reads it back, and carries the two-file patch that lets a browser reach the memory
+  card. `jgenesis-host/` is that shape again over jgenesis, the Mega Drive, minus the
+  GPU, with its own one patch for the cartridge's battery memory. `build-core.sh`
+  fetches each core at a pinned commit and builds it — mGBA and Beetle VB against WASI,
   bsnes against Emscripten, because a core built out of coroutines and exceptions cannot
-  use the first, Gecko with Rust's own wasm target and wasm-bindgen; what it fetches and
-  what it emits are both gitignored, the same bargain `models/` strikes. See
-  `native/README.md`, which also carries the licence table.
+  use the first, Gecko and jgenesis with Rust's own wasm target and wasm-bindgen; what
+  it fetches and what it emits are both gitignored, the same bargain `models/` strikes.
+  See `native/README.md`, which also carries the licence table.
 - `tests/Gatherum.Tests` — unit tests plus `AppIntegrationTests` booting the real app.
 
 Render modes: static SSR for pages and layout; every interactive component is an
@@ -335,9 +338,10 @@ second icon set, and don't hand-draw a path when the pack has one.
 **Add a vendored console** (a machine too big to write from scratch):
 1. Read `native/README.md` first — it carries the licence table, and a core whose licence
    does not fit AGPL-3.0 cannot be added whatever else is true of it.
-2. Pin it in `native/build-core.sh` beside the two there. Plain C with no threads, no
-   coroutines and no exceptions goes to WASI and comes out glue-free; anything else goes
-   to Emscripten. Link it against `core-shim` unchanged: the shim is not specific to any
+2. Pin it in `native/build-core.sh` beside the five there. Plain C with no threads, no
+   coroutines and no exceptions goes to WASI and comes out glue-free — C++ too, with
+   exceptions switched off, which is what Beetle VB is; anything else goes to
+   Emscripten. Link it against `core-shim` unchanged: the shim is not specific to any
    core, and on the WASI side anything the built module imports beyond WASI is a source
    file you meant to compile and did not.
 3. Never let it learn the time. mGBA asks WASI for `clock_time_get` and the host answers
@@ -346,6 +350,8 @@ second icon set, and don't hand-draw a path when the pack has one.
 4. Give it a row in `VendoredCore.Machines` — module URL, pad labels, player count, and
    any core option that changes what the machine *does* rather than how it looks. Teach
    `Emulator.Identify` its bytes; `MediaTypes` and `FileView.IsRom` as for any console.
+   Never claim `.md` or `.bin` for a cartridge: one is a page and the other is
+   everything.
 5. Report `PlayerCount` 1 until you have **measured** two of it in step: same cartridge,
    scripted two-player input, `retro_serialize` compared every sixty frames over several
    hundred, plus a control run proving different buttons still diverge. Netplay is two

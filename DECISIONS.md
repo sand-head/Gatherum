@@ -2302,3 +2302,95 @@ to play together must first put its sticks on the wire. And `gatherum_set_sticks
 the one call `gatherum.js` treats as optional in a core module, so a `dist/` built
 before sticks existed still opens and plays; it just cannot be told where the stick is
 until it is rebuilt.
+
+## Two more consoles from elsewhere, and the ones left on the shelf
+
+Asked for more of the notable Nintendo and Sega machines, the question was which
+emulators could honestly be added: the licence has to fit AGPL-3.0, the core has to
+compile to WebAssembly with no GPU and no threads, and the seam has to be able to carry
+the machine's controls and picture. Two fit outright; the rest are recorded here with the
+reason each does not, so the next person does not repeat the search.
+
+**The Virtual Boy is Beetle VB, and it is the shim's cleanest case yet.** Mednafen's
+module as libretro carries it is C and C++ built with exceptions and RTTI off, spawns
+nothing, and reads no clock — so it took mGBA's road through the WASI SDK and came out as
+one 412 KB module importing three system calls, all of which the host already answered
+for mGBA. Not a line of `core-shim` or `gatherum.js` changed, which was the claim the
+shim was written on, tested a third time. Two choices are the host's rather than the
+core's. The picture is the left eye's image alone, in the red the hardware drew in — the
+core's anaglyph mode with the glasses preset disabled, which is what a flat screen can
+honestly show of a stereoscope; the side-by-side and line-interleaved modes are for
+hardware nobody has. And the controller's second d-pad, which the seam has no bits for
+(it sits on libretro's L2, R2, L3 and R3, above the twelve the seam carries), is driven
+from a controller's right stick through the core's own `vb_right_analog_to_digital`
+option and the shim's analog path — the first libretro core here to read the sticks the
+shim has answered since the GameCube. A keyboard goes without, and the manual says so.
+Its header is the one that broke a rule of thumb: it sits in the last 544 bytes of the
+cartridge, so `RomTextExtractor` now seeks to the tail — only for a file whose name says
+Virtual Boy, because the tail of anything else is just its last bytes — and
+`Emulator.Identify` trusts the name alone, since there is no magic word to trust.
+
+**The Mega Drive is jgenesis, and the search for it is most of this entry.** Every
+well-known Mega Drive core is unfree or unportable: Genesis Plus GX and PicoDrive are
+non-commercial, BlastEm is GPL-3.0 but its 68000 and Z80 are x86 machine code emitted at
+run time, Gens and Kega are older still or closed. Mednafen's own module is GPL but has
+no libretro port. jgenesis — GPL-3.0, Rust, and with a web build of its own — is the one
+that fits, and it fits the way Gecko did: not libretro, so a host crate of its own,
+`native/jgenesis-host`, exporting the shim's names. It is Gecko's host without the GPU,
+and three things about it were its own.
+
+- **The picture is a fixed canvas.** The seam fixes a picture's size at load, and a Mega
+  Drive changes width by register, height by region, and doubles its lines when a game
+  interlaces. The host hands over 320 by 240 always and centres whatever the console
+  drew in it, reading one field of an interlaced frame. A narrow game wears a border
+  rather than being stretched unevenly.
+- **A save state is bincode, and its size moves.** The seam wants a constant. The host
+  measures a state at load, reports that plus 64 KB, writes each state with its own
+  length in front and zeros behind, and refuses one that has outgrown the room rather
+  than truncating it. A state of the probe cartridge is 1.2 MB, most of it VRAM and the
+  cartridge's memory.
+- **The battery memory is reached through a patch.** jgenesis keeps a cartridge's RAM to
+  itself and writes it out through a `SaveWriter`, and the seam wants a pointer it can
+  read and write in place. `patches/external-ram.patch` adds a mutable accessor down
+  through the cartridge, its external memory and the EEPROM chips — the same bargain as
+  Gecko's memory-card patch, and about the same size. jgenesis's own save writer is
+  given nothing and keeps nothing.
+
+It also needs a nightly compiler — jgenesis leans on library features stable Rust has not
+shipped — so the host pins one from the day after the 0.14.1 release rather than
+whatever "nightly" means when the image is built, and it pins wasm-bindgen to exactly
+the version `build-core.sh` fetches, because a fresh lockfile picked a newer crate and
+the tool refused it. The same core boots the 32X, a Mega Drive with two more processors
+in its cartridge slot; the cartridge's header says which, and `ConsoleKind.Sega32X` is a
+second descriptor over the same module. The Sega CD it could also boot, from a BIOS that
+cannot be shipped and has no free replacement, so it is not offered.
+
+**Measured, not assumed.** The rule for a vendored core is one player until two of it
+have been measured in step, and the measurement for bsnes was made by hand. This one is a
+script, `native/jgenesis-host/measure.mjs`, so it can be made again: it assembles a
+cartridge that reads both pads every frame into work RAM, the palette and the PSG, runs
+three consoles under Node — two on the same scripted buttons, one on different ones —
+and compares their states every sixty frames over six hundred. All ten checkpoints
+agreed, the control diverged at every one, and a state saved from one console and loaded
+into another ran on in step. So the Mega Drive seats two. The 32X seats one, because that
+cartridge never woke its second machine. The caveat is stated plainly: the cartridge is a
+probe, not a game, and it never touched the FM chip or DMA; the argument that those are
+deterministic too is that jgenesis's emulation path reads no clock and takes no
+randomness — the `rand` in its common crate is for the Super Nintendo's power-on memory
+and the Z80's unit tests — which was checked in the source rather than assumed.
+
+**Left on the shelf, and why.** The Nintendo 64: Mupen64Plus-Next and ParaLLEl-N64 fit
+the licence but render through a GL context the shim has no words for, and a software
+RDP interpreted in WebAssembly would be a slideshow. The DS: DeSmuME and melonDS fit too,
+but a machine with two screens and a stylus needs a seam that can carry a pointer, which
+this one cannot, and a second screen the player has no place for. The Saturn: Beetle
+Saturn boots only from the console's BIOS. The Dreamcast: Flycast wants a BIOS and a
+JIT, and whether its GPL-2.0 is "or later" is not written down. The Sega CD, as above.
+The SG-1000 would be the Master System core in C# with the older picture chip's modes,
+which is a from-scratch change to a console this project wrote, not an emulator to add.
+Each is a row in the licence table now, with its reason.
+
+**One name refused.** A Mega Drive cartridge is called `.md` more often than anything,
+and `.md` is a page here. It is not claimed, and a test says so: a wiki that mistook its
+own pages for cartridges would be no wiki at all. `.gen` and `.smd` are what the manual
+tells people to rename one to, and `.bin` is left alone for the reason it is on a disc.

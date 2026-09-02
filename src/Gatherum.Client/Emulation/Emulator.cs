@@ -14,6 +14,12 @@ public enum ConsoleKind
     GameBoyAdvance,
     SuperNintendo,
     GameCube,
+    MegaDrive,
+    /// <summary>The 32X is a Mega Drive with a second console bolted through its
+    /// cartridge slot: the same core boots both, and a cartridge says which in its
+    /// header.</summary>
+    Sega32X,
+    VirtualBoy,
     /// <summary>Recognised so that a Wii disc is told apart from a GameCube one and
     /// said no to by name, rather than fed to a core that would boot it wrong or
     /// fetched whole into a heap it cannot fit in. Nothing plays it.</summary>
@@ -36,6 +42,10 @@ public static class Emulator
             return ConsoleKind.GameBoyAdvance;
         if (SegaRegion(rom) is { } region)
             return region >= 5 ? ConsoleKind.GameGear : ConsoleKind.MasterSystem;
+        // Sega's word at $100 before the Super Nintendo's checksum: a name is a surer
+        // thing than sixteen bits that happen to add up.
+        if (SegaCartridgeKind(rom) is { } sega)
+            return sega;
         if (LooksLikeSuperNintendo(rom))
             return ConsoleKind.SuperNintendo;
         if (DiscKind(rom) is { } disc)
@@ -52,6 +62,11 @@ public static class Emulator
             ".gba" => ConsoleKind.GameBoyAdvance,
             ".sfc" or ".smc" => ConsoleKind.SuperNintendo,
             ".gcm" or ".rvz" => ConsoleKind.GameCube,
+            ".gen" or ".smd" => ConsoleKind.MegaDrive,
+            ".32x" => ConsoleKind.Sega32X,
+            // A Virtual Boy cartridge keeps its header at the very end of the file and
+            // stamps no magic word anywhere, so its name is all there is to go on.
+            ".vb" or ".vboy" => ConsoleKind.VirtualBoy,
             _ => null,
         };
     }
@@ -87,7 +102,8 @@ public static class Emulator
             ConsoleKind.GameBoy => new GameBoyConsole(rom),
             ConsoleKind.MasterSystem => new MasterSystem(rom, gameGear: false),
             ConsoleKind.GameGear => new MasterSystem(rom, gameGear: true),
-            ConsoleKind.GameBoyAdvance or ConsoleKind.SuperNintendo or ConsoleKind.GameCube =>
+            ConsoleKind.GameBoyAdvance or ConsoleKind.SuperNintendo or ConsoleKind.GameCube
+                or ConsoleKind.MegaDrive or ConsoleKind.Sega32X or ConsoleKind.VirtualBoy =>
                 throw new NotSupportedException(
                     "This cartridge plays on a core this build did not fetch. " +
                     "See native/README.md."),
@@ -97,9 +113,9 @@ public static class Emulator
             _ => throw new NotSupportedException(
                 "This does not look like a cartridge image the player knows: it plays " +
                 "Nintendo Entertainment System (.nes), Game Boy (.gb, .gbc), " +
-                "Game Boy Advance (.gba), Super Nintendo (.sfc, .smc), " +
-                "Master System (.sms), Game Gear (.gg) and GameCube (.iso, .gcm, .rvz) " +
-                "files."),
+                "Game Boy Advance (.gba), Super Nintendo (.sfc, .smc), Virtual Boy " +
+                "(.vb, .vboy), Master System (.sms), Game Gear (.gg), Mega Drive " +
+                "(.gen, .smd), 32X (.32x) and GameCube (.iso, .gcm, .rvz) files."),
         };
 
     /// <summary>The Super Nintendo is the one machine here that stamped nothing at a
@@ -125,6 +141,20 @@ public static class Emulator
                 return true;
         }
         return false;
+    }
+
+    /// <summary>Every licensed Mega Drive cartridge begins its header at $100 with the
+    /// console's name — "SEGA MEGA DRIVE" or "SEGA GENESIS", depending on where it was
+    /// sold — and a 32X cartridge says "SEGA 32X" in the same place, which is how the one
+    /// core that boots both knows which machine to build. A dump saved by an old copier
+    /// is interleaved and spells it differently, and is left to the name.</summary>
+    private static ConsoleKind? SegaCartridgeKind(ReadOnlySpan<byte> rom)
+    {
+        if (rom.Length < 0x200 || !rom.Slice(0x100, 4).SequenceEqual("SEGA"u8))
+            return null;
+        return rom.Slice(0x100, 8).SequenceEqual("SEGA 32X"u8)
+            ? ConsoleKind.Sega32X
+            : ConsoleKind.MegaDrive;
     }
 
     /// <summary>A GameCube disc carries a magic word at $1C and a Wii one at $18, and

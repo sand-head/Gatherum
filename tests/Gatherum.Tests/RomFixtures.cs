@@ -193,6 +193,60 @@ public static class RomFixtures
         return copierHeader ? [.. new byte[512], .. image] : image;
     }
 
+    /// <summary>A Mega Drive cartridge, or a 32X one: Sega's header at $100 with the
+    /// console's name, the overseas title, the serial, where the program ends, the
+    /// battery memory if the board has any, and the markets it was made for. No program
+    /// in it, for the reason the Game Boy Advance fixture has none.</summary>
+    public static byte[] MegaDrive(string title = "GATHERUM TEST", string serial = "GM 00001009-00",
+        string region = "JUE", string console = "SEGA MEGA DRIVE", int saveRamBytes = 0,
+        bool battery = false)
+    {
+        var image = new byte[0x10000];
+        Array.Fill(image, (byte)' ', 0x100, 0x100);
+        Write(image, 0x100, console);
+        Write(image, 0x110, "(C)SEGA 1991.JUL");
+        Write(image, 0x150, title);
+        Write(image, 0x180, serial);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(image.AsSpan(0x1A4),
+            (uint)image.Length - 1);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(image.AsSpan(0x1A8), 0xFF0000);
+        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(image.AsSpan(0x1AC), 0xFFFFFF);
+        if (saveRamBytes > 0)
+        {
+            Write(image, 0x1B0, "RA");
+            // Odd bytes only, as most boards were wired, so the range spans twice the
+            // bytes; bit 6 is the battery.
+            image[0x1B2] = (byte)(0xA0 | (battery ? 0x40 : 0) | 0x18);
+            image[0x1B3] = 0x20;
+            System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(image.AsSpan(0x1B4), 0x200001);
+            System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(image.AsSpan(0x1B8),
+                (uint)(0x200001 + saveRamBytes * 2 - 2));
+        }
+        Write(image, 0x1F0, region);
+        return image;
+    }
+
+    /// <summary>A Virtual Boy cartridge: 1 KB — the console wants a power of two — with
+    /// the header in the last 544 bytes, where the hardware keeps it.</summary>
+    public static byte[] VirtualBoy(string title = "GATHERUM TEST", string maker = "01",
+        string code = "VGTE", byte version = 0)
+    {
+        var image = new byte[0x400];
+        var header = image.Length - 0x220;
+        Array.Fill(image, (byte)' ', header, 20);
+        Write(image, header, title);
+        Write(image, header + 0x19, maker);
+        Write(image, header + 0x1B, code);
+        image[header + 0x1F] = version;
+        return image;
+    }
+
+    private static void Write(byte[] image, int at, string text)
+    {
+        foreach (var (character, index) in text.Select((c, i) => (c, i)))
+            image[at + index] = (byte)character;
+    }
+
     public static readonly byte[] NintendoLogo =
     [
         0xCE, 0xED, 0x66, 0x66, 0xCC, 0x0D, 0x00, 0x0B, 0x03, 0x73, 0x00, 0x83,
