@@ -254,6 +254,10 @@ that reason. If you publish the port more widely than that, set
 
 The first user ever to sign in becomes admin. API keys are created in **Settings**,
 stored hashed, revocable, and sent as `Authorization: Bearer gk_…` to `/api` and `/mcp`.
+An admin also uploads the consoles' system files there — a GameCube boot ROM, a Game Boy
+Advance BIOS, Super Nintendo coprocessor firmware — once for the whole instance; they are
+kept under the storage root's `.gatherum/system` and travel with it in a backup. Every
+console plays without them.
 
 ## Container images
 

@@ -55,6 +55,17 @@ public interface IFileStorage
     /// <summary>Where a root's metadata and history live, for callers that need to read
     /// or write the sidecar directly.</summary>
     string SidecarDirectory(NodePath path);
+
+    /// <summary>The instance's own files — a console's boot ROM, say — kept under the
+    /// storage root's <c>.gatherum/system</c>, beside nobody's directory and outside
+    /// every scan. <paramref name="relative"/> is <c>{console}/{name}</c>: a single
+    /// directory and a filename, and nothing that could climb out of either.</summary>
+    Task<StoredBlob> WriteSystemAsync(string relative, Stream content, CancellationToken cancellationToken = default);
+    Task<Stream> OpenSystemAsync(string relative, CancellationToken cancellationToken = default);
+
+    /// <summary>The hash and length of a system file, or null when there is none.</summary>
+    Task<StoredBlob?> MeasureSystemAsync(string relative, CancellationToken cancellationToken = default);
+    Task DeleteSystemAsync(string relative, CancellationToken cancellationToken = default);
 }
 
 public record StoredBlob(string Hash, long SizeBytes);

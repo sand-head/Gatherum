@@ -786,6 +786,56 @@ public class AppIntegrationTests(PostgresFixture postgres) : IAsyncLifetime
         return (id, Convert.ToHexStringLower(SHA256.HashData(image)));
     }
 
+    [Fact]
+    public async Task An_admin_uploads_a_system_file_a_member_fetches_it_and_a_stranger_cannot()
+    {
+        // The seeded user is the first account the app ever saw, which is what makes
+        // them the admin; the member is everybody after.
+        var bios = new byte[0x4000];
+        Random.Shared.NextBytes(bios);
+        var put = await client.PutAsync("/api/system-files/gba/gba_bios.bin", new ByteArrayContent(bios));
+        Assert.Equal(HttpStatusCode.OK, put.StatusCode);
+        var stored = await put.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.True(stored.GetProperty("present").GetBoolean());
+        Assert.Equal(Convert.ToHexStringLower(SHA256.HashData(bios)),
+            stored.GetProperty("sha256").GetString());
+
+        var wrong = await client.PutAsync("/api/system-files/gba/gba_bios.bin",
+            new ByteArrayContent(new byte[100]));
+        Assert.Equal(HttpStatusCode.BadRequest, wrong.StatusCode);
+        var unknown = await client.PutAsync("/api/system-files/gba/gba_bios2.bin",
+            new ByteArrayContent(bios));
+        Assert.Equal(HttpStatusCode.NotFound, unknown.StatusCode);
+
+        using var member = factory.CreateClient();
+        member.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", await KeyForAsync("member"));
+        var consoles = await member.GetFromJsonAsync<JsonElement>("/api/system-files");
+        var gba = consoles.EnumerateArray().Single(c => c.GetProperty("key").GetString() == "gba");
+        var slot = gba.GetProperty("files").EnumerateArray().Single();
+        Assert.Equal("gba_bios.bin", slot.GetProperty("name").GetString());
+        Assert.True(slot.GetProperty("present").GetBoolean());
+        Assert.Equal(bios, await member.GetByteArrayAsync("/api/system-files/gba/gba_bios.bin"));
+
+        var refused = await member.PutAsync("/api/system-files/gba/gba_bios.bin",
+            new ByteArrayContent(bios));
+        Assert.Equal(HttpStatusCode.Forbidden, refused.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await member.DeleteAsync("/api/system-files/gba/gba_bios.bin")).StatusCode);
+
+        // Not signed in: a boot ROM is the instance's members' to fetch, and nobody else's.
+        using var stranger = factory.CreateClient();
+        Assert.Equal(HttpStatusCode.Unauthorized,
+            (await stranger.GetAsync("/api/system-files/gba/gba_bios.bin")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized,
+            (await stranger.GetAsync("/api/system-files")).StatusCode);
+
+        Assert.Equal(HttpStatusCode.NoContent,
+            (await client.DeleteAsync("/api/system-files/gba/gba_bios.bin")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await member.GetAsync("/api/system-files/gba/gba_bios.bin")).StatusCode);
+    }
+
     private async Task<string> KeyForAsync(string username)
     {
         using var scope = factory.Services.CreateScope();

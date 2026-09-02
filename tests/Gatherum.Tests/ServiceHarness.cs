@@ -31,6 +31,7 @@ public sealed class ServiceHarness : IAsyncDisposable
     public BookmarkService Bookmarks { get; }
     public SharedListService SharedLists { get; }
     public SearchService Search { get; }
+    public SystemFileService SystemFiles { get; }
     public ManualClock Clock { get; } = new();
     public MediaAnalysisQueue AnalysisQueue { get; } = new();
     public EmbeddingService Embeddings { get; }
@@ -112,6 +113,7 @@ public sealed class ServiceHarness : IAsyncDisposable
         Bookmarks = new BookmarkService(Db, Nodes, Files, Archiver, Sidecar);
         SharedLists = new SharedListService(Db, Nodes, Files);
         Search = new SearchService(Db, authorizer, Embeddings);
+        SystemFiles = new SystemFileService(Db, storage);
     }
 
     /// <summary>Files a node under a category, then nests that category under another —

@@ -32,8 +32,13 @@ public sealed class VendoredCore : IEmulatorCore, IDisposable
     /// that opens it itself, what the pad is printed with, how many can play, and
     /// anything the core must be told before it powers on — and, for a machine whose
     /// image is a disc, that the core fetches it itself and needs a GPU to draw with.</summary>
+    /// <param name="SystemKey">How the server names this console's system files — a
+    /// boot ROM, a coprocessor's firmware — which the player fetches into the core before
+    /// the cartridge. The spelling the API uses, copied here because this project does
+    /// not reference Core.</param>
     private sealed record Machine(
         string SystemName,
+        string SystemKey,
         string ModuleUrl,
         string Extension,
         ButtonLabels Buttons,
@@ -45,15 +50,18 @@ public sealed class VendoredCore : IEmulatorCore, IDisposable
     private static readonly Dictionary<ConsoleKind, Machine> Machines = new()
     {
         [ConsoleKind.GameBoyAdvance] = new(
-            "Game Boy Advance", "/cores/mgba.wasm", ".gba",
+            "Game Boy Advance", "gba", "/cores/mgba.wasm", ".gba",
             new("A", "B", "Start", "Select", "L", "R"),
             // A Game Boy Advance played with somebody else meant a second console and a
             // cable. Nobody has held this core to the seam's promise that two copies of
             // it agree frame for frame, so it is not asked to keep it.
-            PlayerCount: 1, Settings: []),
+            PlayerCount: 1,
+            // Use the console's BIOS when the instance has one; without one the core
+            // stands in for it, as it did before there was anywhere to put one.
+            Settings: ["mgba_use_bios", "ON"]),
 
         [ConsoleKind.SuperNintendo] = new(
-            "Super Nintendo", "/cores/bsnes.mjs", ".sfc",
+            "Super Nintendo", "snes", "/cores/bsnes.mjs", ".sfc",
             new("A", "B", "Start", "Select", "L", "R", X: "X", Y: "Y"),
             // Two, and measured rather than assumed: two of these run six hundred frames
             // of scripted two-player input and come out byte for byte the same.
@@ -64,7 +72,7 @@ public sealed class VendoredCore : IEmulatorCore, IDisposable
             Settings: ["bsnes_entropy", "None"]),
 
         [ConsoleKind.GameCube] = new(
-            "GameCube", "/cores/gecko.mjs", ".iso",
+            "GameCube", "gamecube", "/cores/gecko.mjs", ".iso",
             // The pad's four face buttons and two shoulders keep their own names; the
             // button the seam calls Select is Z, the one GameCube button left over.
             new("A", "B", "Start", "Z", "L", "R", X: "X", Y: "Y"),
@@ -126,6 +134,11 @@ public sealed class VendoredCore : IEmulatorCore, IDisposable
     public static bool LoadsByUrl(ConsoleKind kind) =>
         Machines.TryGetValue(kind, out var machine) && machine.LoadsByUrl;
 
+    /// <summary>The name the server files this machine's system files under, or null
+    /// for a machine that plays on no core from elsewhere.</summary>
+    public static string? SystemKey(ConsoleKind kind) =>
+        Machines.TryGetValue(kind, out var machine) ? machine.SystemKey : null;
+
     /// <summary>Fetches the core if it is not already here and hands it the cartridge —
     /// the bytes, or for a disc the address the core fetches them from. Null means this
     /// build genuinely has no such core — a deployment that did not build one is a
@@ -133,8 +146,13 @@ public sealed class VendoredCore : IEmulatorCore, IDisposable
     /// go wrong throws with words the player shows, because a core that is here and
     /// will not start is a bug to report, not an edition to accept — the two were once
     /// one answer, and the player blamed the build for a serving failure.</summary>
+    /// <param name="systemFiles">The names of this machine's system files the instance
+    /// has, fetched into the core before the cartridge because a core opens its BIOS
+    /// while it loads a game. One that will not fetch is left out and the console boots
+    /// as it would have without it.</param>
     public static async Task<VendoredCore?> CreateAsync(
-        IJSObjectReference module, ConsoleKind kind, byte[] rom, string? contentUrl = null)
+        IJSObjectReference module, ConsoleKind kind, byte[] rom,
+        IReadOnlyList<string> systemFiles, string? contentUrl = null)
     {
         if (module is not IJSInProcessObjectReference js)
             return null;
@@ -152,6 +170,12 @@ public sealed class VendoredCore : IEmulatorCore, IDisposable
             throw new NotSupportedException(
                 $"This Gatherum has a {machine.SystemName} core, but it would not " +
                 "start — the browser console has the details.");
+
+        foreach (var name in systemFiles)
+        {
+            await module.InvokeAsync<bool>("loadEmulatorSystemFile", name,
+                $"/api/system-files/{machine.SystemKey}/{name}");
+        }
 
         var facts = machine.LoadsByUrl
             ? await module.InvokeAsync<CartridgeFacts?>(

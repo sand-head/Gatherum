@@ -120,6 +120,22 @@ runs in the browser, sends it in pieces instead:
 Only the key that began an upload may add to it or finish it, and an upload does not
 survive the server restarting — the answer is a `404`, and the cure is to send it again.
 
+## System files
+
+The consoles' boot ROMs and firmware, the instance's own — see
+[System files](/docs/pages-and-files#system-files) for what each console takes.
+
+| Endpoint | Notes |
+| --- | --- |
+| `GET /api/system-files` | Every console, every file it can take, and whether this instance has it — with the stored file's length and SHA-256 when it does |
+| `GET /api/system-files/{console}/{name}` | The bytes, for a console in a player's browser |
+| `PUT /api/system-files/{console}/{name}` | The raw bytes as the body. Admin only; a file of the wrong length is refused with `400` and both lengths |
+| `DELETE /api/system-files/{console}/{name}` | Admin only. Removing what is not there is fine |
+
+Consoles are `gamecube`, `gba` and `snes`, and a name is one the listing shows,
+spelled exactly. Nothing here is anonymous: a stranger reading a public cartridge's page
+plays without them.
+
 ## Bookmarks
 
 | Endpoint | Body |

@@ -115,6 +115,13 @@ public interface IAppData
     Task<IReadOnlyList<KeyInfo>> ListKeysAsync();
     Task<CreatedKey> CreateKeyAsync(string name);
     Task RevokeKeyAsync(Guid keyId);
+
+    // The consoles' system files: what each can take and what this instance has.
+    // Listing is any signed-in person's; a reader who is not signed in gets an empty
+    // list rather than an error, because a public cartridge still plays without them.
+    Task<IReadOnlyList<SystemConsoleInfo>> ListSystemFilesAsync();
+    Task<SystemFileInfo> PutSystemFileAsync(string console, string name, byte[] content);
+    Task DeleteSystemFileAsync(string console, string name);
 }
 
 public record EditorPayload(string Text, int HeadVersion);
@@ -181,6 +188,9 @@ public record SharedListOrphanInfo(string Text, string Note);
 public record KeyInfo(Guid Id, string Name, string Prefix, DateTimeOffset CreatedAt,
     DateTimeOffset? LastUsedAt, bool IsActive);
 public record CreatedKey(Guid Id, string Name, string Token);
+public record SystemConsoleInfo(string Key, string Name, IReadOnlyList<SystemFileInfo> Files);
+public record SystemFileInfo(string Name, long Bytes, string Purpose, bool Present,
+    long? SizeBytes, string? Sha256);
 
 public sealed class HttpAppData(HttpClient http) : IAppData
 {
@@ -419,6 +429,29 @@ public sealed class HttpAppData(HttpClient http) : IAppData
 
     public async Task RevokeKeyAsync(Guid keyId) =>
         Ensure(await http.DeleteAsync($"/api/keys/{keyId}"));
+
+    public async Task<IReadOnlyList<SystemConsoleInfo>> ListSystemFilesAsync()
+    {
+        var response = await http.GetAsync("/api/system-files");
+        // Not signed in: the endpoint refuses, and the answer to "what is there for me"
+        // is nothing rather than an exception a public page would have to catch.
+        if (response.StatusCode is System.Net.HttpStatusCode.Unauthorized
+            or System.Net.HttpStatusCode.Forbidden)
+            return [];
+        Ensure(response);
+        return await response.Content.ReadFromJsonAsync<List<SystemConsoleInfo>>() ?? [];
+    }
+
+    public async Task<SystemFileInfo> PutSystemFileAsync(string console, string name, byte[] content)
+    {
+        var response = await http.PutAsync($"/api/system-files/{console}/{name}",
+            new ByteArrayContent(content));
+        await EnsureAsync(response);
+        return (await response.Content.ReadFromJsonAsync<SystemFileInfo>())!;
+    }
+
+    public async Task DeleteSystemFileAsync(string console, string name) =>
+        await EnsureAsync(await http.DeleteAsync($"/api/system-files/{console}/{name}"));
 
     /// <summary>Eight megabytes at a time. The browser's HTTP client buffers a whole
     /// request body before it sends it, so a file goes over as chunks appended to a

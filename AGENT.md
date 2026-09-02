@@ -46,7 +46,9 @@ auto-login. Migrations: `dotnet ef migrations add <Name> -p src/Gatherum.Infrast
   `FileService` = bodies/versions/text editing, `BookmarkService` = a URL captured as
   a file node and captured again on demand, `SharedListService` = a shared list's
   catalog fused with every tally of it, and the one write, which is always the
-  caller's own tally), `Markdown/MarkdownContent`,
+  caller's own tally, `SystemFileService` = the consoles' boot ROMs and firmware, the
+  instance's own under the storage root's `.gatherum/system`, with `Roms/SystemFiles`
+  the catalog of what each console takes and how long each file is), `Markdown/MarkdownContent`,
   `Markdown/WikiLinkSyntax` and `Markdown/SharedListSyntax` (the conventions a body
   carries, read server-side without an editor), the seam
   interfaces in `Abstractions/`, `Services/MediaAnalysisQueue` — the hand-off from
@@ -350,9 +352,14 @@ second icon set, and don't hand-draw a path when the pack has one.
 3. Never let it learn the time. mGBA asks WASI for `clock_time_get` and the host answers
    with a frame counter; bsnes calls `clock()` and `libco-extras.c` answers zero. Find
    which it does before trusting anything it says about two machines agreeing.
-4. Give it a row in `VendoredCore.Machines` — module URL, pad labels, player count, and
-   any core option that changes what the machine *does* rather than how it looks. Teach
-   `Emulator.Identify` its bytes; `MediaTypes` and `FileView.IsRom` as for any console.
+4. Give it a row in `VendoredCore.Machines` — module URL, pad labels, player count, the
+   key its system files are filed under, and any core option that changes what the
+   machine *does* rather than how it looks. Teach `Emulator.Identify` its bytes;
+   `MediaTypes` and `FileView.IsRom` as for any console. If it wants a BIOS or firmware
+   the hardware had, add the console and its files to `SystemFiles` in Core — exact
+   names and exact lengths — and to the table in `Docs/pages-and-files.md`, which
+   `DocsTests` checks; the player fetches whatever the instance has into `/system`
+   before the cartridge, and the core finds it there or boots without it.
 5. Report `PlayerCount` 1 until you have **measured** two of it in step: same cartridge,
    scripted two-player input, `retro_serialize` compared every sixty frames over several
    hundred, plus a control run proving different buttons still diverge. Netplay is two

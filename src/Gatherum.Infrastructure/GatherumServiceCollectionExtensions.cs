@@ -58,6 +58,7 @@ public static class GatherumServiceCollectionExtensions
         services.AddScoped<EmbeddingService>();
         services.AddScoped<UserService>();
         services.AddScoped<ApiKeyService>();
+        services.AddScoped<SystemFileService>();
         return services;
     }
 

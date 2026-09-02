@@ -132,6 +132,22 @@ public record KeyDto(Guid Id, string Name, string Prefix, DateTimeOffset Created
 
 public record CreatedKeyDto(Guid Id, string Name, string Token);
 
+public record SystemConsoleDto(string Key, string Name, IReadOnlyList<SystemFileDto> Files)
+{
+    public static SystemConsoleDto From(SystemConsoleStatus console) =>
+        new(console.Key, console.Name, console.Files.Select(SystemFileDto.From).ToList());
+}
+
+/// <param name="Bytes">What the slot takes, exactly.</param>
+/// <param name="SizeBytes">What is there, when something is — always <c>Bytes</c>, and
+/// carried so a client can show it beside the hash without knowing that.</param>
+public record SystemFileDto(string Name, long Bytes, string Purpose, bool Present,
+    long? SizeBytes, string? Sha256)
+{
+    public static SystemFileDto From(SystemFileStatus file) =>
+        new(file.Name, file.Bytes, file.Purpose, file.Present, file.SizeBytes, file.Sha256);
+}
+
 public record SearchResultDto(Guid Id, string Kind, string Title, string Snippet)
 {
     public static SearchResultDto From(SearchResult result) =>

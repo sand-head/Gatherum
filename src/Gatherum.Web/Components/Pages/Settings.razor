@@ -1,7 +1,18 @@
 @page "/settings"
+@using Gatherum.Web.Auth
 
 <PageTitle>Settings — Gatherum</PageTitle>
 
 <h1>Settings</h1>
 
 <ApiKeysPanel @rendermode="InteractiveAuto" />
+
+@* The console system files are the instance's rather than anybody's, so the panel is
+   an admin's alone. The page is static and holds the principal; the island behind it
+   only ever talks to the service, which refuses everybody else regardless. *@
+<AuthorizeView>
+    @if (context.User.IsAdmin())
+    {
+        <SystemFilesPanel @rendermode="InteractiveAuto" />
+    }
+</AuthorizeView>

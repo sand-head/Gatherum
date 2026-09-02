@@ -22,6 +22,15 @@
 //! **There is no save state.** Gecko has no serializer, so `gatherum_state_size` is zero
 //! and a save never reports success. The seam already reads that as a machine that cannot
 //! hand itself over, which is the honest answer for a one-player console.
+//!
+//! **The console boots from whatever the instance has.** With no system files it boots
+//! a disc through the free IPL replacement Gecko carries, with the boot chip attached
+//! blank, and runs its sound processor on Dolphin's free ROM. Handed the console's own
+//! boot ROM through `gatherum_system_file`, it boots the way the hardware does — the ROM
+//! runs, patched to skip its animation — and a game can read the font and the settings
+//! a real console keeps in that chip. The ROM is taken as dumped or decoded; the
+//! descrambler is Gecko's multitool's. A disc is booted with the ROM of its own region,
+//! and a region with no ROM boots the free way.
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -53,8 +62,18 @@ const ROW_BYTES: u32 = FRAME_WIDTH * 4;
 const SAMPLE_RATE: u32 = 48_000;
 
 /// The IPL mask ROM is 2 MB. What is on it cannot be shipped; its size still matters,
-/// because reads wrap at it.
+/// because reads wrap at it. Most of it is scrambled in the chip, and decoded, the first
+/// instruction of BS1 at 0x100 is `lis r4, 0x0011` — which is how one is told from the other.
 const IPL_ROM_SIZE: usize = 0x20_0000;
+const IPL_SCRAMBLE_START: usize = 0x100;
+const IPL_SCRAMBLE_SIZE: usize = 0x1A_FE00;
+const IPL_DECODED_FIRST_WORD: u32 = 0x3C80_0011;
+
+/// The system files this host can be handed, by the names the instance keeps them under.
+const IPL_NTSC_FILE: &str = "IPL.bin";
+const IPL_PAL_FILE: &str = "PAL_IPL.bin";
+const DSP_ROM_FILE: &str = "dsp_rom.bin";
+const DSP_COEF_FILE: &str = "dsp_coef.bin";
 
 /// A "Memory Card 251": 2 MB, the biggest official card, in slot A.
 const MEMORY_CARD_BLOCKS: u32 = 256;
@@ -377,6 +396,89 @@ impl BlockCompiler for TableCompiler {
     }
 }
 
+/// What the instance has uploaded for this console, kept for as long as the module runs
+/// so a reset boots the same machine.
+#[derive(Default)]
+struct SystemFiles {
+    ipl_ntsc: Option<Vec<u8>>,
+    ipl_pal: Option<Vec<u8>>,
+    dsp_rom: Option<Vec<u8>>,
+    dsp_coef: Option<Vec<u8>>,
+}
+
+impl SystemFiles {
+    /// Takes a file by name; a name this host has no use for is refused, and a boot
+    /// ROM of the wrong length is not a boot ROM.
+    fn accept(&mut self, name: &str, bytes: Vec<u8>) -> bool {
+        match name {
+            IPL_NTSC_FILE | IPL_PAL_FILE => {
+                let Some(decoded) = decode_ipl(bytes) else { return false };
+                if name == IPL_NTSC_FILE { self.ipl_ntsc = Some(decoded) } else { self.ipl_pal = Some(decoded) }
+            }
+            DSP_ROM_FILE => self.dsp_rom = Some(bytes),
+            DSP_COEF_FILE => self.dsp_coef = Some(bytes),
+            _ => return false,
+        }
+        true
+    }
+
+    /// The boot ROM for a disc's region — the fourth letter of its game code — or none.
+    fn ipl_for(&self, game_code: &[u8; 4]) -> Option<&[u8]> {
+        // Europe and its language variants are PAL; America, Japan and Korea are NTSC,
+        // and so is anything unrecognised, which is where most of the world's discs are.
+        let pal = matches!(game_code[3], b'P' | b'D' | b'F' | b'S' | b'I' | b'X' | b'Y' | b'U' | b'L' | b'M' | b'H');
+        (if pal { &self.ipl_pal } else { &self.ipl_ntsc }).as_deref()
+    }
+}
+
+/// A boot ROM as Gecko wants it: decoded. The chip holds most of the ROM scrambled and
+/// a dump is usually taken that way; a person who has run it through Gecko's multitool
+/// has the decoded form, and either is taken. The descrambler is that tool's.
+fn decode_ipl(mut bytes: Vec<u8>) -> Option<Vec<u8>> {
+    if bytes.len() != IPL_ROM_SIZE {
+        return None;
+    }
+    let first = u32::from_be_bytes(bytes[0x100..0x104].try_into().unwrap());
+    if first != IPL_DECODED_FIRST_WORD {
+        descramble(&mut bytes[IPL_SCRAMBLE_START..IPL_SCRAMBLE_START + IPL_SCRAMBLE_SIZE]);
+    }
+    Some(bytes)
+}
+
+fn descramble(region: &mut [u8]) {
+    let (mut acc, mut nacc) = (0u8, 0u8);
+    let (mut t, mut u, mut v) = (0x2953u16, 0xD9C2u16, 0x3FF1u16);
+    let mut x = 1u8;
+    let mut it = 0;
+    while it < region.len() {
+        let t0 = (t & 1) as u8;
+        let t1 = ((t >> 1) & 1) as u8;
+        let u0 = (u & 1) as u8;
+        let u1 = ((u >> 1) & 1) as u8;
+        let v0 = (v & 1) as u8;
+        x ^= t1 ^ v0;
+        x ^= u0 | u1;
+        x ^= (t0 ^ u1 ^ v0) & (t0 ^ u0);
+        if t0 == u0 {
+            v >>= 1;
+            if v0 != 0 { v ^= 0xB3D0; }
+        }
+        if t0 == 0 {
+            u >>= 1;
+            if u0 != 0 { u ^= 0xFB10; }
+        }
+        t >>= 1;
+        if t0 != 0 { t ^= 0xA740; }
+        nacc += 1;
+        acc = acc.wrapping_shl(1).wrapping_add(x);
+        if nacc == 8 {
+            region[it] ^= acc;
+            nacc = 0;
+            it += 1;
+        }
+    }
+}
+
 struct Console {
     emulator: GameCube,
     actions: ActionQueue,
@@ -392,21 +494,35 @@ struct Console {
 }
 
 impl Console {
-    fn boot(dvd: Box<dyn image::Dvd>) -> Self {
-        let mut emulator = GameCube::with_ipl_hle(dvd);
-        emulator.dsp.load_irom(DSP_ROM);
-        emulator.dsp.load_coef(DSP_COEF);
+    fn boot(dvd: Box<dyn image::Dvd>, system: &SystemFiles) -> Self {
+        let mut emulator = match system.ipl_for(&dvd.header().game_code) {
+            // The real boot, patched to go straight from the reset vector to the disc:
+            // the ROM's own animation is a menu nobody here can reach. Booting this way
+            // puts the chip that holds the ROM on the bus with the ROM in it.
+            Some(ipl) => {
+                let mut emulator = GameCube::with_ipl(ipl, true);
+                emulator.insert_dvd(dvd);
+                emulator
+            }
+            None => {
+                let mut emulator = GameCube::with_ipl_hle(dvd);
+                // The device beside the memory card: the IPL mask ROM, the SRAM and the
+                // clock. Gecko's IPL-less boot leaves it off the bus, and a game that asks
+                // it for the console's settings, or waits on its clock, gets nothing
+                // back. With no ROM to put in it, it is blank: a font read from it comes
+                // out empty, and the SRAM and clock behind it answer as a fresh console
+                // would.
+                emulator.exi.attach_device(
+                    ExiMacronix::CHANNEL,
+                    ExiMacronix::DEVICE,
+                    Box::new(ExiMacronix::new(vec![0u8; IPL_ROM_SIZE])),
+                );
+                emulator
+            }
+        };
+        emulator.dsp.load_irom(system.dsp_rom.as_deref().unwrap_or(DSP_ROM));
+        emulator.dsp.load_coef(system.dsp_coef.as_deref().unwrap_or(DSP_COEF));
         emulator.insert_memory_card(MEMORY_CARD_SLOT, None, MEMORY_CARD_BLOCKS);
-        // The device beside the memory card: the IPL mask ROM, the SRAM and the clock.
-        // Gecko's IPL-less boot leaves it off the bus, and a game that asks it for the
-        // console's settings, or waits on its clock, gets nothing back. The ROM itself
-        // cannot be shipped, so it is blank: a font read from it comes out empty, and
-        // the SRAM and clock behind it answer as a fresh console would.
-        emulator.exi.attach_device(
-            ExiMacronix::CHANNEL,
-            ExiMacronix::DEVICE,
-            Box::new(ExiMacronix::new(vec![0u8; IPL_ROM_SIZE])),
-        );
 
         let actions: ActionQueue = Arc::new(Mutex::new(QueueShared { messages: Vec::new(), epoch: 0 }));
         emulator.render_sink = Box::new(QueueSink::new(actions.clone()));
@@ -490,6 +606,7 @@ impl Console {
 struct Host {
     gpu: Option<Gpu>,
     console: Option<Console>,
+    system: SystemFiles,
     frame: Vec<u8>,
     audio_out: Vec<i16>,
     /// What `gatherum_alloc` handed out and how big it was, so `gatherum_free` can give
@@ -501,6 +618,7 @@ thread_local! {
     static HOST: RefCell<Host> = RefCell::new(Host {
         gpu: None,
         console: None,
+        system: SystemFiles::default(),
         frame: vec![0; (ROW_BYTES * FRAME_HEIGHT) as usize],
         audio_out: Vec::new(),
         allocations: HashMap::new(),
@@ -549,6 +667,25 @@ pub fn gatherum_free(address: u32) {
     if let Some(length) = with_host(|host| host.allocations.remove(&address)) {
         unsafe { drop(Vec::from_raw_parts(address as *mut u8, length, length)) };
     }
+}
+
+/// One of the instance's system files, by the name it is kept under — a NUL-terminated
+/// string in this module's memory — and the allocation from `gatherum_alloc` holding
+/// it, which becomes the host's the way a disc does. Before the disc: the boot ROM is
+/// what the console is built around. A name this host has no slot for, or a boot ROM
+/// of the wrong length, answers zero and the allocation is given back.
+#[wasm_bindgen]
+pub fn gatherum_system_file(name: u32, address: u32, length: u32) -> u32 {
+    let length = length as usize;
+    let owned = with_host(|host| host.allocations.remove(&address)) == Some(length);
+    if !owned {
+        return 0;
+    }
+    let bytes = unsafe { Vec::from_raw_parts(address as *mut u8, length, length) };
+    let name = unsafe { std::ffi::CStr::from_ptr(name as *const std::ffi::c_char) }
+        .to_string_lossy()
+        .into_owned();
+    with_host(|host| host.system.accept(&name, bytes)) as u32
 }
 
 /// Gecko reads its disc out of memory.
@@ -611,7 +748,7 @@ pub fn gatherum_load(address: u32, length: u32) -> u32 {
         return 0;
     }
     with_host(|host| {
-        host.console = Some(Console::boot(dvd));
+        host.console = Some(Console::boot(dvd, &host.system));
         host.frame.fill(0);
         host.audio_out.clear();
         if let Some(gpu) = host.gpu.as_mut() {
@@ -637,7 +774,7 @@ pub fn gatherum_reset() {
         let sticks = console.sticks;
         let card = console.memory_card().map(|data| data.to_vec());
         drop(console);
-        let mut fresh = Console::boot(dvd);
+        let mut fresh = Console::boot(dvd, &host.system);
         fresh.buttons = buttons;
         fresh.sticks = sticks;
         fresh.apply_input();

@@ -399,6 +399,32 @@ public sealed class ServerAppData(
         await ops.Keys(s => s.RevokeAsync(userId, keyId));
     }
 
+    public async Task<IReadOnlyList<SystemConsoleInfo>> ListSystemFilesAsync()
+    {
+        if (await ViewerIdAsync() is null)
+            return [];
+        var consoles = await ops.SystemFiles(s => s.ListAsync());
+        return consoles.Select(c => new SystemConsoleInfo(c.Key, c.Name,
+            c.Files.Select(SystemFile).ToList())).ToList();
+    }
+
+    public async Task<SystemFileInfo> PutSystemFileAsync(string console, string name, byte[] content)
+    {
+        var userId = await UserIdAsync();
+        var stored = await ops.SystemFiles(s =>
+            s.PutAsync(userId, console, name, new MemoryStream(content)));
+        return SystemFile(stored);
+    }
+
+    public async Task DeleteSystemFileAsync(string console, string name)
+    {
+        var userId = await UserIdAsync();
+        await ops.SystemFiles(s => s.DeleteAsync(userId, console, name));
+    }
+
+    private static SystemFileInfo SystemFile(SystemFileStatus file) =>
+        new(file.Name, file.Bytes, file.Purpose, file.Present, file.SizeBytes, file.Sha256);
+
     /// <summary>The signed-in user, for anything that writes. Anonymous callers have no
     /// business here and get an exception rather than a silent no-op.</summary>
     private async Task<Guid> UserIdAsync() =>

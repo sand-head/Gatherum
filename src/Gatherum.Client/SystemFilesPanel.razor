@@ -1,0 +1,117 @@
+@inject IAppData Data
+@using Microsoft.AspNetCore.Components.Forms
+
+@* The consoles' system files — boot ROMs and coprocessor firmware — for the admin who
+   has them. Every slot is optional and the table says what each one changes; a file
+   that is the wrong length is refused with its length, because a ROM is a fixed piece of
+   silicon and a file of another size is something else wearing its name. *@
+
+<section class="system-files">
+    <h2>Console system files</h2>
+    <p>
+        A console plays without any of these, on a free stand-in for the part Nintendo
+        made. Each one uploaded here is handed to that console in every signed-in
+        player's browser, and nothing else in Gatherum reads it. Gatherum does not
+        supply them.
+    </p>
+
+    @if (problem is not null)
+    {
+        <div class="system-problem" role="alert">@problem</div>
+    }
+
+    @foreach (var console in consoles)
+    {
+        <h3>@console.Name</h3>
+        <table class="system-table stacked-table" role="table">
+            <thead role="rowgroup">
+                <tr role="row"><th>File</th><th>What it is for</th><th>Status</th><th></th></tr>
+            </thead>
+            <tbody role="rowgroup">
+                @foreach (var file in console.Files)
+                {
+                    var slot = (console.Key, file.Name);
+                    <tr role="row" class="@(file.Present ? "present" : "")">
+                        <td role="cell" data-label="File"><code>@file.Name</code></td>
+                        <td role="cell" data-label="What it is for">@file.Purpose</td>
+                        <td role="cell" data-label="Status">
+                            @if (file.Present)
+                            {
+                                <span title="SHA-256 @file.Sha256">uploaded, @file.SizeBytes?.ToString("N0") bytes</span>
+                            }
+                            else
+                            {
+                                <span class="absent">not uploaded (@file.Bytes.ToString("N0") bytes)</span>
+                            }
+                        </td>
+                        <td role="cell" class="actions">
+                            <label class="upload">
+                                <span class="button">@(file.Present ? "Replace" : "Upload")</span>
+                                <InputFile OnChange="e => UploadAsync(slot, e)" disabled="@(busy == slot)" />
+                            </label>
+                            @if (file.Present)
+                            {
+                                <button class="danger" @onclick="() => RemoveAsync(slot)" disabled="@(busy == slot)">Remove</button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</section>
+
+@code {
+    /// <summary>Room to read a file that is the wrong size, so the refusal can say how
+    /// wrong: the biggest slot is a two-megabyte boot ROM.</summary>
+    private const long ReadCeiling = 4 * 1024 * 1024;
+
+    private IReadOnlyList<SystemConsoleInfo> consoles = [];
+    private (string Console, string Name)? busy;
+    private string? problem;
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync() => consoles = await Data.ListSystemFilesAsync();
+
+    private async Task UploadAsync((string Console, string Name) slot, InputFileChangeEventArgs e)
+    {
+        busy = slot;
+        problem = null;
+        try
+        {
+            await using var stream = e.File.OpenReadStream(ReadCeiling);
+            var buffer = new MemoryStream();
+            await stream.CopyToAsync(buffer);
+            await Data.PutSystemFileAsync(slot.Console, slot.Name, buffer.ToArray());
+            await ReloadAsync();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException)
+        {
+            problem = $"{slot.Name} was not stored: {ex.Message}";
+        }
+        finally
+        {
+            busy = null;
+        }
+    }
+
+    private async Task RemoveAsync((string Console, string Name) slot)
+    {
+        busy = slot;
+        problem = null;
+        try
+        {
+            await Data.DeleteSystemFileAsync(slot.Console, slot.Name);
+            await ReloadAsync();
+        }
+        catch (InvalidOperationException ex)
+        {
+            problem = $"{slot.Name} was not removed: {ex.Message}";
+        }
+        finally
+        {
+            busy = null;
+        }
+    }
+}

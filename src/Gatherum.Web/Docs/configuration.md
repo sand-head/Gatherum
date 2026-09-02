@@ -132,6 +132,10 @@ The directory behind `Gatherum__Storage__Root` **is** the knowledge base:
     .gatherum/
       meta.json                titles, categories, sharing, history
       versions/                superseded content, addressed by SHA-256
+  .gatherum/
+    system/                    the consoles' boot ROMs and firmware, an admin's uploads
+      gamecube/IPL.bin
+      gba/gba_bios.bin
 ```
 
 `meta.json` names a node's categories by name — `"categories": ["Podman"]` — for the same

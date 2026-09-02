@@ -138,9 +138,16 @@ static ROM: Shared<*mut c_void> = Shared::new(core::ptr::null_mut());
 
 // ---- the core we are compiled against -------------------------------------------
 
+const GET_SYSTEM_DIRECTORY: c_uint = 9;
 const SET_PIXEL_FORMAT: c_uint = 10;
 const GET_VARIABLE: c_uint = 15;
 const PIXEL_FORMAT_XRGB8888: c_uint = 1;
+
+/// Where a core looks for a BIOS or a coprocessor's firmware. The host puts the files
+/// the instance has under this name — in a filesystem that exists only in the tab,
+/// whichever toolchain's — and a core that finds nothing there boots the way it always
+/// did, on its own stand-in.
+static SYSTEM_DIRECTORY: &[u8] = b"/system\0";
 
 /// How many settings a host may hand a core. Cores have dozens; the ones that need
 /// answering here are the few that change what the machine *does* rather than how it
@@ -223,15 +230,20 @@ extern "C" {
 
 // ---- what the core calls back into ----------------------------------------------
 
-/// A host that offers nothing: no system directory, no configuration variables, no log.
-/// The one question it answers is the pixel format, and it only says yes to the one
-/// layout the packing below knows how to read — a core told yes to a format nobody
-/// agreed on would draw a picture that looked almost right.
+/// A host that offers almost nothing: no log, no save directory, and only the
+/// configuration variables it was handed. It answers the pixel format, and only says
+/// yes to the one layout the packing below knows how to read — a core told yes to a
+/// format nobody agreed on would draw a picture that looked almost right — and it
+/// names the one directory a core may read system files from.
 unsafe extern "C" fn on_environment(command: c_uint, data: *mut c_void) -> bool {
     if data.is_null() {
         return false;
     }
     match command {
+        GET_SYSTEM_DIRECTORY => {
+            *(data as *mut *const u8) = SYSTEM_DIRECTORY.as_ptr();
+            true
+        }
         SET_PIXEL_FORMAT => *(data as *const c_uint) == PIXEL_FORMAT_XRGB8888,
         GET_VARIABLE => {
             let asked = &mut *(data as *mut Variable);

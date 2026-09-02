@@ -2536,3 +2536,61 @@ and the condition-register updates that read and write the console for every `Rc
 compare. Those, the Rust loop that dispatches blocks (a tenth of the frame), and the GX
 decode and vertex uploads are each their own piece of work, and each is measured against
 the same oracle before it lands.
+
+## System files are the instance's, and a GameCube boots from its own ROM when it has one
+
+Asked for a way to upload the BIOS files some consoles need, per instance. A console
+keeps a little of itself in silicon an emulator cannot ship — the GameCube's boot ROM and
+its sound processor's program, the Game Boy Advance's BIOS, the firmware on a Super
+Nintendo cartridge's coprocessor. Each machine here plays without them, on a free
+replacement or a stand-in, and each one supplied makes it more like the real thing.
+
+**Where they live, and who touches them.** They belong to the instance rather than to
+anybody: one copy, uploaded by an admin, handed to every signed-in player's console. So
+they are not nodes. They live under the storage root's own
+`.gatherum/system/{console}/{name}` — the one directory `Roots()` already skipped, so
+no scan indexes them and no owner's root holds them — and there is no table: the files
+are the record, and listing them is looking at the directory. `SystemFiles` in Core is
+the catalog, and it is deliberately narrow: the exact filename each emulator looks for
+and the exact length the chip was, and a file of another length is refused with both
+lengths rather than stored for an emulator to ignore silently. Reading is any signed-in
+person's, because the bytes reach a console in the reader's browser, and never
+anonymous, because a boot ROM is somebody's copyrighted silicon and the instance's
+members are who it was uploaded for; a stranger playing a public cartridge plays without
+it, which is what happened before. Writing is the admin's, which is the first thing
+`IsAdmin` has gated: the claim existed for this.
+
+**One call, three homes.** The player fetches what the instance has *before* the
+cartridge, because a core opens its BIOS while it loads a game. A WASI core — mGBA —
+opens files through wasi-libc, so the host in `gatherum.js` grew a read-only
+filesystem: one preopened directory, `/system`, served out of a map, with the eight
+calls wasi-libc makes on the way from `open()` to `read()`. It was driven in Node
+against the real `mgba.wasm`: told there is no such file, the core loads the cartridge
+anyway; given one, it opens it, asks its size, reads it whole. An Emscripten core —
+bsnes — has a filesystem of its own the file is written into under the same name, and
+the shim now answers `GET_SYSTEM_DIRECTORY` with `/system` for both, which bsnes
+already knew to look in for coprocessor firmware. The Gecko host takes the bytes through
+a call of its own, `gatherum_system_file`, the one addition to the flat surface, and
+optional — a core without it is a core with nothing to be handed.
+
+**The GameCube boots from its own ROM when it has one.** Gecko's launcher requires the
+boot ROM and boots through it; the IPL-less boot this host uses is Gecko's fallback, and
+the black-screen work above is a list of what that path left unset. With an `IPL.bin` or
+`PAL_IPL.bin` present the host now builds the console Gecko's way — `with_ipl`, the ROM
+patched to skip its animation, the disc inserted after — choosing by the disc's region
+letter, and the boot chip goes on the bus with the real ROM in it rather than the blank
+one, so a game that reads the console's font gets it. A region with no ROM boots as
+before. The ROM is taken as dumped or decoded, because a dump comes scrambled and Gecko's
+multitool decodes it; the descrambler is forty lines and lives in the host too. The
+optional DSP ROM and coefficient table replace Dolphin's free ones the same way. None of
+it could be tried here — no disc, no ROM, no GPU — but it is the path Gecko is developed
+against.
+
+**An RVZ read decompressed a whole group every time.** Gecko's `image` crate decodes
+the zstd group around every disc read and keeps nothing; a game reads its disc a few
+kilobytes at a time, and a group is up to two megabytes. One more commit on the fork's
+`gatherum` branch keeps the last eight groups, most recently used last. What it is
+worth on a compressed disc is a profile away.
+
+Left alone: the Super Nintendo's other BIOS-shaped files (a Super Game Boy, a BS-X),
+which bsnes looks for only to play cartridges the player does not accept.

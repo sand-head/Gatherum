@@ -55,6 +55,16 @@ upstream; the fork exists so that they have somewhere to live while they wait, a
 that the next one can be written, built and tested in place rather than as a patch file
 applied to a clone.
 
+**System files reach a core three ways, through one call.** `gatherum.js` fetches what
+the instance has — a BIOS, a boot ROM, a coprocessor's firmware — before the cartridge,
+because a core opens them while it loads a game. A WASI core reads them from `/system`,
+a directory the host in `gatherum.js` serves out of memory and the shim names when the
+core asks for its system directory; an Emscripten core has a filesystem of its own the
+file is written into under the same name; and the Gecko host takes the bytes through
+`gatherum_system_file`, decodes a boot ROM if it arrived as dumped, and boots the disc
+with the ROM of its region — or the free replacement, with the boot chip attached blank,
+when there is none.
+
 **The cores themselves are not in this repository's history.** `build-core.sh` fetches
 mGBA and bsnes at a pinned commit into `build/`, compiles each against a pinned
 toolchain, links the shim, and leaves the result in `dist/`. Both directories are

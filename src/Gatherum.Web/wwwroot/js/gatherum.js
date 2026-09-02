@@ -519,30 +519,110 @@ let coreFrameClock = 0n;
 
 const NANOSECONDS_PER_FRAME = 16666667n;
 
-/// Every file the core asks for is not there. A browser has no filesystem to offer and
-/// does not need one: the cartridge is handed in from memory and the save comes back the
-/// same way. EBADF is the honest answer.
+/// The one directory a core may read from, and the files in it: what the instance has
+/// for this console — a BIOS, a coprocessor's firmware — fetched into memory before the
+/// cartridge loads, because a core opens them while it loads. Nothing else a core asks
+/// for is there. A browser has no filesystem to offer and does not need one: the
+/// cartridge is handed in from memory and the save comes back the same way.
+const SYSTEM_DIRECTORY = "/system";
+const SYSTEM_DIRECTORY_FD = 3;
+let systemFiles = new Map();
+
+// WASI's spellings: the errors a missing file is refused with, and the two kinds of
+// thing an open handle can be.
 const NO_FILE = 8;
+const NO_ENTRY = 44;
+const BAD_ARGUMENT = 28;
+const DIRECTORY = 3;
+const REGULAR_FILE = 4;
+const ALL_RIGHTS = 0x1fffffffn;
 
 function coreHost(memoryOf) {
   const bytes = () => new Uint8Array(memoryOf().buffer);
   const words = () => new DataView(memoryOf().buffer);
+  const text = (at, length) => new TextDecoder().decode(bytes().subarray(at, at + length));
+  // Open handles, read-only: a core reads a BIOS once and closes it.
+  const handles = new Map();
+  let nextHandle = SYSTEM_DIRECTORY_FD + 1;
+  const kindOf = (fd) =>
+    fd === SYSTEM_DIRECTORY_FD ? DIRECTORY : handles.has(fd) ? REGULAR_FILE : 0;
   return {
     wasi_snapshot_preview1: {
       clock_time_get: (_id, _precision, out) => {
         words().setBigUint64(out, coreFrameClock, true);
         return 0;
       },
-      fd_close: () => NO_FILE,
-      fd_fdstat_get: () => NO_FILE,
-      fd_filestat_get: () => NO_FILE,
+      fd_close: (fd) => (handles.delete(fd) ? 0 : NO_FILE),
+      fd_fdstat_get: (fd, out) => {
+        const kind = kindOf(fd);
+        if (!kind) return NO_FILE;
+        const view = words();
+        view.setUint8(out, kind);
+        view.setUint16(out + 2, 0, true);
+        view.setBigUint64(out + 8, ALL_RIGHTS, true);
+        view.setBigUint64(out + 16, ALL_RIGHTS, true);
+        return 0;
+      },
+      fd_filestat_get: (fd, out) => {
+        const kind = kindOf(fd);
+        if (!kind) return NO_FILE;
+        const view = words();
+        bytes().fill(0, out, out + 64);
+        view.setUint8(out + 16, kind);
+        view.setBigUint64(out + 24, 1n, true);
+        view.setBigUint64(out + 32, BigInt(handles.get(fd)?.data.length ?? 0), true);
+        return 0;
+      },
       fd_filestat_set_size: () => NO_FILE,
-      fd_prestat_dir_name: () => NO_FILE,
-      fd_prestat_get: () => NO_FILE,
-      fd_read: () => NO_FILE,
-      fd_seek: () => NO_FILE,
-      fd_sync: () => NO_FILE,
-      fd_tell: () => NO_FILE,
+      // The directory is "preopened", which is how a WASI program learns that a path
+      // exists at all: it asks about descriptors from three up until one is not there.
+      fd_prestat_get: (fd, out) => {
+        if (fd !== SYSTEM_DIRECTORY_FD) return NO_FILE;
+        const view = words();
+        view.setUint8(out, 0);
+        view.setUint32(out + 4, SYSTEM_DIRECTORY.length, true);
+        return 0;
+      },
+      fd_prestat_dir_name: (fd, path, length) => {
+        if (fd !== SYSTEM_DIRECTORY_FD) return NO_FILE;
+        bytes().set(new TextEncoder().encode(SYSTEM_DIRECTORY).subarray(0, length), path);
+        return 0;
+      },
+      fd_read: (fd, iovs, count, out) => {
+        const file = handles.get(fd);
+        if (!file) return NO_FILE;
+        const view = words();
+        let read = 0;
+        for (let i = 0; i < count; i++) {
+          const at = view.getUint32(iovs + i * 8, true);
+          const length = view.getUint32(iovs + i * 8 + 4, true);
+          const taken = Math.min(length, file.data.length - file.position);
+          if (taken <= 0) break;
+          bytes().set(file.data.subarray(file.position, file.position + taken), at);
+          file.position += taken;
+          read += taken;
+          if (taken < length) break;
+        }
+        view.setUint32(out, read, true);
+        return 0;
+      },
+      fd_seek: (fd, offset, whence, out) => {
+        const file = handles.get(fd);
+        if (!file) return NO_FILE;
+        const from = whence === 0 ? 0 : whence === 1 ? file.position : file.data.length;
+        const target = from + Number(offset);
+        if (target < 0) return BAD_ARGUMENT;
+        file.position = target;
+        words().setBigUint64(out, BigInt(target), true);
+        return 0;
+      },
+      fd_sync: (fd) => (handles.has(fd) ? 0 : NO_FILE),
+      fd_tell: (fd, out) => {
+        const file = handles.get(fd);
+        if (!file) return NO_FILE;
+        words().setBigUint64(out, BigInt(file.position), true);
+        return 0;
+      },
       // Anything the core prints goes to the console, where a person debugging it can
       // find it; nothing else reads it.
       fd_write: (fd, iovs, count, out) => {
@@ -558,7 +638,16 @@ function coreHost(memoryOf) {
         words().setUint32(out, written, true);
         return 0;
       },
-      path_open: () => NO_FILE,
+      path_open: (directory, _lookup, pathAt, pathLength, _oflags, _rights, _inheriting,
+        _flags, out) => {
+        if (directory !== SYSTEM_DIRECTORY_FD) return NO_FILE;
+        const data = systemFiles.get(text(pathAt, pathLength).replace(/^\/+/, ""));
+        if (!data) return NO_ENTRY;
+        const fd = nextHandle++;
+        handles.set(fd, { data, position: 0 });
+        words().setUint32(out, fd, true);
+        return 0;
+      },
       proc_exit: () => { throw new Error("The emulator core gave up."); },
     },
     // Two number-formatting helpers from the one source file of the core's that wants a
@@ -588,7 +677,7 @@ const CORE_CALLS = [
 /// Calls a core may lack without being broken: a module built before the call existed
 /// still plays, it just cannot be told the thing the call carries. Everything else
 /// missing is a build error worth failing loudly on.
-const OPTIONAL_CORE_CALLS = new Set(["gatherum_set_sticks"]);
+const OPTIONAL_CORE_CALLS = new Set(["gatherum_set_sticks", "gatherum_system_file"]);
 
 function flattened(source, prefix) {
   const calls = {};
@@ -656,6 +745,7 @@ export async function loadEmulatorCore(url, settings) {
   if (core && coreUrl === url) return "ok";
   core = undefined;
   coreUrl = undefined;
+  systemFiles = new Map();
   try {
     const opened = await openCore(url);
     if (!opened) return "missing";
@@ -677,6 +767,35 @@ export async function loadEmulatorCore(url, settings) {
     core = undefined;
     return "broken";
   }
+}
+
+/// Puts one of the instance's system files where this core will look for it — before
+/// the cartridge, because a core opens its BIOS while it loads a game. Three homes for
+/// three kinds of core: the Gecko host takes the bytes through a call of its own, an
+/// Emscripten core has a filesystem in memory that a file can be written into, and a
+/// WASI core reads the directory the host above serves. Fetched here rather than
+/// through .NET because that is where the bytes are going anyway.
+export async function loadEmulatorSystemFile(name, url) {
+  if (!core) return false;
+  const response = await fetch(url, { credentials: "same-origin" });
+  if (!response.ok) return false;
+  const data = new Uint8Array(await response.arrayBuffer());
+  if (core.exports.gatherum_system_file) {
+    const address = core.exports.gatherum_alloc(data.length);
+    if (!address) return false;
+    core.bytes().set(data, address);
+    const label = planted(name);
+    const taken = !!core.exports.gatherum_system_file(label, address, data.length);
+    core.exports.gatherum_free(label);
+    return taken;
+  }
+  if (core.fs) {
+    try { core.fs.mkdir(SYSTEM_DIRECTORY); } catch { /* already there */ }
+    core.fs.writeFile(SYSTEM_DIRECTORY + "/" + name, data);
+    return true;
+  }
+  systemFiles.set(name, data);
+  return true;
 }
 
 /// Hands the cartridge over.

@@ -229,7 +229,55 @@ one follow from that.
   GameCube core would have to invent, and it does not.
 - **Speed** is the emulator's business. It runs the console's processor an instruction
   at a time, which is what a browser allows, so a game that was slow to draw on the real
-  machine is slower here.
+  machine is slower here. Keep the disc as `.rvz` and the console keeps the last few
+  pieces it decompressed, so a game that reads the disc constantly is not decompressing
+  the same piece over and over.
+- **The real boot ROM**, if the instance has one — see [System files](#system-files) —
+  boots the disc the way the hardware does, skipping straight past the animation, and
+  a game that reads the console's font or its settings from that chip finds them.
+  Without one a small free replacement boots the disc, which most games never notice.
+  The console's clock starts at the beginning of the year 2000 every time it is
+  switched on and counts frames from there: the same disc and the same buttons make the
+  same game, and a browser build has no clock the console is allowed to read.
+
+### System files
+
+A console keeps a little of itself in silicon Nintendo made: a boot ROM, a sound
+processor's program, the firmware on a cartridge's coprocessor. An emulator cannot ship
+those, so each machine here plays without them, on a free replacement or a stand-in of
+its own — and each one that is supplied makes the machine more like the real thing.
+
+An admin uploads them under **Settings**, once for the whole instance. They are handed
+to the console in every signed-in player's browser and read by nothing else; somebody
+reading a public page without signing in plays without them. Every file is optional,
+and the name has to be exactly the one below, because it is the name the emulator looks
+for. A file of the wrong length is refused with both lengths, since a ROM is a fixed
+piece of hardware and a file of another size is something else wearing its name.
+
+| Console | File | What it is for |
+| --- | --- | --- |
+| GameCube | `IPL.bin` | An NTSC console's boot ROM, as dumped or decoded. Boots the disc the way the hardware does, and gives games the console's font and settings. |
+| GameCube | `PAL_IPL.bin` | A PAL console's boot ROM. A disc is booted with the ROM of its own region; a region with no ROM boots the free way. |
+| GameCube | `dsp_rom.bin` | The sound processor's boot ROM, in place of the free one from Dolphin that is built in. |
+| GameCube | `dsp_coef.bin` | The sound processor's coefficient table, which goes with it. |
+| Game Boy Advance | `gba_bios.bin` | The console's BIOS. With it the boot logo plays and every game sees what it expects; without it the emulator stands in, which a few games notice. |
+| Super Nintendo | `dsp1.program.rom`, `dsp1.data.rom` | DSP-1 coprocessor (Pilotwings) |
+| Super Nintendo | `dsp1b.program.rom`, `dsp1b.data.rom` | DSP-1B coprocessor (Super Mario Kart and most other DSP-1 games) |
+| Super Nintendo | `dsp2.program.rom`, `dsp2.data.rom` | DSP-2 coprocessor (Dungeon Master) |
+| Super Nintendo | `dsp3.program.rom`, `dsp3.data.rom` | DSP-3 coprocessor (SD Gundam GX) |
+| Super Nintendo | `dsp4.program.rom`, `dsp4.data.rom` | DSP-4 coprocessor (Top Gear 3000) |
+| Super Nintendo | `st010.program.rom`, `st010.data.rom` | ST010 coprocessor (F1 ROC II) |
+| Super Nintendo | `st011.program.rom`, `st011.data.rom` | ST011 coprocessor (Hayazashi Nidan Morita Shougi) |
+| Super Nintendo | `st018.program.rom`, `st018.data.rom` | ST018 coprocessor (Hayazashi Nidan Morita Shougi 2) |
+| Super Nintendo | `cx4.data.rom` | Cx4 coprocessor (Mega Man X2 and X3) |
+
+A Super Nintendo cartridge dump that has its coprocessor's firmware appended, as many
+do, needs none of the Super Nintendo files: the console takes the firmware from the
+cartridge first and looks here only when it is missing. The consoles Gatherum wrote —
+the NES, the Game Boy, the Master System and the Game Gear — have nothing to upload.
+
+The files live under the storage root's own bookkeeping directory, `.gatherum/system`,
+beside nobody's pages, and go where the storage root goes in a backup.
 
 A Master System cartridge carries no title, only the catalogue number Sega sold it under,
 so that is what search has to go on for one. A Game Gear plays in colour on a screen a

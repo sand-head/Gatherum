@@ -430,6 +430,29 @@ public static class ApiEndpoints
             Results.Ok(SharedListDto.From(await lists.SetAsync(http.User.GetUserId(), id,
                 request.Key, request.Answered, request.Name))));
 
+        // A console's boot ROMs and firmware, the instance's own. Any signed-in player's
+        // browser fetches them for its console; only an admin changes them; and nothing
+        // here is anonymous — see SystemFileService.
+        api.MapGet("/system-files", async (SystemFileService files) =>
+            Results.Ok((await files.ListAsync()).Select(SystemConsoleDto.From)));
+
+        api.MapGet("/system-files/{console}/{name}", async (SystemFileService files,
+            string console, string name) =>
+            Results.Stream(await files.OpenAsync(console, name), "application/octet-stream"));
+
+        api.MapPut("/system-files/{console}/{name}", async (SystemFileService files,
+            HttpContext http, string console, string name) =>
+            Results.Ok(SystemFileDto.From(await files.PutAsync(http.User.GetUserId(),
+                console, name, http.Request.Body, http.RequestAborted))))
+            .DisableAntiforgery();
+
+        api.MapDelete("/system-files/{console}/{name}", async (SystemFileService files,
+            HttpContext http, string console, string name) =>
+        {
+            await files.DeleteAsync(http.User.GetUserId(), console, name);
+            return Results.NoContent();
+        });
+
         api.MapGet("/keys", async (ApiKeyService keys, HttpContext http) =>
         {
             var list = await keys.ListAsync(http.User.GetUserId());

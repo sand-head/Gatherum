@@ -342,7 +342,8 @@ else
                 romHash = "";
                 module ??= await Js.InvokeAsync<IJSObjectReference>("import", "./js/gatherum.js");
                 directModule = module as IJSInProcessObjectReference;
-                core = await VendoredCore.CreateAsync(module, discKind, [], ContentUrl)
+                core = await VendoredCore.CreateAsync(module, discKind, [],
+                        await SystemFilesForAsync(discKind), ContentUrl)
                     ?? throw new NotSupportedException(NoCoreMessage);
             }
             else if (Emulator.NamedLikeADisc(FileName))
@@ -363,7 +364,8 @@ else
                     // constructed, so the module has to be in hand before the first render.
                     module ??= await Js.InvokeAsync<IJSObjectReference>("import", "./js/gatherum.js");
                     directModule = module as IJSInProcessObjectReference;
-                    core = await VendoredCore.CreateAsync(module, kind, rom)
+                    core = await VendoredCore.CreateAsync(module, kind, rom,
+                            await SystemFilesForAsync(kind))
                         ?? throw new NotSupportedException(NoCoreMessage);
                 }
                 else
@@ -386,6 +388,26 @@ else
         catch (Exception problem)
         {
             failure = $"This cartridge would not load: {problem.Message}";
+        }
+    }
+
+    /// <summary>Which of this console's system files — a BIOS, a boot ROM — the instance
+    /// has, for the core to load before the cartridge. None for a reader who is not
+    /// signed in, and none rather than an error when the list will not come: a cartridge
+    /// played without them is the cartridge as it always played.</summary>
+    private async Task<IReadOnlyList<string>> SystemFilesForAsync(ConsoleKind kind)
+    {
+        if (VendoredCore.SystemKey(kind) is not { } key)
+            return [];
+        try
+        {
+            var consoles = await Data.ListSystemFilesAsync();
+            return consoles.FirstOrDefault(c => c.Key == key)?.Files
+                .Where(f => f.Present).Select(f => f.Name).ToList() ?? [];
+        }
+        catch (HttpRequestException)
+        {
+            return [];
         }
     }
 

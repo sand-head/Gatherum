@@ -20,10 +20,45 @@ public class FileSystemStorage(IOptions<GatherumOptions> options) : IFileStorage
 
     private readonly string root = Path.GetFullPath(options.Value.Storage.Root);
 
-    public async Task<StoredBlob> WriteAsync(NodePath path, Stream content,
+    public Task<StoredBlob> WriteAsync(NodePath path, Stream content,
+        CancellationToken cancellationToken = default) =>
+        WriteToAsync(Resolve(path), content, cancellationToken);
+
+    public Task<StoredBlob> WriteSystemAsync(string relative, Stream content,
+        CancellationToken cancellationToken = default) =>
+        WriteToAsync(ResolveSystem(relative), content, cancellationToken);
+
+    public Task<Stream> OpenSystemAsync(string relative, CancellationToken cancellationToken = default)
+    {
+        var target = ResolveSystem(relative);
+        if (!File.Exists(target))
+            throw new FileNotFoundException($"No system file at {relative}.", target);
+        return Task.FromResult<Stream>(File.OpenRead(target));
+    }
+
+    public async Task<StoredBlob?> MeasureSystemAsync(string relative,
         CancellationToken cancellationToken = default)
     {
-        var target = Resolve(path);
+        var target = ResolveSystem(relative);
+        if (!File.Exists(target))
+            return null;
+        await using var file = File.OpenRead(target);
+        using var sha = SHA256.Create();
+        var hash = await sha.ComputeHashAsync(file, cancellationToken);
+        return new StoredBlob(Convert.ToHexStringLower(hash), file.Length);
+    }
+
+    public Task DeleteSystemAsync(string relative, CancellationToken cancellationToken = default)
+    {
+        File.Delete(ResolveSystem(relative));
+        return Task.CompletedTask;
+    }
+
+    /// <summary>Written beside its final name and moved into place, so a reader never
+    /// sees half a file and a failed write leaves the old one where it was.</summary>
+    private static async Task<StoredBlob> WriteToAsync(string target, Stream content,
+        CancellationToken cancellationToken)
+    {
         Directory.CreateDirectory(Path.GetDirectoryName(target)!);
         var temp = target + $".incoming-{Guid.NewGuid():N}";
         try
@@ -193,6 +228,22 @@ public class FileSystemStorage(IOptions<GatherumOptions> options) : IFileStorage
         if (hash.Length != 64 || !hash.All(Uri.IsHexDigit))
             throw new ArgumentException("Not a SHA-256 hex digest.", nameof(hash));
         return Path.Combine(VersionsDirectory(root), hash[..2], hash[2..4], hash);
+    }
+
+    /// <summary>A system file's path: <c>{root}/.gatherum/system/{console}/{name}</c>,
+    /// and only that shape — one directory, one plain filename, nothing that could be
+    /// read as a step up or a step out.</summary>
+    private string ResolveSystem(string relative)
+    {
+        var segments = relative.Split('/');
+        if (segments.Length != 2 || segments.Any(s => s.Length == 0 || s is ".." or "."
+                || s.Contains('\\') || s == SidecarName))
+            throw new ArgumentException($"'{relative}' is not a system file path.", nameof(relative));
+        var start = Path.Combine(root, SidecarName, "system");
+        var full = Path.GetFullPath(Path.Combine(start, segments[0], segments[1]));
+        if (!full.StartsWith(start + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+            throw new ArgumentException($"'{relative}' escapes the system directory.", nameof(relative));
+        return full;
     }
 
     private string Resolve(NodePath path)

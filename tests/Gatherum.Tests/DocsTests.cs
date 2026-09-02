@@ -61,6 +61,20 @@ public class DocsTests
     }
 
     [Fact]
+    public void The_manual_names_every_system_file_a_console_can_take()
+    {
+        // A boot ROM the manual never mentions is one nobody knows to upload, and the
+        // file's name is the one thing a person has to get exactly right.
+        var page = Page("pages-and-files").Markdown;
+        foreach (var console in Gatherum.Core.Roms.SystemFiles.Consoles)
+        {
+            Assert.Contains(console.Name, page, StringComparison.Ordinal);
+            Assert.All(console.Files, file =>
+                Assert.Contains($"`{file.Name}`", page, StringComparison.Ordinal));
+        }
+    }
+
+    [Fact]
     public void The_dialect_page_names_every_construct_the_code_implements()
     {
         // The point of shipping the manual is that a model can be pointed at it, so a
