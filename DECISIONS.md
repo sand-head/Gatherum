@@ -2422,3 +2422,36 @@ only the two of Gecko's own that are compiled in (the third is test data), and t
 context carries the checkout because the core stage has no `.git` to fetch with.
 `build-core.sh` refuses, with the command to run, when either is missing. mGBA and bsnes
 are unchanged: fetched, pinned by commit, never patched.
+
+## Where a GameCube frame's time went, and two idle loops
+
+Asked whether the frame rate was the integrated GPU's doing, the answer from the kernel's
+per-client DRM accounting was no on both counts: Firefox had put WebGPU on the discrete
+card, and that card was one percent busy. The Firefox Profiler on the thread running the
+console said where the time was instead, and it was not where the "interpreter is slow"
+story put it. Twilight Princess spent 57% of every frame in the DSP — the sound processor,
+emulated instruction by instruction — and a count of instructions per frame made the
+shape of it plain: five million DSP instructions a frame, on a chip that can execute 1.35
+million in that time, and eight million CPU instructions a frame on a game sitting at its
+health-and-safety screen doing nothing. Both were idle loops run in full. Gecko's JIT
+skips both kinds; its interpreters, which are what a browser gets, skipped neither.
+
+Two commits on the fork. The interpreter now classifies a backward branch the moment it
+closes a loop, with the JIT's own classifier moved to `gekko::idle` so both modes share
+one definition of "reads only what an interrupt or a DMA could change", and jumps the
+clock to the next scheduler deadline — the decrementer and time base are derived from
+that clock, so an alarm or a timed wait still lands where it would have. And the DSP's
+wait table learns the Zelda microcode's three idle loops beside the AX ones it knew: a
+flag in its own DRAM that its mail handler sets, a command ring whose read and write
+words have drawn level, and the `LR @CMBH` spelling of the mailbox poll; Dolphin's
+analyzer lists the same three. The parked condition reads the words the loop reads, and
+requires no interrupt pending, because only the handler can change them.
+
+Measured in Firefox on the same discs: Twilight Princess from 128 ms a frame to 8 —
+full speed with time to spare — and Super Monkey Ball 2 from 67 to 50, where a profile
+now shows no hot spot at all, only the work of a real 3D scene spread across the
+interpreter, the GX FIFO and the vertex uploads. That remainder is the price of no JIT,
+and no patch buys it back. Two things tried and found worthless are worth recording:
+`wasm-opt -O3` shrank the module by a quarter and changed the frame time by nothing, and
+the chip the WebGPU device lands on does not matter, because the picture is never waited
+for.

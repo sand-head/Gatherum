@@ -47,10 +47,12 @@ draining into memory whether or not the command processor is linked to it, which
 a game running two FIFOs and swapping them each frame (Super Monkey Ball 2, for one)
 gets anything drawn at all; and the DSP's DMA-busy bit made the status it is — not
 writable, and not held high by the audio stream — because a sound driver that polls it
-before every ARAM transfer otherwise waits forever. Each is one commit, in upstream's
-own voice, and each is meant to go back upstream; the fork exists so that they have
-somewhere to live while they wait, and so that the next one can be written, built and
-tested in place rather than as a patch file applied to a clone.
+before every ARAM transfer otherwise waits forever; and, for speed, the interpreter
+skipping idle loops the way the JIT already did, and the DSP parking in the Zelda
+microcode's idle loops as it did in AX's. Each is one commit, in upstream's own voice,
+and each is meant to go back upstream; the fork exists so that they have somewhere to
+live while they wait, and so that the next one can be written, built and tested in place
+rather than as a patch file applied to a clone.
 
 **The cores themselves are not in this repository's history.** `build-core.sh` fetches
 mGBA and bsnes at a pinned commit into `build/`, compiles each against a pinned
