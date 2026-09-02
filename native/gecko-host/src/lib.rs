@@ -467,14 +467,15 @@ impl Console {
         emulator.insert_memory_card(MEMORY_CARD_SLOT, None, MEMORY_CARD_BLOCKS);
         // The device beside the memory card: the IPL mask ROM, the SRAM and the clock.
         // Gecko's IPL-less boot leaves it off the bus, and a game that asks it for the
-        // console's settings, or waits on its clock, gets nothing back. The ROM itself
-        // cannot be shipped, so it is blank: a font read from it comes out empty, and
-        // the SRAM and clock behind it answer as a fresh console would.
-        emulator.exi.attach_device(
-            ExiMacronix::CHANNEL,
-            ExiMacronix::DEVICE,
-            Box::new(ExiMacronix::new(vec![0u8; IPL_ROM_SIZE])),
-        );
+        // console's settings, or waits on its clock, gets nothing back. The ROM cannot
+        // be shipped, so it is blank unless this Gatherum was given one: a font read
+        // out of a blank ROM comes out empty, and the SRAM and clock behind it answer
+        // as a fresh console would either way. Booting stays the free IPL's job.
+        let ipl = IPL_ROM.with(|rom| {
+            let rom = rom.borrow();
+            if rom.len() == IPL_ROM_SIZE { rom.clone() } else { vec![0u8; IPL_ROM_SIZE] }
+        });
+        emulator.exi.attach_device(ExiMacronix::CHANNEL, ExiMacronix::DEVICE, Box::new(ExiMacronix::new(ipl)));
 
         let actions: ActionQueue = Arc::new(Mutex::new(QueueShared { messages: Vec::new(), epoch: 0 }));
         emulator.render_sink = Box::new(QueueSink::new(actions.clone()));
@@ -566,6 +567,11 @@ struct Host {
 }
 
 thread_local! {
+    /// The console's boot ROM, handed over before the console powers on. Empty unless
+    /// this Gatherum holds one: a blank ROM answers every read with nothing, which is
+    /// what a font drawn out of it looks like.
+    static IPL_ROM: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
+
     static HOST: RefCell<Host> = RefCell::new(Host {
         gpu: None,
         console: None,
@@ -602,6 +608,16 @@ fn is_gamecube_disc(bytes: &[u8]) -> bool {
 /// need to know.
 #[wasm_bindgen]
 pub fn gatherum_set_option(_key: u32, _value: u32) {}
+
+/// The console's boot ROM, if this Gatherum holds one, before it powers on. A ROM of
+/// any other length is not this console's and is ignored.
+#[wasm_bindgen]
+pub fn gatherum_set_firmware(address: u32, length: u32) {
+    let bytes = unsafe { core::slice::from_raw_parts(address as *const u8, length as usize) };
+    if bytes.len() == IPL_ROM_SIZE {
+        IPL_ROM.with(|rom| *rom.borrow_mut() = bytes.to_vec());
+    }
+}
 
 #[wasm_bindgen]
 pub fn gatherum_alloc(length: u32) -> u32 {

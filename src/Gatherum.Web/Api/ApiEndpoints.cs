@@ -430,6 +430,36 @@ public static class ApiEndpoints
             Results.Ok(SharedListDto.From(await lists.SetAsync(http.User.GetUserId(), id,
                 request.Key, request.Answered, request.Name))));
 
+        // Firmware belongs to the instance rather than to anybody, and every console
+        // here plays without it, so any signed-in person may see what is held, add a
+        // file or take one away. The bytes themselves are only ever served back to a
+        // signed-in browser, which is the player fetching them for its core.
+        api.MapGet("/firmware", async (FirmwareService firmware) =>
+            Results.Ok((await firmware.ListAsync()).Select(FirmwareDto.From)));
+
+        api.MapGet("/firmware/{machine}/{file}", async (FirmwareService firmware,
+            string machine, string file) =>
+        {
+            var content = await firmware.OpenAsync(machine, file);
+            return content is null
+                ? Results.NotFound()
+                : Results.Stream(content, "application/octet-stream");
+        });
+
+        api.MapPut("/firmware/{machine}/{file}", async (FirmwareService firmware,
+            HttpContext http, string machine, string file) =>
+        {
+            var stored = await firmware.StoreAsync(machine, file, http.Request.Body);
+            return Results.Ok(new { hash = stored.Hash, sizeBytes = stored.SizeBytes });
+        });
+
+        api.MapDelete("/firmware/{machine}/{file}", async (FirmwareService firmware,
+            string machine, string file) =>
+        {
+            await firmware.RemoveAsync(machine, file);
+            return Results.NoContent();
+        });
+
         api.MapGet("/keys", async (ApiKeyService keys, HttpContext http) =>
         {
             var list = await keys.ListAsync(http.User.GetUserId());

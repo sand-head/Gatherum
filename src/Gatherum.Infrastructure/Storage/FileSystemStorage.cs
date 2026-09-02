@@ -20,10 +20,39 @@ public class FileSystemStorage(IOptions<GatherumOptions> options) : IFileStorage
 
     private readonly string root = Path.GetFullPath(options.Value.Storage.Root);
 
-    public async Task<StoredBlob> WriteAsync(NodePath path, Stream content,
+    public Task<StoredBlob> WriteAsync(NodePath path, Stream content,
+        CancellationToken cancellationToken = default) =>
+        WriteFileAsync(Resolve(path), content, cancellationToken);
+
+    public async Task<StoredBlob?> MeasureInstanceFileAsync(string relative,
         CancellationToken cancellationToken = default)
     {
-        var target = Resolve(path);
+        var target = InstancePath(relative);
+        if (!File.Exists(target))
+            return null;
+        await using var file = File.OpenRead(target);
+        var hash = await SHA256.HashDataAsync(file, cancellationToken);
+        return new StoredBlob(Convert.ToHexStringLower(hash), file.Length);
+    }
+
+    public Task<Stream> OpenInstanceFileAsync(string relative, CancellationToken cancellationToken = default) =>
+        Task.FromResult<Stream>(File.OpenRead(InstancePath(relative)));
+
+    public Task<StoredBlob> WriteInstanceFileAsync(string relative, Stream content,
+        CancellationToken cancellationToken = default) =>
+        WriteFileAsync(InstancePath(relative), content, cancellationToken);
+
+    public Task DeleteInstanceFileAsync(string relative, CancellationToken cancellationToken = default)
+    {
+        File.Delete(InstancePath(relative));
+        return Task.CompletedTask;
+    }
+
+    /// <summary>Written whole under a temporary name and moved into place, so that a
+    /// reader never sees half a file, and hashed on the way through.</summary>
+    private static async Task<StoredBlob> WriteFileAsync(string target, Stream content,
+        CancellationToken cancellationToken)
+    {
         Directory.CreateDirectory(Path.GetDirectoryName(target)!);
         var temp = target + $".incoming-{Guid.NewGuid():N}";
         try
@@ -187,6 +216,21 @@ public class FileSystemStorage(IOptions<GatherumOptions> options) : IFileStorage
 
     private string VersionsDirectory(string root) =>
         Path.Combine(RootDirectory(root), SidecarName, "versions");
+
+    /// <summary>The instance's own files live in the storage root's sidecar, which is
+    /// not a user's root and is skipped by the scan; a path that would leave it is
+    /// refused the way a node path that would leave its root is.</summary>
+    private string InstancePath(string relative)
+    {
+        var start = Path.Combine(root, SidecarName);
+        var segments = relative.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length == 0 || segments.Any(s => s is ".." or "." || s == SidecarName))
+            throw new ArgumentException($"'{relative}' is not a path within the instance's files.", nameof(relative));
+        var full = Path.GetFullPath(Path.Combine(start, Path.Combine(segments)));
+        if (!IsInside(start, full))
+            throw new ArgumentException($"'{relative}' escapes the instance's files.", nameof(relative));
+        return full;
+    }
 
     private string ArchivePath(string root, string hash)
     {

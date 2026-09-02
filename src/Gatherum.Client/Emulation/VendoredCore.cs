@@ -40,7 +40,8 @@ public sealed class VendoredCore : IEmulatorCore, IDisposable
         int PlayerCount,
         string[] Settings,
         bool LoadsByUrl = false,
-        bool NeedsWebGpu = false);
+        bool NeedsWebGpu = false,
+        string? FirmwareUrl = null);
 
     private static readonly Dictionary<ConsoleKind, Machine> Machines = new()
     {
@@ -71,7 +72,10 @@ public sealed class VendoredCore : IEmulatorCore, IDisposable
             // One. Gecko has no save state to hand a second player, and nobody has
             // measured two of it agreeing.
             PlayerCount: 1, Settings: [],
-            LoadsByUrl: true, NeedsWebGpu: true),
+            LoadsByUrl: true, NeedsWebGpu: true,
+            // The console boots on Gecko's own free replacement either way; a real IPL
+            // here is what a game reading the console's font finds when it looks.
+            FirmwareUrl: "/api/firmware/gamecube/ipl.bin"),
     };
 
     /// <summary>How often the cartridge's battery memory is checked for changes. Every
@@ -145,7 +149,7 @@ public sealed class VendoredCore : IEmulatorCore, IDisposable
                 $"A {machine.SystemName} draws with WebGPU, which this browser does not " +
                 "offer. The disc can be downloaded but not played here.");
         var status = await module.InvokeAsync<string>(
-            "loadEmulatorCore", machine.ModuleUrl, machine.Settings);
+            "loadEmulatorCore", machine.ModuleUrl, machine.Settings, machine.FirmwareUrl);
         if (status == "missing")
             return null;
         if (status != "ok")

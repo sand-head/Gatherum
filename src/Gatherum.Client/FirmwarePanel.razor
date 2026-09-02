@@ -1,0 +1,118 @@
+@inject IAppData Data
+
+<section class="settings-firmware">
+    <h2>Console firmware</h2>
+    <p>
+        A few consoles had a chip in them that nobody may distribute. Every console here
+        plays without one — what a file buys is listed beside it. A file added here is
+        this Gatherum's, not any one person's: everybody who plays sees the difference.
+    </p>
+
+    @if (problem is not null)
+    {
+        <p class="firmware-problem" role="alert">@problem</p>
+    }
+
+    <table class="firmware-table stacked-table" role="table">
+        <thead role="rowgroup">
+            <tr role="row"><th>Console</th><th>File</th><th>Held</th><th></th></tr>
+        </thead>
+        <tbody role="rowgroup">
+            @foreach (var item in firmware)
+            {
+                <tr role="row">
+                    <td role="cell" data-label="Console">
+                        @item.Console
+                        <span class="firmware-purpose">@item.Purpose</span>
+                    </td>
+                    <td role="cell" data-label="File">
+                        <code>@item.File</code>
+                        <span class="firmware-size">@item.Bytes.ToString("N0") bytes</span>
+                    </td>
+                    <td role="cell" data-label="Held">
+                        @if (item.Hash is { Length: > 0 } hash)
+                        {
+                            <code title="SHA-256">@hash[..12]…</code>
+                        }
+                        else
+                        {
+                            <span class="firmware-absent">none</span>
+                        }
+                    </td>
+                    <td role="cell">
+                        @if (busy == Key(item))
+                        {
+                            <span>working…</span>
+                        }
+                        else
+                        {
+                            <label class="firmware-upload">
+                                <InputFile OnChange="@(e => UploadAsync(item, e))" />
+                                <span>@(item.Hash is null ? "Add file" : "Replace")</span>
+                            </label>
+                            @if (item.Hash is not null)
+                            {
+                                <button class="danger" @onclick="() => RemoveAsync(item)">Remove</button>
+                            }
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</section>
+
+@code {
+    private IReadOnlyList<FirmwareInfo> firmware = [];
+    private string? busy;
+    private string? problem;
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync() => firmware = await Data.ListFirmwareAsync();
+
+    private static string Key(FirmwareInfo item) => $"{item.Machine}/{item.File}";
+
+    private async Task UploadAsync(FirmwareInfo item, InputFileChangeEventArgs e)
+    {
+        problem = null;
+        busy = Key(item);
+        try
+        {
+            // A byte over what the console's chip holds is a different file, and the
+            // service says so; the extra byte is what lets it tell "too big" apart.
+            await using var stream = e.File.OpenReadStream(maxAllowedSize: item.Bytes + 1);
+            await Data.UploadFirmwareAsync(item.Machine, item.File, stream);
+        }
+        catch (Exception failure)
+        {
+            problem = failure is IOException
+                ? $"That file is larger than {item.Console}'s {item.File}."
+                : failure.Message;
+        }
+        finally
+        {
+            busy = null;
+            await ReloadAsync();
+        }
+    }
+
+    private async Task RemoveAsync(FirmwareInfo item)
+    {
+        problem = null;
+        busy = Key(item);
+        try
+        {
+            await Data.RemoveFirmwareAsync(item.Machine, item.File);
+        }
+        catch (Exception failure)
+        {
+            problem = failure.Message;
+        }
+        finally
+        {
+            busy = null;
+            await ReloadAsync();
+        }
+    }
+}

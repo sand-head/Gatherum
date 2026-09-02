@@ -46,7 +46,8 @@ auto-login. Migrations: `dotnet ef migrations add <Name> -p src/Gatherum.Infrast
   `FileService` = bodies/versions/text editing, `BookmarkService` = a URL captured as
   a file node and captured again on demand, `SharedListService` = a shared list's
   catalog fused with every tally of it, and the one write, which is always the
-  caller's own tally), `Markdown/MarkdownContent`,
+  caller's own tally, `FirmwareService` = the files a console had in silicon and nobody
+  may ship, kept for the instance rather than for a person), `Markdown/MarkdownContent`,
   `Markdown/WikiLinkSyntax` and `Markdown/SharedListSyntax` (the conventions a body
   carries, read server-side without an editor), the seam
   interfaces in `Abstractions/`, `Services/MediaAnalysisQueue` — the hand-off from

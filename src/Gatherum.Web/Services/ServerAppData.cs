@@ -14,6 +14,7 @@ namespace Gatherum.Web.Services;
 public sealed class ServerAppData(
     AppOperations ops,
     PresenceTracker presence,
+    FirmwareService firmware,
     AuthenticationStateProvider authentication) : IAppData
 {
     public async Task<EditorPayload> LoadAsync(Guid nodeId)
@@ -375,6 +376,28 @@ public sealed class ServerAppData(
     {
         var userId = await UserIdAsync();
         await ops.Files(s => s.SetDescriptionAsync(userId, nodeId, description));
+    }
+
+    public async Task<IReadOnlyList<FirmwareInfo>> ListFirmwareAsync()
+    {
+        await UserIdAsync();
+        var held = await firmware.ListAsync();
+        return held
+            .Select(f => new FirmwareInfo(f.Spec.Machine, f.Spec.File, f.Spec.Console,
+                f.Spec.Purpose, f.Spec.Bytes, f.Stored?.Hash, f.Stored?.SizeBytes))
+            .ToList();
+    }
+
+    public async Task UploadFirmwareAsync(string machine, string file, Stream content)
+    {
+        await UserIdAsync();
+        await firmware.StoreAsync(machine, file, content);
+    }
+
+    public async Task RemoveFirmwareAsync(string machine, string file)
+    {
+        await UserIdAsync();
+        await firmware.RemoveAsync(machine, file);
     }
 
     public async Task<IReadOnlyList<KeyInfo>> ListKeysAsync()

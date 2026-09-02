@@ -574,7 +574,7 @@ function coreHost(memoryOf) {
 /// happens to export is what lets the two kinds be flattened into one: Emscripten spells
 /// an exported C function with a leading underscore and a bare module does not.
 const CORE_CALLS = [
-  "gatherum_set_option", "gatherum_alloc", "gatherum_free",
+  "gatherum_set_option", "gatherum_set_firmware", "gatherum_alloc", "gatherum_free",
   "gatherum_needs_path", "gatherum_load", "gatherum_load_path", "gatherum_unload",
   "gatherum_boot", "gatherum_reset", "gatherum_run",
   "gatherum_frame_ptr", "gatherum_frame_width", "gatherum_frame_height",
@@ -588,7 +588,7 @@ const CORE_CALLS = [
 /// Calls a core may lack without being broken: a module built before the call existed
 /// still plays, it just cannot be told the thing the call carries. Everything else
 /// missing is a build error worth failing loudly on.
-const OPTIONAL_CORE_CALLS = new Set(["gatherum_set_sticks"]);
+const OPTIONAL_CORE_CALLS = new Set(["gatherum_set_sticks", "gatherum_set_firmware"]);
 
 function flattened(source, prefix) {
   const calls = {};
@@ -652,7 +652,7 @@ function planted(text) {
 /// core that is *in* this build and would not start, which is a bug to report, not an
 /// edition to accept. Collapsing them once had the player blaming the build for a
 /// serving failure.
-export async function loadEmulatorCore(url, settings) {
+export async function loadEmulatorCore(url, settings, firmwareUrl) {
   if (core && coreUrl === url) return "ok";
   core = undefined;
   coreUrl = undefined;
@@ -663,6 +663,7 @@ export async function loadEmulatorCore(url, settings) {
     for (let at = 0; at + 1 < (settings?.length ?? 0); at += 2) {
       core.exports.gatherum_set_option(planted(settings[at]), planted(settings[at + 1]));
     }
+    if (firmwareUrl) await handFirmwareOver(firmwareUrl);
     // A core that has to find a GPU boots asynchronously and says whether it did; the
     // shim's boot returns nothing, which is not a refusal.
     const booted = await core.exports.gatherum_boot();
@@ -677,6 +678,26 @@ export async function loadEmulatorCore(url, settings) {
     core = undefined;
     return "broken";
   }
+}
+
+/// Hands the core the firmware this Gatherum holds for it, if it holds any. Nothing
+/// here needs firmware to play, so every way of not having it — none uploaded, a reader
+/// who is not signed in, a core built before firmware existed — is the same quiet no.
+async function handFirmwareOver(url) {
+  if (!core.exports.gatherum_set_firmware) return;
+  let response;
+  try {
+    response = await fetch(url, { credentials: "same-origin" });
+  } catch {
+    return;
+  }
+  if (!response.ok) return;
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  const address = core.exports.gatherum_alloc(bytes.length);
+  if (!address) return;
+  core.bytes().set(bytes, address);
+  core.exports.gatherum_set_firmware(address, bytes.length);
+  core.exports.gatherum_free(address);
 }
 
 /// Hands the cartridge over.

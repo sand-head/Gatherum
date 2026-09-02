@@ -54,7 +54,15 @@ them down, and they live in a sidecar that travels with the directory.
       versions/ab/cd/<sha256>   ← the CAS, demoted to history storage
   bob/
     ...
+  .gatherum/
+    firmware/gamecube/ipl.bin   ← the instance's own, owned by nobody, indexed as nothing
 ```
+
+The storage root's own `.gatherum/` is the one place a file belongs to the instance
+rather than to a person. Nothing there is a node: the scan skips it as it skips every
+other sidecar, so a console's firmware is not a page, has no owner, and appears in no
+listing. It is still a plain file where a person would expect one, and it travels with a
+backup of the storage root.
 
 The root directory is named after the user's `preferred_username` — Authelia sends the
 login itself, so `sand_head` is `sand_head`. That is the point of using it: somebody
