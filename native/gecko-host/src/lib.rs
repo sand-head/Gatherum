@@ -188,6 +188,12 @@ struct Gpu {
     queue: wgpu::Queue,
     renderer: GxRenderer,
     staging: wgpu::Buffer,
+    /// EFB copies to RAM the GPU has been asked for and this side is waiting to map:
+    /// each lands in the game's memory on a later frame, the way the picture does.
+    /// Natively the renderer waits on the device for these; a browser cannot wait, so
+    /// they are settled here as they arrive, and left unsettled they would pile up a
+    /// staging buffer each — which is what a game that copies every frame did.
+    writebacks: Vec<(backend_wgpu::PendingWriteback, Rc<Cell<Option<bool>>>)>,
     /// The size of the copy in flight, if one is.
     pending: Option<(u32, u32)>,
     /// None while the copy is in flight; Some(true) once the buffer is mapped and can
@@ -230,6 +236,7 @@ impl Gpu {
             queue,
             renderer,
             staging,
+            writebacks: Vec::new(),
             pending: None,
             mapped: Rc::new(Cell::new(None)),
             last_size: (0, 0),
@@ -253,6 +260,36 @@ impl Gpu {
             self.renderer
                 .process_action_with_external_scratch(&self.device, &self.queue, &message.action, &mut scratch);
         }
+        for writeback in self.renderer.take_pending_writebacks(&self.queue) {
+            let mapped = Rc::new(Cell::new(None));
+            let flag = mapped.clone();
+            writeback
+                .staging
+                .slice(..writeback.staging_size)
+                .map_async(wgpu::MapMode::Read, move |result| flag.set(Some(result.is_ok())));
+            self.writebacks.push((writeback, mapped));
+        }
+    }
+
+    /// Puts every EFB copy that has mapped since last time into the game's memory.
+    fn settle_writebacks(&mut self, mmio: &mut gecko::mmio::Mmio<{ gecko::system::GC }>) {
+        if self.writebacks.is_empty() {
+            return;
+        }
+        let mut ram = mmio.ram_view_mut();
+        let mut waiting = Vec::new();
+        for (writeback, mapped) in self.writebacks.drain(..) {
+            match mapped.get() {
+                None => waiting.push((writeback, mapped)),
+                Some(false) => self.renderer.discard_writeback(writeback),
+                Some(true) => {
+                    let bytes = writeback.staging.slice(..writeback.staging_size).get_mapped_range().to_vec();
+                    writeback.staging.unmap();
+                    self.renderer.finish_writeback(writeback, &bytes, &mut ram);
+                }
+            }
+        }
+        self.writebacks = waiting;
     }
 
     /// Asks for the picture. It arrives later: see `collect`.
@@ -306,10 +343,16 @@ impl Gpu {
             let x0 = ((FRAME_WIDTH - width) / 2 * 4) as usize;
             let y0 = ((FRAME_HEIGHT - height) / 2) as usize;
             let row_bytes = (width * 4) as usize;
+            // The seam's frame is opaque, and what comes back from the texture is not
+            // always: a game that never writes alpha leaves it at zero, and a bitmap
+            // declared opaque still composites those pixels as nothing.
             for row in 0..height as usize {
                 let source = &view[row * ROW_BYTES as usize..][..row_bytes];
                 let target = &mut frame[(y0 + row) * ROW_BYTES as usize + x0..][..row_bytes];
                 target.copy_from_slice(source);
+                for pixel in target.chunks_exact_mut(4) {
+                    pixel[3] = 0xFF;
+                }
             }
         }
         self.staging.unmap();
@@ -319,14 +362,17 @@ impl Gpu {
 
 // ---- the console ----------------------------------------------------------------
 
-/// Gecko's JIT for this target compiles a block to a WebAssembly module; this is the
+/// Gecko's JIT for this target compiles blocks to a WebAssembly module; this is the
 /// half that needs a browser. The module is instantiated over this module's own memory
-/// and function table, and its function goes into a slot of that table — which, to
-/// Rust compiled for wasm32, is exactly what a function pointer is. A slot a block gave
-/// up is handed to the next one rather than the table growing without end.
+/// and function table, and each of its functions goes into a slot of that table —
+/// which, to Rust compiled for wasm32, is exactly what a function pointer is. A slot a
+/// block gave up points at a function that only traps until the next block takes it:
+/// the table is what keeps a module alive, and a browser has only so much room for
+/// executable code.
 struct TableCompiler {
     table: js_sys::WebAssembly::Table,
     imports: js_sys::Object,
+    placeholder: js_sys::Function,
     free: Vec<u32>,
     complained: bool,
 }
@@ -339,30 +385,51 @@ impl TableCompiler {
         js_sys::Reflect::set(&env, &wasmjit::TABLE_IMPORT.into(), &table).ok()?;
         let imports = js_sys::Object::new();
         js_sys::Reflect::set(&imports, &wasmjit::IMPORT_MODULE.into(), &env).ok()?;
-        Some(Self { table, imports, free: Vec::new(), complained: false })
+        let mut compiler = Self { table, imports, placeholder: js_sys::Function::new_no_args(""), free: Vec::new(), complained: false };
+        // A block-shaped function that must never run: a released slot holds it.
+        compiler.placeholder = compiler.functions_of(&wasmjit::assemble(&[wasmjit::trap()])).ok()?.pop()?;
+        Some(compiler)
     }
 
-    fn instantiate(&mut self, module: &[u8]) -> Result<u32, JsValue> {
+    /// Instantiates the module and returns its exported functions, in order.
+    fn functions_of(&self, module: &[u8]) -> Result<Vec<js_sys::Function>, JsValue> {
         let bytes = js_sys::Uint8Array::from(module);
         let module = js_sys::WebAssembly::Module::new(&bytes)?;
         let instance = js_sys::WebAssembly::Instance::new(&module, &self.imports)?;
-        let block = js_sys::Reflect::get(&instance.exports(), &wasmjit::BLOCK_EXPORT.into())?;
-        let block: js_sys::Function = block.dyn_into()?;
-        let slot = match self.free.pop() {
-            Some(slot) => slot,
-            None => self.table.grow(1)?,
-        };
-        self.table.set(slot, &block)?;
-        Ok(slot)
+        let exports = instance.exports();
+        let mut functions = Vec::new();
+        for i in 0.. {
+            let function = js_sys::Reflect::get(&exports, &i.to_string().into())?;
+            if function.is_undefined() {
+                break;
+            }
+            functions.push(function.dyn_into()?);
+        }
+        Ok(functions)
+    }
+
+    fn place(&mut self, module: &[u8], count: usize) -> Result<Vec<u32>, JsValue> {
+        let functions = self.functions_of(module)?;
+        let mut slots = Vec::with_capacity(count);
+        for function in functions.iter().take(count) {
+            let slot = match self.free.pop() {
+                Some(slot) => slot,
+                None => self.table.grow(1)?,
+            };
+            self.table.set(slot, function)?;
+            slots.push(slot);
+        }
+        Ok(slots)
     }
 }
 
 impl BlockCompiler for TableCompiler {
-    fn compile(&mut self, module: &[u8]) -> Option<u32> {
-        match self.instantiate(module) {
-            Ok(slot) => Some(slot),
+    fn compile(&mut self, module: &[u8], functions: usize) -> Option<Vec<u32>> {
+        match self.place(module, functions) {
+            Ok(slots) if slots.len() == functions => Some(slots),
+            Ok(_) => None,
             Err(error) => {
-                // The interpreter runs the block instead; one complaint is enough.
+                // The interpreter runs the blocks instead; one complaint is enough.
                 if !self.complained {
                     self.complained = true;
                     web_sys::console::warn_1(&format!("GameCube core: could not compile a block: {error:?}").into());
@@ -373,6 +440,7 @@ impl BlockCompiler for TableCompiler {
     }
 
     fn release(&mut self, slot: u32) {
+        let _ = self.table.set(slot, &self.placeholder);
         self.free.push(slot);
     }
 }
@@ -695,6 +763,7 @@ pub fn gatherum_run() {
         let Host { gpu, console, frame, audio_out, .. } = host;
         let (Some(gpu), Some(console)) = (gpu.as_mut(), console.as_mut()) else { return };
         gpu.collect(frame);
+        gpu.settle_writebacks(&mut console.emulator.mmio);
         console.frames += 1;
         RTC_SECONDS.store((console.frames as f64 / console.fps()) as u32, Ordering::Relaxed);
         console.emulator.run_until_vsync();

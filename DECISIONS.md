@@ -2536,3 +2536,39 @@ and the condition-register updates that read and write the console for every `Rc
 compare. Those, the Rust loop that dispatches blocks (a tenth of the frame), and the GX
 decode and vertex uploads are each their own piece of work, and each is measured against
 the same oracle before it lands.
+
+## Three things the first deployment of the GameCube JIT found
+
+The owner deployed it and played: Super Monkey Ball 2 was slow and crackled, Twilight
+Princess was black. Reproducing the second in the real app, not the harness, took the
+tools from the previous entry — the app's console fingerprinted every couple of seconds
+against the harness's per-frame table — and they said the emulation was identical
+frame for frame while the canvas stayed black. The picture was in the core's frame
+buffer with alpha zero on every pixel: that game never writes alpha, Super Monkey Ball 2
+happens to, and a bitmap declared opaque still composites those pixels as nothing. The
+seam promises an opaque frame, so the host's readback now forces alpha on every pixel
+it copies out.
+
+Behind it were two more, found by running longer. A browser gives every WebAssembly
+module its own page of executable memory, and Twilight Princess compiles tens of
+thousands of blocks, so one block per module ran Firefox out of it in a minute ("out of
+memory" from `WebAssembly.Module`, then a panic in the WebGPU backend when its
+allocations failed too). Hot blocks are now compiled thirty-two to a module, or fewer
+when the first has waited four thousand block runs, and a released slot is pointed at a
+function that only traps, because the table is what keeps a module alive. And the
+browser's memory grew by tens of megabytes a second with the JIT on or off: the renderer
+queues every EFB copy to RAM as a writeback with its own staging buffer, the native
+front end drains those by waiting on the device, and the WebGPU host — which cannot
+wait — never drained them, so they piled up, and the games never got those copies in
+RAM either. The drain is split on the fork into a hand-over and a finish; the host maps
+each copy as it is handed over and finishes it on the frame it arrives, the way the
+picture already arrives a frame late. That lag is a compromise the native core does not
+make, and it is the reason the GameCube stays a one-player machine here: two consoles
+whose EFB copies land on different frames are not the same machine.
+
+Cache busting was asked about and is not a factor: every core file is served with
+`Cache-Control: no-cache` and an ETag, so a browser revalidates each time and never
+pairs a stale loader with a new binary. The crackle is the frame rate: on the owner's
+machine the title screen runs at about forty percent of speed, the player runs up to
+two frames a paint to catch up, and the audio worklet starves between paints. That is
+the work of the previous entry's last paragraph, not a bug in the sound.
