@@ -97,8 +97,10 @@ auto-login. Migrations: `dotnet ef migrations add <Name> -p src/Gatherum.Infrast
   the same one links both libretro cores unchanged (`bsnes-support/libco-extras.c` is the
   small exception, three functions bsnes's Emscripten backend leaves out). `gecko-host/`
   is the same flat surface built over a core that is not libretro at all: Gecko is a Rust
-  crate, and the host owns its console, draws its picture through WebGPU and reads it
-  back. Gecko itself is the submodule at `native/gecko` — our fork, whose `gatherum`
+  crate, and the host owns its console, draws its picture through WebGPU, reads it
+  back, and compiles the console's hot blocks to WebAssembly modules it instantiates into
+  its own function table (`TableCompiler`; the emitter is the fork's `gekko::wasmjit`).
+  Gecko itself is the submodule at `native/gecko` — our fork, whose `gatherum`
   branch rides upstream's `dev` and carries the fixes this project needed as commits
   meant for upstream; the commit the submodule points at is the pin, and a clone needs
   `--recurse-submodules` (or `git submodule update --init native/gecko`) to have it.

@@ -34,6 +34,7 @@ use gecko::audio::AudioSink;
 use gecko::flipper::exi::macronix::{ExiMacronix, RTC_SECONDS};
 use gecko::flipper::si::pad::{self, PadStatus, STICK_CENTER, STICK_MAX, STICK_MIN, TRIGGER_MAX, TRIGGER_MIN};
 use gecko::flipper::vi::regs::RefreshRate;
+use gecko::gekko::wasmjit::{self, BlockCompiler};
 use gecko::host::{DrawVertex, GxAction, RenderSink};
 use gecko::{GameCube, HostInput};
 use wasm_bindgen::prelude::*;
@@ -318,6 +319,64 @@ impl Gpu {
 
 // ---- the console ----------------------------------------------------------------
 
+/// Gecko's JIT for this target compiles a block to a WebAssembly module; this is the
+/// half that needs a browser. The module is instantiated over this module's own memory
+/// and function table, and its function goes into a slot of that table — which, to
+/// Rust compiled for wasm32, is exactly what a function pointer is. A slot a block gave
+/// up is handed to the next one rather than the table growing without end.
+struct TableCompiler {
+    table: js_sys::WebAssembly::Table,
+    imports: js_sys::Object,
+    free: Vec<u32>,
+    complained: bool,
+}
+
+impl TableCompiler {
+    fn new() -> Option<Self> {
+        let table: js_sys::WebAssembly::Table = wasm_bindgen::function_table().dyn_into().ok()?;
+        let env = js_sys::Object::new();
+        js_sys::Reflect::set(&env, &wasmjit::MEMORY_IMPORT.into(), &wasm_bindgen::memory()).ok()?;
+        js_sys::Reflect::set(&env, &wasmjit::TABLE_IMPORT.into(), &table).ok()?;
+        let imports = js_sys::Object::new();
+        js_sys::Reflect::set(&imports, &wasmjit::IMPORT_MODULE.into(), &env).ok()?;
+        Some(Self { table, imports, free: Vec::new(), complained: false })
+    }
+
+    fn instantiate(&mut self, module: &[u8]) -> Result<u32, JsValue> {
+        let bytes = js_sys::Uint8Array::from(module);
+        let module = js_sys::WebAssembly::Module::new(&bytes)?;
+        let instance = js_sys::WebAssembly::Instance::new(&module, &self.imports)?;
+        let block = js_sys::Reflect::get(&instance.exports(), &wasmjit::BLOCK_EXPORT.into())?;
+        let block: js_sys::Function = block.dyn_into()?;
+        let slot = match self.free.pop() {
+            Some(slot) => slot,
+            None => self.table.grow(1)?,
+        };
+        self.table.set(slot, &block)?;
+        Ok(slot)
+    }
+}
+
+impl BlockCompiler for TableCompiler {
+    fn compile(&mut self, module: &[u8]) -> Option<u32> {
+        match self.instantiate(module) {
+            Ok(slot) => Some(slot),
+            Err(error) => {
+                // The interpreter runs the block instead; one complaint is enough.
+                if !self.complained {
+                    self.complained = true;
+                    web_sys::console::warn_1(&format!("GameCube core: could not compile a block: {error:?}").into());
+                }
+                None
+            }
+        }
+    }
+
+    fn release(&mut self, slot: u32) {
+        self.free.push(slot);
+    }
+}
+
 struct Console {
     emulator: GameCube,
     actions: ActionQueue,
@@ -359,6 +418,10 @@ impl Console {
             samples: Vec::new(),
         }));
         emulator.audio_sink = Box::new(ResamplingSink(audio.clone()));
+
+        if let Some(compiler) = TableCompiler::new() {
+            emulator.block_cache.get_or_insert_with(Default::default).set_compiler(Some(Box::new(compiler)));
+        }
 
         let mut console = Self { emulator, actions, audio, buttons: 0, sticks: 0, frames: 0 };
         console.apply_input();

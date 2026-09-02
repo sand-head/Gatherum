@@ -102,8 +102,14 @@ job, and Gecko has no software rasterizer — so a browser without WebGPU gets a
 link, and the host reads the picture back from the GPU every frame to hand the player the
 pixel array the seam asks for. That readback completes on a later JavaScript task, so the
 frame handed over is always the one before: a lag of one, invisible, rather than a stall
-every frame. Gecko also cannot compile its just-in-time compilers for the browser, so it
-interprets, and its speed is what an interpreter's is.
+every frame. Gecko's own just-in-time compiler emits machine code, which a page cannot
+run, so the fork carries a second one for this target: a hot block is compiled to a
+WebAssembly module of one function, the host instantiates it over its own memory and
+function table and puts the function in a table slot — which is what a function pointer
+is to Rust on wasm32 — and the interpreter's handler is called by its slot for whatever
+the emitter does not translate. The host's half is `TableCompiler` in `gecko-host`; the
+emitter, and the validator that holds it to the interpreter bit for bit, is
+`gekko::wasmjit` in the fork.
 
 One consequence of Asyncify leaks into the shim and is worth knowing before reading it:
 **a value returned across a fiber swap does not survive the trip.** The function body runs

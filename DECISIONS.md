@@ -2486,3 +2486,48 @@ loop and a third GX: the FIFO decode and the vertex uploads through WebGPU's
 the day to 43 is the whole of what a browser gets from this core without a compiler.
 The block scanner and the numbered handlers are the front half of a WebAssembly-emitting
 JIT, should anyone build the back half.
+
+## The back half: a JIT that emits WebAssembly
+
+The owner asked for the back half, and it is built. A block the cached interpreter has run
+sixteen times is handed to `gekko::wasmjit`, which emits a WebAssembly module of one
+function — importing the host's memory and function table, so it reads the console where
+the interpreter does — and the host (`TableCompiler`, over js-sys, so no JavaScript text
+ships) instantiates it and puts its function in a slot of the host's own table. To Rust
+compiled for wasm32 a table slot *is* a function pointer, so the cache calls a compiled
+block the way it calls anything else, and the linker flag that makes the table growable
+is the only build change. What the emitter translates it translates inline: integer
+arithmetic, rotates, compares and the condition register, branches, loads and stores
+against RAM by the bus's own fast path (segment 8 or C, in range, and not a line the
+cache holds code on), and the floating-point and paired-single arithmetic a game spends
+its time in. Everything else calls the interpreter's handler by its own table slot,
+which the generated tables know by the `OP_*` constant it is specialised on — not by
+address, because a native test build has several copies of a generic function.
+
+**The interpreter is the oracle, and three tools hold the emitter to it.** A validation
+switch runs every compiled block twice, compiled and then interpreted from the same
+registers and — the compiled run's RAM stores having been noted and undone — the same
+memory, and reports the first blocks that disagree; a block that writes a device register
+and reads it back disagrees with itself, which is the one kind of noise it makes. A
+translation mask turns each class of translation off from the harness, for bisecting. And
+a native test runs emitted blocks in `wasmi` over an image of the console beside the
+handlers on the console itself, for every arithmetic instruction the emitter knows, from
+tables of awkward operands; it found the last bug in minutes after the browser had shown
+it only as a few floats off by a bit in vertex memory. Four things bit on the way and are
+worth writing down: a halfword store swaps bytes with a formula that is only right when
+the high half is already zero; the cycles a block owes must be settled before any call
+the bus might answer with the clock in hand, because the interpreter charges an
+instruction before it runs, and a device read that sees a clock five cycles behind is a
+timer that drifts; a `flush` inside a conditional branch loses the cycles on the other
+path; and a block that ends early where the interpreter would not have creates an
+interrupt point the interpreter never had. Both discs now match the interpreter frame
+for frame, registers, clock and RAM, over the whole run measured.
+
+**What it is worth, so far: less than the mechanism promised.** Super Monkey Ball 2's
+title screen went from 43 ms a frame to 39; Twilight Princess was never CPU-bound. The
+profile explains it: a quarter of the frame is the compiled code, a tenth the Rust loop
+that dispatches blocks, a further tenth the call stubs Firefox puts between two
+instances, and the GX decode and vertex uploads are as they were. Every one of those is
+its own piece of work — a register cache in locals, chaining blocks without returning to
+Rust, and the vertex decoder's JIT translated the same way — and each is measured
+against the same oracle before it lands.
