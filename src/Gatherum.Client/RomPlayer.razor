@@ -291,8 +291,10 @@ else
     private readonly GamepadButtons[] slotInputs = new GamepadButtons[PlayProtocol.MaxPlayers];
     private byte[] stateBuffer = [];
 
-    private readonly short[] samples = new short[2048];
-    private readonly byte[] sampleBytes = new byte[4096];
+    /// <summary>Room for one frame of the loudest console here with a margin: a disc's
+    /// stereo at 48 kHz is sixteen hundred values a frame.</summary>
+    private readonly short[] samples = new short[8192];
+    private readonly byte[] sampleBytes = new byte[16384];
 
     /// <summary>What the cartridge's battery memory held when it was last written out,
     /// so the download link has something to point at without re-reading it every
@@ -419,7 +421,7 @@ else
         owed = 0;
         clock.Restart();
         if (sound && module is not null)
-            await module.InvokeVoidAsync("startEmulatorAudio", core.SampleRate);
+            await module.InvokeVoidAsync("startEmulatorAudio", core.SampleRate, core.AudioChannels);
         // Keys only reach a focused element, and the click that started the game is
         // the gesture that is allowed to move focus.
         await screen.FocusAsync();
@@ -460,7 +462,7 @@ else
         if (module is null || core is null)
             return;
         if (sound && running)
-            await module.InvokeVoidAsync("startEmulatorAudio", core.SampleRate);
+            await module.InvokeVoidAsync("startEmulatorAudio", core.SampleRate, core.AudioChannels);
         else
             await StopSoundAsync();
     }
@@ -497,9 +499,10 @@ else
                     break;
                 owed -= frame;
                 ran++;
-            }
-            if (ran > 0)
+                // After every frame, not once after both: a vendored core keeps one
+                // frame of sound and drops it when the next runs.
                 PushSound();
+            }
             WatchSave();
         }
 
@@ -674,18 +677,20 @@ else
 
     private void PushSound()
     {
-        if (!sound || core is null || module is null)
+        if (core is null)
             return;
+        // Drained even when muted, so that a console's own queue holds nothing stale
+        // to play in a burst the moment the sound comes back.
         var count = core.ReadAudio(samples);
-        if (count == 0)
+        if (count == 0 || !sound || module is null)
             return;
         // The buffer goes over whole and the count says how much of it is real, so
         // there is no per-frame array to allocate and collect.
         Buffer.BlockCopy(samples, 0, sampleBytes, 0, count * 2);
         if (directModule is not null)
-            directModule.InvokeVoid("queueEmulatorAudio", sampleBytes, count, core.AudioChannels);
+            directModule.InvokeVoid("queueEmulatorAudio", sampleBytes, count);
         else
-            _ = module.InvokeVoidAsync("queueEmulatorAudio", sampleBytes, count, core.AudioChannels);
+            _ = module.InvokeVoidAsync("queueEmulatorAudio", sampleBytes, count);
     }
 
     /// <summary>A save is written a couple of seconds after the game first touches its

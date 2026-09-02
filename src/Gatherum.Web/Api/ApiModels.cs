@@ -144,6 +144,7 @@ public record TitleMatchDto(string Title, Guid Id);
 public record ResolveTitlesRequest(IReadOnlyList<string>? Titles);
 public record ReachableRequest(IReadOnlyList<Guid>? Ids);
 public record CreatePageRequest(Guid? ParentId, string Title, string? Markdown);
+public record BeginUploadRequest(string FileName, string? ContentType);
 public record UpdatePageRequest(string Markdown, string? Title);
 public record SaveTextRequest(string Text);
 public record MoveNodeRequest(Guid? NewParentId, int? Position);

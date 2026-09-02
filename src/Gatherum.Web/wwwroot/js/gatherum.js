@@ -245,55 +245,173 @@ export function initChrome() {
 // play something it has not been asked to play, so the context is created on the click
 // that starts the game and nowhere else.
 //
-// Each frame's samples become one short buffer scheduled at the end of the last, which
-// keeps the sound continuous without a worklet (a worklet is a second script file, and
-// there is only one script here).
+// The console pushes a frame's worth of samples sixty-odd times a second, on the
+// display's schedule; the speaker pulls at its own rate, on its own thread. The two
+// meet in an AudioWorklet holding a queue: each frame's samples are posted into it, and
+// the worklet's own clock draws them out, interpolating from the console's rate to the
+// device's across every seam. It used to be one AudioBufferSourceNode per frame,
+// scheduled end to end, and it crackled: each little buffer was resampled on its own,
+// and a start time that is not a whole sample rounds to one, so every seam was a gap or
+// an overlap a sample wide. A worklet wants a second script file, and there is only one
+// script here — so the processor is written as a string and loaded from a blob, which
+// keeps it in this file and out of everything else's way.
+const SOUND_PROCESSOR = `
+class GatherumSound extends AudioWorkletProcessor {
+  constructor(options) {
+    super();
+    const { rate, channels, prime, cap } = options.processorOptions;
+    this.channels = channels;
+    // Console frames per output frame: one exactly when the context runs at the
+    // console's rate, and a fraction to interpolate across when it could not.
+    this.step = rate / sampleRate;
+    this.prime = prime;
+    this.cap = cap;
+    this.chunks = [];
+    this.head = 0;
+    this.queued = 0;
+    this.prev = new Float32Array(channels);
+    this.next = new Float32Array(channels);
+    this.phase = 1;
+    this.ready = false;
+    this.port.onmessage = (e) => this.push(e.data);
+  }
+
+  push(samples) {
+    this.chunks.push(samples);
+    this.queued += samples.length / this.channels;
+    // A display that skipped a frame pays it back as two, and a paint loop can only
+    // ever hand over more than the speaker took, never less — so a queue that has
+    // grown past the cap is trimmed back to the prime rather than left to lag.
+    while (this.queued > this.cap && this.chunks.length > 1) {
+      const dropped = this.chunks.shift().length / this.channels - this.head;
+      this.queued -= dropped;
+      this.head = 0;
+    }
+  }
+
+  take() {
+    if (this.queued === 0) return false;
+    const chunk = this.chunks[0];
+    const at = this.head * this.channels;
+    for (let c = 0; c < this.channels; c++) this.next[c] = chunk[at + c] / 32768;
+    this.head++;
+    this.queued--;
+    if (this.head * this.channels >= chunk.length) {
+      this.chunks.shift();
+      this.head = 0;
+    }
+    return true;
+  }
+
+  process(inputs, outputs) {
+    const out = outputs[0];
+    const frames = out[0].length;
+    if (!this.ready) {
+      if (this.queued < this.prime) return true;
+      this.ready = true;
+    }
+    for (let i = 0; i < frames; i++) {
+      this.phase += this.step;
+      while (this.phase >= 1) {
+        this.prev.set(this.next);
+        if (!this.take()) {
+          this.starve(out, i);
+          return true;
+        }
+        this.phase -= 1;
+      }
+      for (let c = 0; c < out.length; c++) {
+        const ear = Math.min(c, this.channels - 1);
+        out[c][i] = this.prev[ear] + (this.next[ear] - this.prev[ear]) * this.phase;
+      }
+    }
+    return true;
+  }
+
+  // Nothing left to play. The last frame in hand plays, and the rest of this quantum
+  // fades it out rather than cutting to silence, which is a click; then the queue
+  // waits to fill to the prime again before sound resumes — resuming on the very next
+  // frame would only starve again on the one after.
+  starve(out, from) {
+    const left = out[0].length - from;
+    for (let i = from; i < out[0].length; i++) {
+      const gain = 1 - (i - from) / left;
+      for (let c = 0; c < out.length; c++) out[c][i] = this.prev[Math.min(c, this.channels - 1)] * gain;
+    }
+    this.prev.fill(0);
+    this.next.fill(0);
+    this.phase = 1;
+    this.ready = false;
+  }
+}
+registerProcessor("gatherum-sound", GatherumSound);
+`;
+
 let emulatorAudio;
 
-export function startEmulatorAudio(sampleRate) {
+export async function startEmulatorAudio(sampleRate, channels) {
   stopEmulatorAudio();
   const Context = window.AudioContext ?? window.webkitAudioContext;
   if (!Context) return false;
-  const context = new Context();
+  // Asked to run at the console's rate, so that the browser's own resampler — a
+  // better one than a straight line between two samples — does the work of matching
+  // the speaker; the worklet's interpolation is for a browser that declines.
+  let context;
+  try {
+    context = new Context({ sampleRate });
+  } catch {
+    context = new Context();
+  }
+  if (!context.audioWorklet) {
+    context.close();
+    return false;
+  }
+  try {
+    const url = URL.createObjectURL(new Blob([SOUND_PROCESSOR], { type: "text/javascript" }));
+    try {
+      await context.audioWorklet.addModule(url);
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  } catch (problem) {
+    console.warn("The console's sound could not start.", problem);
+    context.close();
+    return false;
+  }
+  // Forty milliseconds in hand before the first sample plays, which rides out a late
+  // paint or two; a quarter of a second is where waiting has become lag.
+  const node = new AudioWorkletNode(context, "gatherum-sound", {
+    numberOfInputs: 0,
+    outputChannelCount: [2],
+    processorOptions: {
+      rate: sampleRate,
+      channels,
+      prime: Math.round(sampleRate * 0.04),
+      cap: Math.round(sampleRate * 0.25),
+    },
+  });
+  node.connect(context.destination);
   context.resume();
-  emulatorAudio = { context, rate: sampleRate, cursor: 0 };
+  emulatorAudio = { context, node };
   return true;
 }
 
 export function stopEmulatorAudio() {
   if (!emulatorAudio) return;
+  emulatorAudio.node.disconnect();
   emulatorAudio.context.close();
   emulatorAudio = undefined;
 }
 
-export function queueEmulatorAudio(bytes, valueCount, channels) {
+export function queueEmulatorAudio(bytes, valueCount) {
   if (!emulatorAudio || valueCount <= 0) return;
-  const { context, rate } = emulatorAudio;
-  const ears = channels || 1;
-  // A stereo core hands over its two ears interleaved, so the count of values is a
-  // multiple of the channel count rather than the number of moments of sound.
-  const frames = Math.floor(valueCount / ears);
-  if (frames <= 0) return;
-  const buffer = context.createBuffer(ears, frames, rate);
-  for (let ear = 0; ear < ears; ear++) {
-    const channel = buffer.getChannelData(ear);
-    // Signed sixteen-bit, little-endian, read a byte at a time: a typed-array view
-    // would need the interop buffer to be two-byte aligned, which is not promised.
-    for (let i = 0; i < frames; i++) {
-      const at = (i * ears + ear) * 2;
-      const raw = bytes[at] | (bytes[at + 1] << 8);
-      channel[i] = (raw >= 32768 ? raw - 65536 : raw) / 32768;
-    }
-  }
-  const source = context.createBufferSource();
-  source.buffer = buffer;
-  source.connect(context.destination);
-  // Stay a breath ahead of the clock. Falling behind means the cursor is in the past,
-  // which would play everything at once; catching up by skipping is the only cure.
-  const now = context.currentTime;
-  if (emulatorAudio.cursor < now + 0.02) emulatorAudio.cursor = now + 0.08;
-  source.start(emulatorAudio.cursor);
-  emulatorAudio.cursor += frames / rate;
+  // Signed sixteen-bit, little-endian, read a byte at a time: a typed-array view
+  // would need the interop buffer to be two-byte aligned, which is not promised.
+  // Writing into an Int16Array wraps the unsigned pair back to signed.
+  const samples = new Int16Array(valueCount);
+  for (let i = 0; i < valueCount; i++)
+    samples[i] = bytes[i * 2] | (bytes[i * 2 + 1] << 8);
+  emulatorAudio.node.port.postMessage(samples, [samples.buffer]);
 }
 
 // A cartridge's battery-backed memory. It is the player's own, not the wiki's: the ROM

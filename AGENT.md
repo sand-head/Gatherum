@@ -64,7 +64,9 @@ auto-login. Migrations: `dotnet ef migrations add <Name> -p src/Gatherum.Infrast
 - `src/Gatherum.Web` — the static pages and layout (`Components/`), REST API
   (`Api/`, including `PlayEndpoints` — the one WebSocket, a relay for two people playing
   one cartridge), MCP tools (`Mcp/`), auth (`Auth/`), presence, `Services/PlaySessions`
-  (who is in which game) + `ServerAppData`, the
+  (who is in which game), `Services/UploadStaging` (a file arriving in pieces, which is
+  how the WebAssembly home sends every upload — its HTTP client cannot stream one) +
+  `ServerAppData`, the
   server implementation of the interactive components' data seam (`Services/`), and
   `Docs/` — the manual that ships with the app: Markdown files embedded in the
   assembly, read by `Services/DocsLibrary`, served as pages by

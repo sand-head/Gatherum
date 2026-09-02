@@ -254,6 +254,55 @@ public static class ApiEndpoints
             return Results.Created($"/api/nodes/{node.Id}", NodeDto.From(created));
         }).DisableAntiforgery();
 
+        // A file in pieces, for a sender that cannot stream one whole — the WebAssembly
+        // home, whose HTTP client buffers a body before sending it. See UploadStaging.
+        api.MapPost("/uploads", (UploadStaging staging, HttpContext http,
+            BeginUploadRequest request) =>
+            Results.Ok(new { id = staging.Begin(http.User.GetUserId(), request.FileName,
+                request.ContentType ?? "") }));
+
+        api.MapPatch("/uploads/{id:guid}", async (UploadStaging staging, HttpContext http,
+            Guid id, long offset) =>
+        {
+            try
+            {
+                return await staging.AppendAsync(http.User.GetUserId(), id, offset,
+                    http.Request.Body, http.RequestAborted) switch
+                {
+                    null => Results.NotFound(),
+                    false => Results.Conflict(new { error = "That is not where this upload ends." }),
+                    true => Results.NoContent(),
+                };
+            }
+            catch (UploadTooLargeException ex)
+            {
+                return Results.Json(new { error = ex.Message },
+                    statusCode: StatusCodes.Status413PayloadTooLarge);
+            }
+        });
+
+        api.MapPost("/uploads/{id:guid}/finish", async (UploadStaging staging, FileService files,
+            NodeService nodes, HttpContext http, Guid id, Guid? parentId, Guid? nodeId) =>
+        {
+            if (staging.Take(http.User.GetUserId(), id) is not { } staged)
+                return Results.NotFound();
+            await using var content = staged.Content;
+            if (nodeId is { } existing)
+            {
+                await files.UploadVersionAsync(http.User.GetUserId(), existing, staged.FileName,
+                    staged.ContentType, content);
+                return Results.Ok(NodeDto.From(
+                    await nodes.GetWithBodyAsync(http.User.GetUserId(), existing)));
+            }
+            var node = await files.CreateFileNodeAsync(http.User.GetUserId(), parentId,
+                staged.FileName, staged.ContentType, content);
+            var created = await nodes.GetWithBodyAsync(http.User.GetUserId(), node.Id);
+            return Results.Created($"/api/nodes/{node.Id}", NodeDto.From(created));
+        });
+
+        api.MapDelete("/uploads/{id:guid}", (UploadStaging staging, HttpContext http, Guid id) =>
+            staging.Discard(http.User.GetUserId(), id) ? Results.NoContent() : Results.NotFound());
+
         api.MapPost("/bookmarks", async (BookmarkService bookmarks, NodeService nodes,
             HttpContext http, BookmarkRequest request) =>
         {

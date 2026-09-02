@@ -10,8 +10,9 @@ namespace Gatherum.Client;
 public interface IAppData
 {
     /// <summary>One ceiling for every upload path: the components' stream reads and
-    /// the server's request-body limits both quote it.</summary>
-    const long MaxUploadBytes = 512L * 1024 * 1024;
+    /// the server's request-body limits both quote it. Two gigabytes because the biggest
+    /// thing a console here plays is a GameCube disc, at 1.4 GB.</summary>
+    const long MaxUploadBytes = 2L * 1024 * 1024 * 1024;
 
     // The editor.
     Task<EditorPayload> LoadAsync(Guid nodeId);
@@ -290,9 +291,12 @@ public sealed class HttpAppData(HttpClient http) : IAppData
     public async Task<Guid> UploadFileAsync(Guid? parentId, string fileName, string contentType,
         Stream content)
     {
-        var url = parentId is { } id ? $"/api/files?parentId={id}" : "/api/files";
-        var response = await http.PostAsync(url, FilePart(fileName, contentType, content));
-        response.EnsureSuccessStatusCode();
+        var staged = await StageAsync(fileName, contentType, content);
+        var url = parentId is { } id
+            ? $"/api/uploads/{staged}/finish?parentId={id}"
+            : $"/api/uploads/{staged}/finish";
+        var response = await http.PostAsync(url, null);
+        await EnsureAsync(response);
         return (await response.Content.ReadFromJsonAsync<NodeInfo>())!.Id;
     }
 
@@ -394,9 +398,11 @@ public sealed class HttpAppData(HttpClient http) : IAppData
         Ensure(await http.PostAsync($"/api/nodes/{nodeId}/versions/{number}/restore", null));
 
     public async Task UploadVersionAsync(Guid nodeId, string fileName, string contentType,
-        Stream content) =>
-        Ensure(await http.PostAsync($"/api/files/{nodeId}/versions",
-            FilePart(fileName, contentType, content)));
+        Stream content)
+    {
+        var staged = await StageAsync(fileName, contentType, content);
+        await EnsureAsync(await http.PostAsync($"/api/uploads/{staged}/finish?nodeId={nodeId}", null));
+    }
 
     public async Task SetDescriptionAsync(Guid nodeId, string description) =>
         Ensure(await http.PutAsJsonAsync($"/api/files/{nodeId}/description", new { description }));
@@ -414,14 +420,42 @@ public sealed class HttpAppData(HttpClient http) : IAppData
     public async Task RevokeKeyAsync(Guid keyId) =>
         Ensure(await http.DeleteAsync($"/api/keys/{keyId}"));
 
-    private static MultipartFormDataContent FilePart(string fileName, string contentType,
-        Stream content)
+    /// <summary>Eight megabytes at a time. The browser's HTTP client buffers a whole
+    /// request body before it sends it, so a file goes over as chunks appended to a
+    /// staging file on the server rather than as one multipart body — a disc image is
+    /// bigger than this heap, and even a photo would otherwise be held twice over.</summary>
+    private const int ChunkBytes = 8 * 1024 * 1024;
+
+    private async Task<Guid> StageAsync(string fileName, string contentType, Stream content)
     {
-        var part = new StreamContent(content);
-        if (contentType.Length > 0)
-            part.Headers.ContentType = new MediaTypeHeaderValue(contentType);
-        return new MultipartFormDataContent { { part, "file", fileName } };
+        var begun = await http.PostAsJsonAsync("/api/uploads", new { fileName, contentType });
+        await EnsureAsync(begun);
+        var id = (await begun.Content.ReadFromJsonAsync<StagedUpload>())!.Id;
+        var chunk = new byte[ChunkBytes];
+        long offset = 0;
+        try
+        {
+            while (true)
+            {
+                var read = await content.ReadAtLeastAsync(chunk, chunk.Length,
+                    throwOnEndOfStream: false);
+                if (read == 0)
+                    break;
+                await EnsureAsync(await http.PatchAsync($"/api/uploads/{id}?offset={offset}",
+                    new ByteArrayContent(chunk, 0, read)));
+                offset += read;
+            }
+        }
+        catch
+        {
+            // Best effort: the server sweeps what a lost tab leaves behind anyway.
+            _ = http.DeleteAsync($"/api/uploads/{id}");
+            throw;
+        }
+        return id;
     }
+
+    private record StagedUpload(Guid Id);
 
     private static void Ensure(HttpResponseMessage response) => response.EnsureSuccessStatusCode();
 
