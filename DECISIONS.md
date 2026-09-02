@@ -2455,3 +2455,34 @@ and no patch buys it back. Two things tried and found worthless are worth record
 `wasm-opt -O3` shrank the module by a quarter and changed the frame time by nothing, and
 the chip the WebGPU device lands on does not matter, because the picture is never waited
 for.
+
+## A cached interpreter, and what it was worth
+
+Asked for a JIT and told why a browser cannot have Gecko's — Cranelift emits machine
+code, and a page can only run WebAssembly — the owner asked for the cached interpreter
+instead. It is in the fork now: a block is scanned once with the JIT's own scanner
+(`gekko::block`, moved out from under the JIT so both can use it), every instruction in
+it resolved once to the number of its handler, and the block run to its end or to the
+first branch that leaves it, with interrupts taken at block boundaries as the JIT takes
+them and the JIT's idle classes skipping to the next deadline after one pass. The
+resolver is generated at build time from the text of the dispatch tables chipi writes,
+because chipi does not know about it: every `_dN` decoder gets an `_rN` twin returning a
+number, and `execute` is one `match` over those numbers. Blocks are keyed by pc through
+a direct-mapped table ahead of a map, register the RAM lines they span, and are dropped
+when a store or a DMA touches one — the same pending-line mechanism the JIT invalidates
+from, which is no longer the JIT's alone. The hooks the debugger builds with run at the
+same places they ran before.
+
+Measured in Firefox on the same two discs, against the idle-skipping build before it:
+Twilight Princess 7 to 5 ms a frame; Super Monkey Ball 2 49 to 43. Two findings shaped
+the second number. Resolving the handler once saved almost nothing — Firefox walks the
+table tree cheaply — and what saved the twelve percent was calling the handler through a
+`match` rather than through a function pointer, which in WebAssembly is a checked
+indirect call. And a count showed the cache doing exactly its job (400k blocks a frame,
+seven instructions each, no misses to speak of) while the frame stayed where it was,
+because a title screen's cost is now a third interpreter handlers, a third the block
+loop and a third GX: the FIFO decode and the vertex uploads through WebGPU's
+`writeBuffer`, which is Firefox's memcpy, not ours. From 67 ms a frame at the start of
+the day to 43 is the whole of what a browser gets from this core without a compiler.
+The block scanner and the numbered handlers are the front half of a WebAssembly-emitting
+JIT, should anyone build the back half.
