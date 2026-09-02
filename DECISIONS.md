@@ -2302,3 +2302,39 @@ to play together must first put its sticks on the wire. And `gatherum_set_sticks
 the one call `gatherum.js` treats as optional in a core module, so a `dist/` built
 before sticks existed still opens and plays; it just cannot be told where the stick is
 until it is rebuilt.
+
+## Sound through a worklet, and a disc that arrives in pieces
+
+The ROM player's sound was one `AudioBufferSourceNode` per frame, scheduled end to end,
+and it crackled on every console. Two reasons, both at the seams: the browser resampled
+each sixteen-millisecond buffer from the console's rate to the device's on its own, with
+no knowledge of its neighbours, and a start time that is not a whole sample rounds to
+one, so every seam was a gap or an overlap a sample wide. A third fault sat in the paint
+loop: it read the sound once after running up to two frames, and the libretro shim keeps
+one frame of sound and drops it when the next runs — so every catch-up frame on the
+SNES threw away sixteen milliseconds of audio outright, and a stereo console's two
+frames overran the player's buffer besides.
+
+Now the samples go into an `AudioWorklet` holding a queue, and the worklet's own clock
+draws them out, interpolating across every seam; the context is asked to run at the
+console's rate so the browser's resampler does the quality work and the interpolation
+only matters where it declined. It primes forty milliseconds before the first sample
+plays, fades out rather than cuts when starved, and trims a queue that has grown past a
+quarter of a second — the only direction a paint loop can drift. A worklet wants a
+second script file, which this project does not have: the processor is a string in
+`gatherum.js`, loaded from a blob, so the one-file rule holds in letter and in spirit.
+The player reads audio after every frame it runs, and drains a muted console too, so
+nothing stale bursts out when the sound comes back.
+
+A GameCube disc would not upload for a plainer reason: the ceiling was 512 MB and a
+disc is 1.4 GB. Raising the number was the small half. The WebAssembly home sends an
+upload through the browser's HTTP client, which buffers a request body whole before
+sending it — a disc image is bigger than the heap it would have to sit in, and the
+runtime has no streaming request to offer that every browser honours. So `HttpAppData`
+now sends a file in eight-megabyte pieces to `/api/uploads`, a staging file in the
+server's temp directory that `finish` hands to `FileService` exactly as a multipart
+upload would have. `IAppData` did not change: the components still hand over a stream,
+and the server circuit still streams it straight to the service. The staging map is in
+memory on purpose — an upload cannot outlive the process it began in, and one that tries
+gets a 404 to retry from, which is what an interrupted upload is. The multipart endpoints
+stay as they were for the drop zone and for API clients, at the same 2 GB ceiling.

@@ -28,6 +28,7 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<Gatherum.Web.Services.AppOperations>();
 builder.Services.AddSingleton<Gatherum.Web.Services.PresenceTracker>();
 builder.Services.AddSingleton<Gatherum.Web.Services.PlaySessions>();
+builder.Services.AddSingleton<Gatherum.Web.Services.UploadStaging>();
 builder.Services.AddSingleton<Gatherum.Web.Services.DocsLibrary>();
 builder.Services.AddScoped<Gatherum.Client.IAppData, Gatherum.Web.Services.ServerAppData>();
 builder.Services.AddScoped<Gatherum.Client.TreeState>();
@@ -215,7 +216,8 @@ app.UseWhen(
         "/not-found", createScopeForStatusCodePages: true));
 
 // Kestrel's default body cap (~30 MB) is far below the upload ceiling the file
-// endpoints promise; raise it for them before the endpoint reads the body.
+// endpoints promise; raise it for them before the endpoint reads the body. The chunked
+// path under /api/uploads stays under the default by construction — that is its point.
 app.Use((context, next) =>
 {
     if (context.Request.Path.StartsWithSegments("/api/files"))

@@ -991,6 +991,84 @@ public class AppIntegrationTests(PostgresFixture postgres) : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_file_arrives_in_pieces_and_a_piece_out_of_turn_is_refused()
+    {
+        // What the WebAssembly home does with every upload, because its HTTP client
+        // cannot stream a body: begin, append, finish.
+        var bytes = new byte[50_000];
+        Random.Shared.NextBytes(bytes);
+        var id = await BeginUploadAsync("disc.bin");
+
+        Assert.Equal(HttpStatusCode.NoContent, await AppendAsync(client, id, 0, bytes[..20_000]));
+        // Sent twice — a retry, or a bug — and refused rather than written in twice.
+        Assert.Equal(HttpStatusCode.Conflict, await AppendAsync(client, id, 0, bytes[..20_000]));
+        Assert.Equal(HttpStatusCode.NoContent,
+            await AppendAsync(client, id, 20_000, bytes[20_000..]));
+
+        var finished = await client.PostAsync($"/api/uploads/{id}/finish", null);
+        Assert.Equal(HttpStatusCode.Created, finished.StatusCode);
+        var node = await finished.Content.ReadFromJsonAsync<JsonElement>();
+        var nodeId = node.GetProperty("id").GetGuid();
+        Assert.Equal("disc.bin", node.GetProperty("file").GetProperty("fileName").GetString());
+        Assert.Equal(bytes, await client.GetByteArrayAsync($"/api/files/{nodeId}/content"));
+
+        // Finished is gone: the staging file went with the node it became.
+        Assert.Equal(HttpStatusCode.NotFound, await AppendAsync(client, id, 50_000, bytes[..1]));
+    }
+
+    [Fact]
+    public async Task A_new_version_arrives_in_pieces_too()
+    {
+        using var upload = new MultipartFormDataContent();
+        upload.Add(new ByteArrayContent([1, 2, 3]), "file", "notes.bin");
+        var created = await client.PostAsync("/api/files", upload);
+        var nodeId = (await created.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("id").GetGuid();
+
+        var id = await BeginUploadAsync("notes-v2.bin");
+        Assert.Equal(HttpStatusCode.NoContent, await AppendAsync(client, id, 0, [4, 5]));
+        Assert.Equal(HttpStatusCode.NoContent, await AppendAsync(client, id, 2, [6]));
+        var finished = await client.PostAsync($"/api/uploads/{id}/finish?nodeId={nodeId}", null);
+        Assert.Equal(HttpStatusCode.OK, finished.StatusCode);
+        var node = await finished.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(2, node.GetProperty("file").GetProperty("version").GetInt32());
+        Assert.Equal(new byte[] { 4, 5, 6 },
+            await client.GetByteArrayAsync($"/api/files/{nodeId}/content"));
+    }
+
+    [Fact]
+    public async Task Somebody_else_cannot_add_to_an_upload_they_did_not_begin()
+    {
+        var id = await BeginUploadAsync("mine.bin");
+        using var stranger = factory.CreateClient();
+        stranger.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", await KeyForAsync("outsider"));
+        Assert.Equal(HttpStatusCode.NotFound, await AppendAsync(stranger, id, 0, [1]));
+        var finished = await stranger.PostAsync($"/api/uploads/{id}/finish", null);
+        Assert.Equal(HttpStatusCode.NotFound, finished.StatusCode);
+        // And the owner's upload is untouched by the attempt.
+        Assert.Equal(HttpStatusCode.NoContent, await AppendAsync(client, id, 0, [1]));
+        var abandoned = await client.DeleteAsync($"/api/uploads/{id}");
+        Assert.Equal(HttpStatusCode.NoContent, abandoned.StatusCode);
+    }
+
+    private async Task<Guid> BeginUploadAsync(string fileName)
+    {
+        var begun = await client.PostAsJsonAsync("/api/uploads",
+            new { fileName, contentType = "application/octet-stream" });
+        Assert.Equal(HttpStatusCode.OK, begun.StatusCode);
+        return (await begun.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+    }
+
+    private static async Task<HttpStatusCode> AppendAsync(HttpClient http, Guid id, long offset,
+        byte[] bytes)
+    {
+        var response = await http.PatchAsync($"/api/uploads/{id}?offset={offset}",
+            new ByteArrayContent(bytes));
+        return response.StatusCode;
+    }
+
+    [Fact]
     public async Task An_epub_upload_reads_back_as_a_manifest_and_paginated_chapters()
     {
         using var upload = new MultipartFormDataContent();

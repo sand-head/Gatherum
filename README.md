@@ -283,7 +283,10 @@ gatherum.example.org {
 ```
 
 (Caddy forwards WebSockets and sets the forwarded headers by default; for nginx you
-need the usual `Upgrade`/`Connection` header stanza.)
+need the usual `Upgrade`/`Connection` header stanza, and `client_max_body_size 2g`,
+because a file dropped onto the tree goes up in one request and an upload may be as big
+as a GameCube disc. A file that size passes through the container's temp directory on
+its way into storage.)
 
 ### Podman Quadlets
 

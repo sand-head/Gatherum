@@ -105,6 +105,21 @@ the latest one.
 `/api/files/{id}/content` is also the URL a page embeds a file with; see
 [Markdown](/docs/markdown).
 
+An upload may be up to 2 GB — enough for a GameCube disc. A client that would rather
+not hold a file that size in memory, which is what the app's own uploader is when it
+runs in the browser, sends it in pieces instead:
+
+| Endpoint | Notes |
+| --- | --- |
+| `POST /api/uploads` | `{ "fileName": "…", "contentType": "…" }` — begins a file; answers `{ "id": … }` |
+| `PATCH /api/uploads/{id}?offset=` | Raw bytes, appended. `offset` is where the file ends so far, and a piece that says otherwise is refused with `409` |
+| `POST /api/uploads/{id}/finish?parentId=` | The assembled file becomes a new node, exactly as `POST /api/files` would have made it |
+| `POST /api/uploads/{id}/finish?nodeId=` | …or a new version of an existing one |
+| `DELETE /api/uploads/{id}` | Abandons it. An upload nobody has touched for an hour is abandoned for them |
+
+Only the key that began an upload may add to it or finish it, and an upload does not
+survive the server restarting — the answer is a `404`, and the cure is to send it again.
+
 ## Bookmarks
 
 | Endpoint | Body |
