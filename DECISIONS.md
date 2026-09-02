@@ -2173,3 +2173,102 @@ A controller needs no focus: blur releases the keys, whose key-ups would otherwi
 lost, but not the pad, which cannot stick because it is re-read every frame. And every
 connected pad is OR-ed into player one — the second local port is netplay's job, and a
 machine for choosing seats among local pads is a feature nobody asked for yet.
+
+## Gecko, a core that is not libretro, and a disc that is not a cartridge
+
+The owner asked for Gecko — the GameCube/Wii emulator with a web build — as a core, with
+any patches kept local. Three things about it were not like the two cores before it, and
+each one bent something.
+
+**It is not libretro, so the shim has nothing to say to it.** Gecko is a Rust crate: a
+constructor that takes a disc, a `run_until_vsync`, a render sink that receives GX
+actions and an audio sink that receives stereo samples. `core-shim` is a libretro host and
+would have been a second layer of translation over a first. So Gecko has a host crate of
+its own, `native/gecko-host`, whose whole job is to be the shim's shape over Gecko's:
+the same `gatherum_*` exports, the same integers, so that `gatherum.js` gained a third
+`openCore` branch and nothing else in JavaScript or C# can tell which kind of core it
+holds. That was the test of whether the flat surface was the right seam, and it passed:
+the surface was designed around libretro, and a core that shares nothing with libretro
+fits it in six hundred lines.
+
+**It draws on the GPU, and the seam wants pixels.** Gecko has no software rasterizer;
+its renderer is wgpu, and in a browser that means WebGPU. The player's contract is an
+ARGB array. The host reads the composited output texture back into a staging buffer
+every frame and maps it, and on WebGPU a map completes on a later JavaScript task —
+so the picture handed over is always the previous frame's. One frame of lag is invisible;
+a synchronous wait would have stalled every frame. The alternative — Gecko owning a
+canvas on the page and the player drawing nothing — would have made a GameCube the one
+console whose picture the player could not see, scale, or paint the play button over,
+and it was not taken. The cost is that the GameCube is the one console that needs
+WebGPU, and a browser without it is told so and offered the download.
+
+**Its image is a disc, and a disc does not fit.** A GameCube disc is 1.46 GB. Every
+cartridge before it came through `IAppData.ReadBytesAsync` into the .NET heap, was
+hashed for netplay, and was copied into the core's memory. The .NET heap in a browser
+cannot hold that, and copying it twice would be twice as bad. So a machine can now be
+marked `LoadsByUrl`: the player reads the first kilobyte of the file to identify it —
+enough, because both disc magic words and RVZ's header live there — and then hands the
+core the file's *address*, and `gatherum.js` streams the response body straight into an
+allocation in the core's own memory. That needed one new seam method, `ReadHeadAsync`, a
+ranged read, and the host's memory ceiling raised from Gecko's 512 MiB to the 4 GiB a
+32-bit WebAssembly memory can be. RVZ — zstd-compressed, decompressed as the game reads
+— is what the manual tells people to keep discs as, because it is what makes the whole
+thing reasonable rather than merely possible.
+
+Three smaller findings:
+
+- **Nintendo's silicon.** A GameCube boots from an IPL and its sound processor boots from
+  a ROM, and neither can be shipped. Gecko replaces the IPL with a small free one from
+  its `solstice` submodule and needs no BIOS. The DSP ROM it cannot replace — the sound
+  processor is emulated instruction by instruction and the ROM is the code it runs —
+  and Dolphin's team wrote a free one in 2013 and has kept it since; the build fetches
+  the assembled bytes from Dolphin's tree at a pinned commit, checks their hashes, and
+  bakes them into the host. GPL-2.0-or-later, upgraded to v3 like Mednafen would be.
+  Gecko's own README lists Dolphin's coefficient table's hash as the one it expects,
+  which was the confirmation the pairing would work.
+- **The one patch.** "If patches are needed, keep them local" was the instruction, and
+  one was: Gecko's memory card keeps its flash private, and a browser that is to keep a
+  save has to read and write it. Twenty-two lines — two accessors and a downcast — as a
+  `.patch` file in `gecko-host/patches/`, applied by `build-core.sh` after the clone and
+  skipped if already there. The README's "never patching what is fetched" was about the
+  licence obligation to make the source available, and a patch file in the repository
+  meets it as well as an unpatched clone does; the sentence now says what it meant.
+- **Reset without a reset line.** Gecko cannot reset a console; it can only build one.
+  The disc is inside the old console and copying it is the one thing that must not
+  happen, so the host takes the disc out of the dead machine and builds a fresh one
+  around it, carrying the memory card across. That is what the Reset button does.
+
+Left out, and said so in the manual: Wii discs, which the head reader recognises and the
+player refuses by name — a Wii needs a NAND, an IOS and a Starlet the browser build does
+not carry — and netplay, because Gecko has no save state to hand a second player and
+nobody has measured two of it agreeing. `SaveState` on a core whose state measures at
+zero now returns false rather than succeeding at saving nothing.
+
+**The licence gap.** Gecko is GPL-3.0 and fits. The IPL replacement it compiles in comes
+from a submodule whose repository declares no licence at all. Gecko ships it, credits its
+author, and has since it began; that is not a grant. It is recorded in `native/README.md`
+as a gap rather than resolved, because it is not this project's to resolve, and the owner
+should know before an image with this core goes to anyone who reads licence tables.
+
+## One Docker stage per core, and layers that keep only what they made
+
+Asked whether moving the emulator code into a library of its own would let the build
+cache more, the answer was no on both counts that a library could touch: the cores were
+already a stage of their own, keyed on `native/` and untouched by any C# change, and
+`dotnet publish` inside an image compiles every project from clean, so one project or
+five costs the same. The caching that was missing was *inside* `native/`: one `COPY
+native` and one `RUN` meant a line changed in `gecko-host` rebuilt bsnes, forty minutes
+of it. So the stage is now three, each copying only its own core's inputs.
+
+The second finding was worse than the first and had been there since bsnes. A layer keeps
+everything the step left behind, and the core step left behind the Emscripten SDK, three
+cores' sources and a Rust target directory that alone is close to a gigabyte — inside a
+layer that `cache-to: type=gha,mode=max` then exported to a cache with a ten-gigabyte
+ceiling. A cache that big is a cache that gets evicted, and an evicted core layer is
+every core rebuilt on every run, which is the opposite of what the stage was for. Each
+stage now deletes its build tree and the cargo registry in the same `RUN`, so what CI
+keeps is what the next stage copies: a few megabytes in `dist/`.
+
+Not done, and on purpose: a BuildKit cache mount for `obj/` and NuGet, which is the lever
+for the *C#* publish step. It would help every project equally and is unrelated to where
+the emulators live, and it is a different change with its own failure modes.

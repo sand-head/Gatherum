@@ -262,4 +262,47 @@ public class RomHeaderTests
         alsoAlmost[3] = 0x00;
         Assert.Null(RomHeader.Read(alsoAlmost));
     }
+
+    [Fact]
+    public void A_gamecube_disc_header_names_the_game_and_where_it_was_sold()
+    {
+        var header = RomHeader.Read(RomFixtures.Disc("The Legend of Zelda: The Wind Waker", "GZLE", disc: 0, revision: 2));
+        Assert.NotNull(header);
+        Assert.Equal(RomSystem.GameCube, header.System);
+        Assert.Equal("GameCube", header.SystemName);
+        Assert.Equal("The Legend of Zelda: The Wind Waker", header.Title);
+        Assert.Contains("GZLE", header.Cartridge);
+        Assert.Contains("disc 1", header.Cartridge);
+        Assert.Contains("revision 2", header.Cartridge);
+        Assert.Equal("North America", header.Region);
+        // A GameCube saves to a memory card, so the disc has nothing to say about it.
+        Assert.Null(header.Battery);
+    }
+
+    [Fact]
+    public void An_rvz_reports_the_disc_it_holds_and_the_size_it_would_be_uncompressed()
+    {
+        var header = RomHeader.Read(RomFixtures.Rvz("PIKMIN", "GPIP", discBytes: 1_459_978_240));
+        Assert.NotNull(header);
+        Assert.Equal(RomSystem.GameCube, header.System);
+        Assert.Equal("PIKMIN", header.Title);
+        Assert.Equal("Europe", header.Region);
+        Assert.Equal(1_459_978_240, header.ProgramBytes);
+    }
+
+    [Fact]
+    public void A_wii_disc_header_is_read_as_a_wii_one()
+    {
+        var header = RomHeader.Read(RomFixtures.Disc("Wii Sports", "RSPE", wii: true));
+        Assert.NotNull(header);
+        Assert.Equal(RomSystem.Wii, header.System);
+        Assert.Equal("Wii", header.SystemName);
+        Assert.Equal("Wii Sports", header.Title);
+    }
+
+    [Fact]
+    public void A_block_with_neither_magic_word_is_not_a_disc()
+    {
+        Assert.Null(RomHeader.Read(new byte[0x800]));
+    }
 }

@@ -1,0 +1,18 @@
+# Gecko's own flags for its web build, with one change: the memory ceiling. Gecko's is
+# 512 MiB because its web page only ever loads a DOL; a GameCube disc is 1.46 GB and
+# lives in this memory whole, so the ceiling is the most a 32-bit WebAssembly memory can
+# be. Browsers grant it lazily — a small game never touches most of it.
+[target.wasm32-unknown-unknown]
+rustflags = [
+  "-C", "link-args=-z stack-size=33554432",
+  "-C", "link-args=--initial-memory=134217728",
+  "-C", "link-args=--max-memory=4294967296",
+  "-C", "overflow-checks=false",
+  "-C", "target-feature=+bulk-memory",
+  "-C", "target-feature=+multivalue",
+  "-C", "target-feature=+mutable-globals",
+  "-C", "target-feature=+sign-ext",
+  "-C", "target-feature=+simd128",
+  "-C", "target-feature=+tail-call",
+  "--cfg", "getrandom_backend=\"wasm_js\"",
+]

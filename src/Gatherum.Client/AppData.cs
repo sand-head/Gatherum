@@ -27,6 +27,11 @@ public interface IAppData
     Task<string> ReadTextAsync(Guid nodeId);
     Task<byte[]> ReadBytesAsync(Guid nodeId);
 
+    /// <summary>The first <paramref name="bytes"/> of a file, or fewer when it is
+    /// shorter. What a header question costs, for a file too big to read whole to answer
+    /// one — a disc image, which is gigabytes with its name in the first kilobyte.</summary>
+    Task<byte[]> ReadHeadAsync(Guid nodeId, int bytes);
+
     Task<IReadOnlyList<SearchHit>> SearchAsync(string query, int limit);
 
     /// <summary>Which of these titles name a node the user can see. A [[wiki link]]
@@ -220,6 +225,25 @@ public sealed class HttpAppData(HttpClient http) : IAppData
 
     public Task<byte[]> ReadBytesAsync(Guid nodeId) =>
         http.GetByteArrayAsync($"/api/files/{nodeId}/content");
+
+    public async Task<byte[]> ReadHeadAsync(Guid nodeId, int bytes)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/files/{nodeId}/content");
+        request.Headers.Range = new RangeHeaderValue(0, bytes - 1);
+        using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+        response.EnsureSuccessStatusCode();
+        // A server that ignored the range answers with the whole file, so the read
+        // stops at the head regardless rather than trusting the status.
+        await using var stream = await response.Content.ReadAsStreamAsync();
+        return await ReadUpTo(stream, bytes);
+    }
+
+    private static async Task<byte[]> ReadUpTo(Stream stream, int bytes)
+    {
+        var head = new byte[bytes];
+        var read = await stream.ReadAtLeastAsync(head, bytes, throwOnEndOfStream: false);
+        return read == bytes ? head : head[..read];
+    }
 
     public async Task<IReadOnlyList<SearchHit>> SearchAsync(string query, int limit) =>
         await http.GetFromJsonAsync<List<SearchHit>>(

@@ -350,14 +350,16 @@ export function readEmulatorGamepad() {
 // Some machines are too big to write from scratch, so their core is somebody else's,
 // compiled to WebAssembly and fetched at build time (see native/README.md).
 //
-// There are two shapes of module and the difference is the core's own doing. A core
+// There are three shapes of module and the difference is the core's own doing. A core
 // that is plain C with no threads and no exceptions compiles against WASI and arrives
 // as one bare module: everything it needs from a host is below, and everything it
 // offers is a function taking integers. A core built out of coroutines cannot, so it
 // compiles against Emscripten and arrives with the loader Emscripten emits beside it.
-// Past `openCore` neither the rest of this file nor anything in C# can tell which it
-// got: both answer `bytes()` with a view of the core's heap and `exports` with the same
-// flat surface, because both link the same shim.
+// A core written in Rust arrives with wasm-bindgen's loader instead, and its surface is
+// a host crate of its own rather than the shim (native/gecko-host). Past `openCore`
+// neither the rest of this file nor anything in C# can tell which it got: all three
+// answer `bytes()` with a view of the core's heap and `exports` with the same flat
+// surface.
 //
 // Two heaps are in play — the core's and the .NET runtime's — and the frame has to
 // cross between them every sixteen milliseconds. Blazor hands out the address of a
@@ -456,10 +458,16 @@ async function openCore(url) {
     // those — so absence is asked about first, the way the bare-module branch's own
     // fetch already answers it.
     if (!(await fetch(url, { method: "HEAD" })).ok) return null;
-    const module = await (await import(url)).default();
-    // Emscripten replaces its heap rather than resizing it when it grows, so the view
-    // has to be asked for again every time rather than kept.
-    return { exports: flattened(module, "_"), bytes: () => module.HEAPU8, fs: module.FS };
+    const loader = await import(url);
+    const started = await loader.default();
+    if (started?.HEAPU8) {
+      // Emscripten replaces its heap rather than resizing it when it grows, so the
+      // view has to be asked for again every time rather than kept.
+      return { exports: flattened(started, "_"), bytes: () => started.HEAPU8, fs: started.FS };
+    }
+    // wasm-bindgen: the calls are wrappers on the loader itself, and what starting it
+    // returned is the module's exports, its memory among them — which also grows.
+    return { exports: flattened(loader, ""), bytes: () => new Uint8Array(started.memory.buffer) };
   }
   const response = await fetch(url);
   if (!response.ok) return null;
@@ -504,7 +512,13 @@ export async function loadEmulatorCore(url, settings) {
     for (let at = 0; at + 1 < (settings?.length ?? 0); at += 2) {
       core.exports.gatherum_set_option(planted(settings[at]), planted(settings[at + 1]));
     }
-    core.exports.gatherum_boot();
+    // A core that has to find a GPU boots asynchronously and says whether it did; the
+    // shim's boot returns nothing, which is not a refusal.
+    const booted = await core.exports.gatherum_boot();
+    if (booted === false || booted === 0) {
+      core = undefined;
+      return "broken";
+    }
     coreUrl = url;
     return "ok";
   } catch (error) {
@@ -536,6 +550,56 @@ export function loadEmulatorCartridge(rom, extension) {
     if (!core.exports.gatherum_load(address, rom.length)) return null;
   }
 
+  return startCartridge();
+}
+
+/// Hands over a cartridge too big to pass through .NET: a disc, streamed from the
+/// server straight into the core's own memory, a chunk at a time, into an allocation
+/// the core made for it. The length has to be known up front for that, and the server
+/// says it; a response that does not is gathered here first and copied once.
+export async function loadEmulatorCartridgeFromUrl(url, extension) {
+  if (!core || core.exports.gatherum_needs_path()) return null;
+  const response = await fetch(url, { credentials: "same-origin" });
+  if (!response.ok || !response.body) return null;
+  const declared = Number(response.headers.get("content-length") ?? 0);
+  const reader = response.body.getReader();
+  let address = 0;
+  let filled = 0;
+  const gathered = [];
+  if (declared > 0) {
+    address = core.exports.gatherum_alloc(declared);
+    if (!address) return null;
+  }
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (address) {
+      if (filled + value.length > declared) { core.exports.gatherum_free(address); return null; }
+      core.bytes().set(value, address + filled);
+    } else {
+      gathered.push(value);
+    }
+    filled += value.length;
+  }
+  if (!address) {
+    address = core.exports.gatherum_alloc(filled);
+    if (!address) return null;
+    let at = 0;
+    for (const chunk of gathered) { core.bytes().set(chunk, address + at); at += chunk.length; }
+  } else if (filled !== declared) {
+    core.exports.gatherum_free(address);
+    return null;
+  }
+  if (!core.exports.gatherum_load(address, filled)) return null;
+  return startCartridge();
+}
+
+/// Whether a core that draws on the GPU has one to draw on.
+export function hasWebGpu() {
+  return !!globalThis.navigator?.gpu;
+}
+
+function startCartridge() {
   coreFrameClock = 0n;
   core.exports.gatherum_run();
   core.exports.gatherum_measure_state();

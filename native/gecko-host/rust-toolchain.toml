@@ -1,0 +1,6 @@
+# The same toolchain Gecko pins for itself; its sources are built here as path
+# dependencies and a compiler they were not written for is nobody's bug.
+[toolchain]
+channel = "1.96.0"
+components = ["rust-src"]
+targets = ["wasm32-unknown-unknown"]

@@ -1,0 +1,51 @@
+diff --git a/crates/gecko/src/flipper/exi.rs b/crates/gecko/src/flipper/exi.rs
+index c4e29dc..202b605 100644
+--- a/crates/gecko/src/flipper/exi.rs
++++ b/crates/gecko/src/flipper/exi.rs
+@@ -88,6 +88,14 @@ impl ExternalInterface {
+             .and_then(|any| any.downcast_mut::<macronix::ExiMacronix>())
+     }
+ 
++    /// The memory card in a slot (channel 0 is slot A), if one was inserted.
++    pub fn memory_card_mut(&mut self, channel: usize) -> Option<&mut memcard::ExiMemoryCard> {
++        self.devices[channel][0]
++            .as_mut()
++            .and_then(|d| d.as_any_mut())
++            .and_then(|any| any.downcast_mut::<memcard::ExiMemoryCard>())
++    }
++
+     #[inline(always)]
+     pub fn interrupt_active(&self) -> bool {
+         Self::channel_interrupt_active(&self.ch0_csr)
+diff --git a/crates/gecko/src/flipper/exi/memcard.rs b/crates/gecko/src/flipper/exi/memcard.rs
+index 86b9e07..fc2563a 100644
+--- a/crates/gecko/src/flipper/exi/memcard.rs
++++ b/crates/gecko/src/flipper/exi/memcard.rs
+@@ -82,6 +82,16 @@ impl ExiMemoryCard {
+         }
+     }
+ 
++    /// The card's whole flash, for a host that keeps saves somewhere other than a
++    /// file — a browser, say.
++    pub fn data(&self) -> &[u8] {
++        &self.data
++    }
++
++    pub fn data_mut(&mut self) -> &mut [u8] {
++        &mut self.data
++    }
++
+     fn flush(&self) {
+         if let Some(path) = &self.path {
+             super::device::persist_backing(path, &self.data, "memory card");
+@@ -104,6 +114,10 @@ impl ExiMemoryCard {
+ }
+ 
+ impl super::device::ExiDevice for ExiMemoryCard {
++    fn as_any_mut(&mut self) -> Option<&mut dyn std::any::Any> {
++        Some(self)
++    }
++
+     fn on_select(&mut self) {
+         self.position = 0;
+     }
