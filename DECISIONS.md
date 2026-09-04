@@ -2820,3 +2820,49 @@ the median's noise and the mechanism is believable, so it is probably right — 
 one conclusion in these rounds that was not measured on a mean, and it is the first thing to
 try again now that a third of a millisecond is visible. The phase timings, the DSP figures
 and the console-phase A/Bs were all totals divided by frames, which is a mean, and stand.
+
+## A draw that asks for what the last one asked for
+
+With the mean established as the measurement, a third of a millisecond is visible and the
+things dismissed as unmeasurable are worth another look. The first one pays.
+
+**A scene is thousands of tiny draws, and nearly every one repeats the one before it.**
+Twilight Princess submits 5,233 draws a frame averaging 4.9 vertices each, and the backend
+already merges them down to 62 real draw calls — but it decides to merge only after
+building the shader key, the key it is specialised with, the pipeline key, the bind group
+key and both uniform blocks all over again, and then comparing them with the last draw's.
+A draw that arrives under a state nothing has touched, asking for what the last one asked
+for, can skip all of that and go straight to the merge. An epoch bumped by every action
+that is not a draw says nothing has touched the state; a comparison against the last draw
+says the rest.
+
+**The comparison has to be cheap or it eats what it saves, and it has to be exact.**
+Comparing the whole draw record with a derived `PartialEq` was worth nothing at all —
+it is a kilobyte and a half, most of it floating point, and Rust compares those a lane at
+a time with NaN in mind. Comparing seven fields instead was worth a millisecond but was
+not exact. What is both is this: **only the whole numbers are compared**, because every
+floating-point field a draw carries is read in exactly one place — building the frame
+uniforms — and only for a draw that says its frame state changed, which is 1.5% of them
+and takes the long way round; the modelview is not read at all, since vertices arrive
+transformed. And of the TEV arrays only the stages in use are compared, because only those
+are read. **0.93 ms a frame**, and the frame from 24.54 to 23.69.
+
+**It is held to the long way round by an oracle.** A debug switch makes every draw take
+the long way and counts the ones the short way would have taken that the long way would
+not have merged: **2,798,751 draws over 550 frames of the game, none of them wrong**.
+
+**One thing tried and not kept.** A 32-bit load from the console's RAM has its bytes
+reversed with a mask, a rotate, a mask, a rotate and an or — eleven WebAssembly
+operations, on 484,718 accesses a frame. WebAssembly has no instruction that reverses a
+word, but it has one that puts bytes wherever you like, and loading into a vector and
+shuffling is three operations instead of twelve. It measured a tenth of a millisecond
+*slower*: the two moves between a general register and a vector one cost what the nine
+operations saved. The scalar version stays.
+
+**Where the last of it is.** The frame is the console 19.0, the renderer about 4.0 and the
+EFB writebacks 0.7, against a budget of 16.7. The next thing anyone should look at is the
+road a vertex travels: 25,739 of them a frame, 164 bytes each, written by the decoder,
+copied into the queue, copied out of it, copied into the renderer's own scratch, packed
+into the strides the draws use and then handed to JavaScript — six passes over four
+megabytes a frame, three of which exist only because the native backend runs its renderer
+on another thread and this one does not.
