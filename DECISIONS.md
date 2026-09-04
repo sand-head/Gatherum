@@ -2572,3 +2572,40 @@ pairs a stale loader with a new binary. The crackle is the frame rate: on the ow
 machine the title screen runs at about forty percent of speed, the player runs up to
 two frames a paint to catch up, and the audio worklet starves between paints. That is
 the work of the previous entry's last paragraph, not a bug in the sound.
+
+## Firmware belongs to the instance, and only where something reads it
+
+The owner asked for BIOS uploads "on a per-instance level", and the phrase settles the
+design. A console's boot ROM is not one person's document: two readers of the same
+Gatherum play the same console, so a file kept in somebody's root would be a console
+that behaves differently depending on whose page you opened. It goes in the storage
+root's own `.gatherum/firmware/`, beside the users' directories rather than inside any
+of them — the one place a file belongs to the instance. The scan skips it as it skips
+every other sidecar, so it is not a node, has no owner, appears in no listing, and is
+still a plain file that travels with a backup of the storage root. `IFileStorage` grew
+the four calls that reach it, so the seam stays the only door to the filesystem.
+
+**Anybody signed in may add one or take one away.** Gatherum has no operator role, and
+inventing one for this would be inventing an access model for a single feature; the
+honest alternatives were "everybody" or "nobody", and nobody makes the feature
+pointless. The bytes are only ever served back to a signed-in browser, which is the
+player fetching them for its core — an anonymous reader of a public ROM page gets a
+console without firmware, which is a console that works.
+
+**The catalogue is closed and a file is taken only at its exact size.** A machine takes
+exactly the files listed for it and nothing else, so the storage cannot become a
+dumping ground, and a file of another length is a different file whatever it is called.
+The list has one entry: the GameCube's IPL, which the console reads its font out of.
+The Game Boy Advance's BIOS belongs there too and is deliberately absent, because
+nothing could read it yet — mGBA opens it as a file, our libretro shim answers every
+WASI file call with "no such file", and an upload that lands somewhere no core looks is
+worse than no upload at all. Listing a machine is the last step of supporting it, not
+the first.
+
+**Nothing here needs firmware.** Every console plays without it — the GameCube on
+Gecko's free IPL replacement, which keeps doing the booting even when a real IPL is
+present. That is what makes every way of not having a file the same quiet no: none
+uploaded, a reader who is not signed in, a core built before the call existed. The core
+gained `gatherum_set_firmware`, which takes the bytes before the console powers on and
+ignores a ROM of any other length, and the loader hands them over between setting the
+core's options and booting it.

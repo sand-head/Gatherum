@@ -1,0 +1,54 @@
+.settings-firmware {
+    margin-block-start: 2.5rem;
+}
+
+.firmware-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.firmware-table th,
+.firmware-table td {
+    padding: 0.5rem 0.75rem 0.5rem 0;
+    text-align: start;
+    vertical-align: top;
+    border-block-end: 1px solid var(--outline-dim);
+}
+
+.firmware-purpose,
+.firmware-size {
+    display: block;
+    color: var(--on-surface-dim);
+    font-size: 0.85em;
+    max-inline-size: 44ch;
+}
+
+.firmware-absent {
+    color: var(--on-surface-dim);
+}
+
+/* The file input is the label: a bare one says "no file chosen" beside itself. The
+   input belongs to InputFile rather than to this component, so the scoped stylesheet
+   only reaches it through ::deep. */
+.firmware-upload ::deep input {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    opacity: 0;
+}
+
+.firmware-upload span {
+    display: inline-block;
+    padding: 0.35rem 0.75rem;
+    border: 1px solid var(--outline);
+    border-radius: var(--radius-s);
+    cursor: pointer;
+}
+
+.firmware-upload span:hover {
+    background: var(--hover);
+}
+
+.firmware-problem {
+    color: var(--danger);
+}

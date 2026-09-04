@@ -132,6 +132,15 @@ public record KeyDto(Guid Id, string Name, string Prefix, DateTimeOffset Created
 
 public record CreatedKeyDto(Guid Id, string Name, string Token);
 
+/// <summary>A firmware file a console here can use, and whether this Gatherum holds it.</summary>
+public record FirmwareDto(string Machine, string File, string Console, string Purpose,
+    long Bytes, string? Hash, long? SizeBytes)
+{
+    public static FirmwareDto From(FirmwareStatus status) =>
+        new(status.Spec.Machine, status.Spec.File, status.Spec.Console, status.Spec.Purpose,
+            status.Spec.Bytes, status.Stored?.Hash, status.Stored?.SizeBytes);
+}
+
 public record SearchResultDto(Guid Id, string Kind, string Title, string Snippet)
 {
     public static SearchResultDto From(SearchResult result) =>

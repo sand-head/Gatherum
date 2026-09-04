@@ -195,6 +195,18 @@ Two more endpoints — `GET /api/nodes/{id}/presence` and
 `POST /api/nodes/{id}/presence/leave` — exist for the editor to say who is typing. They
 are an implementation detail of the editing UI rather than part of the API's surface.
 
+## Console firmware
+
+Files the instance holds for its consoles, rather than any one person's. Everything
+here needs a signed-in session or a key.
+
+| Route | What |
+| --- | --- |
+| `GET /api/firmware` | What a console here can be given, and what is held |
+| `GET /api/firmware/{machine}/{file}` | The bytes, or 404 when none is held |
+| `PUT /api/firmware/{machine}/{file}` | The body is the file; it must be exactly the size the listing gives |
+| `DELETE /api/firmware/{machine}/{file}` | Forget it |
+
 ## Keys
 
 | Endpoint | Notes |

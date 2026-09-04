@@ -112,10 +112,19 @@ public interface IAppData
     Task SetDescriptionAsync(Guid nodeId, string description);
 
     // Settings.
+    Task<IReadOnlyList<FirmwareInfo>> ListFirmwareAsync();
+    Task UploadFirmwareAsync(string machine, string file, Stream content);
+    Task RemoveFirmwareAsync(string machine, string file);
     Task<IReadOnlyList<KeyInfo>> ListKeysAsync();
     Task<CreatedKey> CreateKeyAsync(string name);
     Task RevokeKeyAsync(Guid keyId);
 }
+
+/// <summary>A firmware file this Gatherum could hold for a console, and whether it
+/// does. <paramref name="Hash"/> and <paramref name="SizeBytes"/> are null when it
+/// holds none.</summary>
+public record FirmwareInfo(string Machine, string File, string Console, string Purpose,
+    long Bytes, string? Hash, long? SizeBytes);
 
 public record EditorPayload(string Text, int HeadVersion);
 public record BytesPayload(byte[] Content, int HeadVersion);
@@ -406,6 +415,16 @@ public sealed class HttpAppData(HttpClient http) : IAppData
 
     public async Task SetDescriptionAsync(Guid nodeId, string description) =>
         Ensure(await http.PutAsJsonAsync($"/api/files/{nodeId}/description", new { description }));
+
+    public async Task<IReadOnlyList<FirmwareInfo>> ListFirmwareAsync() =>
+        await http.GetFromJsonAsync<List<FirmwareInfo>>("/api/firmware") ?? [];
+
+    public async Task UploadFirmwareAsync(string machine, string file, Stream content) =>
+        await EnsureAsync(await http.PutAsync($"/api/firmware/{machine}/{file}",
+            new StreamContent(content)));
+
+    public async Task RemoveFirmwareAsync(string machine, string file) =>
+        await EnsureAsync(await http.DeleteAsync($"/api/firmware/{machine}/{file}"));
 
     public async Task<IReadOnlyList<KeyInfo>> ListKeysAsync() =>
         await http.GetFromJsonAsync<List<KeyInfo>>("/api/keys") ?? [];

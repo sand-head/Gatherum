@@ -16,6 +16,13 @@ PostgreSQL 16 or newer with the [pgvector](https://github.com/pgvector/pgvector)
 extension. The migration issues `CREATE EXTENSION vector`, which wants a superuser the
 first time.
 
+## Console firmware
+
+Not an environment variable: firmware is uploaded in **Settings → Console firmware** and
+kept under `.gatherum/firmware` in the storage root, beside the users' directories
+rather than inside any of them. It is part of the instance, so it travels with a backup
+of the storage root and nothing else needs configuring for it.
+
 ## Identity
 
 | Variable | Default | Purpose |

@@ -225,6 +225,12 @@ one follow from that.
   formats the first time it wants one — and the card is what **Download save** gives
   you: a raw card image, which Dolphin will read if you rename it `.raw`. It is kept by
   your browser like every other save here.
+- **The boot ROM** is a chip the console had and nobody may hand out, so Gatherum ships
+  a free replacement that loads a disc and starts it. That is the whole of what booting
+  needs, and every disc here plays without the real thing. What the real one adds is the
+  console's own font, which a game that draws with it goes looking for and otherwise
+  finds blank. If you have one, **Settings → Console firmware** takes it, and every
+  reader of this Gatherum gets it — see below.
 - **Wii discs** are recognised for what they are and not played: a Wii is a system a
   GameCube core would have to invent, and it does not.
 - **Speed** is the emulator's business. It runs the console's processor an instruction
@@ -235,6 +241,19 @@ A Master System cartridge carries no title, only the catalogue number Sega sold 
 so that is what search has to go on for one. A Game Gear plays in colour on a screen a
 little smaller than the picture the hardware draws, and shows the middle of it, which is
 what the console did.
+
+### Console firmware
+
+A couple of these machines had a chip in them that nobody may distribute, and Gatherum
+has none of them. Every console here plays without one — that is a rule, not an
+accident — so firmware is only ever an improvement on a console that already works.
+
+**Settings → Console firmware** lists what a console here can be given, what having it
+buys, and whether this Gatherum holds it. A file belongs to the instance rather than to
+whoever added it: it is kept beside the users' directories rather than inside any of
+them, everybody playing gets the benefit of it, and anybody signed in can replace it or
+take it away. Only the files on that list are kept, only at the exact size the console's
+chip was — anything else is a different file, whatever it is named.
 
 > [!NOTE]
 > Gatherum plays cartridges; it does not supply them. What you upload is your business,

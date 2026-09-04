@@ -55,6 +55,15 @@ public interface IFileStorage
     /// <summary>Where a root's metadata and history live, for callers that need to read
     /// or write the sidecar directly.</summary>
     string SidecarDirectory(NodePath path);
+
+    /// <summary>A file that belongs to the instance rather than to anybody — a console's
+    /// firmware, say — kept under the storage root's own <c>.gatherum/</c>, where no
+    /// user's root reaches and the scan for nodes never looks. <paramref name="relative"/>
+    /// is '/'-separated beneath that directory. Null when there is no such file.</summary>
+    Task<StoredBlob?> MeasureInstanceFileAsync(string relative, CancellationToken cancellationToken = default);
+    Task<Stream> OpenInstanceFileAsync(string relative, CancellationToken cancellationToken = default);
+    Task<StoredBlob> WriteInstanceFileAsync(string relative, Stream content, CancellationToken cancellationToken = default);
+    Task DeleteInstanceFileAsync(string relative, CancellationToken cancellationToken = default);
 }
 
 public record StoredBlob(string Hash, long SizeBytes);
