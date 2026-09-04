@@ -2665,3 +2665,69 @@ kilobyte and a half, allocated and zeroed fresh every time; pooling them was wor
 measurable, and two runs with the pool drew a picture that differed from two runs without
 it by a little everywhere. Unexplained, and not chased, because there was no speed in it
 either way — but recorded, so the next person to think of it knows to look there first.
+
+## The Gekko's twelve milliseconds, and three ways at them
+
+The owner asked for the Gekko number next, in one branch. It is about twelve of a
+thirty-four millisecond frame, and the first thing was to stop guessing at it: each block
+the emitter compiles now carried a tally of what it made of each instruction, added up
+every time the block ran. A frame of Twilight Princess in its attract demo, executed:
+**1.67 million instructions across 285,180 blocks — 5.87 instructions a block** — of which
+623,639 are plain integer work, 484,718 are loads and stores, 284,243 are branches,
+267,035 are floating point, 133,501 write the condition register and 12,914 fall back to
+an interpreter handler. Blocks of six instructions was the shape of the problem, and three
+things were tried against it.
+
+**Block chaining, and why a browser does not want it.** A block that ends where another
+begins should go straight there. It was built: the cache keeps a table of which address
+has a compiled block in which table slot, in memory the blocks read for themselves, and a
+block's way out checks the four things the loop above it checks — that the console has
+cycles left before the scheduler's deadline, that no interrupt is waiting, that nothing has
+been written over code, and that there is a block at the address — and then tail-calls it.
+It worked exactly as intended: Rust dispatches a frame fell from 285,699 to 76,006. It was
+**three milliseconds a frame slower**. Firefox's `return_call_indirect` costs more than the
+dispatch it saves; an ordinary `call_indirect` with a depth counter to bound the stack was
+still slower. The lesson is worth more than the code: the dispatch loop is not what the
+frame is spending, and a mechanism that removes three quarters of it can still lose. It is
+not in the tree.
+
+**Shaving the emitted code did not move it either.** Two attempts, both sound on paper.
+The guard around every load and store asked two questions — that the address is one of the
+two segments RAM answers on, and that its offset is inside RAM — where one fold answers
+both: flipping the top bit and dropping the next lands segments 8 and C on the same offset
+and leaves everything else far outside RAM. Five bytes off every one of 484,718 accesses a
+frame. And the condition register, which 133,501 instructions write and every conditional
+branch reads, moved into a local the way the general registers already do. Neither could be
+told from the noise, and the second made a short block *bigger*: at six instructions a
+block, loading the register once and writing it back costs more than the two memory
+accesses it saves. The fold is kept, because it is strictly less code and a test proves it
+accepts exactly what the two questions did, at every segment and every boundary. The local
+is not kept, because nothing measured says it earns its place.
+
+**What did move it: blocks that carry on.** The scanner ended a block at every conditional
+branch. One that goes *forward* need not end it — the emitter already knows how to make a
+branch a way out, so it emits the taken path as an exit and keeps translating the code
+after it, which the interpreter has always handled (a step whose `nia` is not where the
+next one starts leaves the block). A branch that goes *backward* still ends it: that is a
+loop closing, it is what the idle classifier reads, and it is where the next look at the
+interrupts belongs. Blocks went from **5.87 instructions to 8.89**, and the console phase
+from 22.65 ms a frame to 21.97.
+
+**Two things this costs, and one it does not.** Interrupts are taken at block boundaries,
+so longer blocks take them a little later — six instructions of granularity became nine.
+That changes what a run computes, and the frame a run draws is not the frame the previous
+build drew; it is still the same frame every time for a given build, which is what
+determinism means here. And it is not a translation bug: the emitter is held against the
+interpreter for every compiled block, in the browser on the real disc, and the only
+disagreement in the whole run is the one the mechanism has always reported — a block that
+reads a video register, writes it, and reads it back cannot agree with a second run of
+itself. Two tests in the fork hold the new shape: one runs a block with a forward branch in
+the middle both ways, taken and not, against the interpreter, and one proves the folded
+guard.
+
+**Where this leaves the frame.** Three well-founded attacks on the Gekko produced one
+three-percent win between them, and the two that failed say something the successful one
+does not: the dispatch is not the cost and the guards are not the cost, which leaves the
+work itself and the memory it touches. There is no lever of the size the last round found.
+The DSP is the opposite case and the obvious next one — seven milliseconds a frame of a
+plain interpreter, with no compiler at all, where the Gekko already has one.
