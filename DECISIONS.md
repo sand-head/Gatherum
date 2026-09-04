@@ -2609,3 +2609,260 @@ uploaded, a reader who is not signed in, a core built before the call existed. T
 gained `gatherum_set_firmware`, which takes the bytes before the console powers on and
 ignores a ROM of any other length, and the loader hands them over between setting the
 core's options and booting it.
+
+## A frame's largest cost was a buffer nobody had filled
+
+The owner reported the GameCube slow across the board, and named the case: Twilight
+Princess is fine on the screen it starts on and not fine once the game behind it starts.
+Measuring that meant reaching it — a scratch harness driving `gecko.mjs` past the health
+screen with the A button, into the attract demo, which is real gameplay rendered by the
+real engine. There it cost **56 ms a frame**, three and a half times the budget.
+
+**A frame was timed by its phases rather than guessed at.** The Gecko profiler was tried
+first and gave one wasm code address holding 99.5% of the samples, which says nothing, so
+the host was instrumented instead: a clock lent to the fork through one extern function,
+accumulators around each phase of `gatherum_run`, then around the DSP, the GX FIFO decode,
+each kind of renderer action, and the two halves of a draw flush. All of it temporary, and
+none of it in the tree. What it said, per frame: the console 23 ms (the Gekko 12, the DSP
+7, the FIFO decode 4), the renderer 20, the EFB writebacks under 1.
+
+**The renderer's twenty milliseconds were nearly all one line.** `wgpu`'s WebGPU backend
+implements `write_buffer_with` by allocating and zeroing a staging buffer of the size
+asked for and copying the whole of it across on drop, and the size asked for was the draw
+buffer's whole *capacity* — sized to the heaviest frame ever seen, written in full four
+times a frame however few draws were in it. Each section is now written with the bytes it
+actually holds, the vertices packed through a scratch vector kept between flushes rather
+than a fresh zeroed one each time. Twelve milliseconds a frame became one and a third, and
+the picture came back pixel for pixel identical, which is the test that matters for a
+change that only moves bytes.
+
+**The second was an allocation per action.** The queue between the console and the renderer
+carried each action's new vertices as their own `Vec` — five thousand nine hundred
+allocations a frame. They share one vector now and an action carries a range into it, and
+the two vectors go back to the queue emptied so the next frame writes into memory already
+there. Measured together, in a same-session A/B against the build without them: Twilight
+Princess in the attract demo **56.3 ms a frame to 34.3**, and Super Monkey Ball 2's title
+screen **52.5 to 39.1**. A third of a frame, for forty lines.
+
+**Where the rest of it is, measured, so nobody has to guess again.** Of what is left, the
+Gekko is 12 ms, the renderer 9, the DSP 7 and the GX FIFO decode 4. The Gekko's number is
+the interesting one, because the JIT is not the problem: 285,699 compiled block runs a
+frame against 33 interpreted, 1.68 million instructions a frame — and only **5.9
+instructions per block**, at 41 ns a block. A block that short spends most of itself
+arriving and leaving: the cache lookup, the type-checked indirect call, the prologue that
+loads its registers into locals and the epilogue that writes them back. That is the next
+piece of work, and WebAssembly has the instruction for it — the build already enables tail
+calls, so a compiled block can `return_call_indirect` straight into the next one instead
+of returning to the Rust loop, which is block chaining under another name. The DSP is a
+plain interpreter here (its Cranelift JIT is native-only) and wants the same treatment the
+Gekko got. The renderer's nine are 5,233 draw actions a frame averaging 4.9 vertices each,
+of which 97.7% are back to back with identical state — the backend already merges them
+down to 62 real draws, so what is left is the work done *before* the merge decision, and
+the fix is to reach that decision sooner.
+
+**One thing tried and not kept.** The draw record each of those 5,233 draws asks for is a
+kilobyte and a half, allocated and zeroed fresh every time; pooling them was worth nothing
+measurable, and two runs with the pool drew a picture that differed from two runs without
+it by a little everywhere. Unexplained, and not chased, because there was no speed in it
+either way — but recorded, so the next person to think of it knows to look there first.
+
+## The Gekko's twelve milliseconds, and three ways at them
+
+The owner asked for the Gekko number next, in one branch. It is about twelve of a
+thirty-four millisecond frame, and the first thing was to stop guessing at it: each block
+the emitter compiles now carried a tally of what it made of each instruction, added up
+every time the block ran. A frame of Twilight Princess in its attract demo, executed:
+**1.67 million instructions across 285,180 blocks — 5.87 instructions a block** — of which
+623,639 are plain integer work, 484,718 are loads and stores, 284,243 are branches,
+267,035 are floating point, 133,501 write the condition register and 12,914 fall back to
+an interpreter handler. Blocks of six instructions was the shape of the problem, and three
+things were tried against it.
+
+**Block chaining, and why a browser does not want it.** A block that ends where another
+begins should go straight there. It was built: the cache keeps a table of which address
+has a compiled block in which table slot, in memory the blocks read for themselves, and a
+block's way out checks the four things the loop above it checks — that the console has
+cycles left before the scheduler's deadline, that no interrupt is waiting, that nothing has
+been written over code, and that there is a block at the address — and then tail-calls it.
+It worked exactly as intended: Rust dispatches a frame fell from 285,699 to 76,006. It was
+**three milliseconds a frame slower**. Firefox's `return_call_indirect` costs more than the
+dispatch it saves; an ordinary `call_indirect` with a depth counter to bound the stack was
+still slower. The lesson is worth more than the code: the dispatch loop is not what the
+frame is spending, and a mechanism that removes three quarters of it can still lose. It is
+not in the tree.
+
+**Shaving the emitted code did not move it either.** Two attempts, both sound on paper.
+The guard around every load and store asked two questions — that the address is one of the
+two segments RAM answers on, and that its offset is inside RAM — where one fold answers
+both: flipping the top bit and dropping the next lands segments 8 and C on the same offset
+and leaves everything else far outside RAM. Five bytes off every one of 484,718 accesses a
+frame. And the condition register, which 133,501 instructions write and every conditional
+branch reads, moved into a local the way the general registers already do. Neither could be
+told from the noise, and the second made a short block *bigger*: at six instructions a
+block, loading the register once and writing it back costs more than the two memory
+accesses it saves. The fold is kept, because it is strictly less code and a test proves it
+accepts exactly what the two questions did, at every segment and every boundary. The local
+is not kept, because nothing measured says it earns its place.
+
+**What did move it: blocks that carry on.** The scanner ended a block at every conditional
+branch. One that goes *forward* need not end it — the emitter already knows how to make a
+branch a way out, so it emits the taken path as an exit and keeps translating the code
+after it, which the interpreter has always handled (a step whose `nia` is not where the
+next one starts leaves the block). A branch that goes *backward* still ends it: that is a
+loop closing, it is what the idle classifier reads, and it is where the next look at the
+interrupts belongs. Blocks went from **5.87 instructions to 8.89**, and the console phase
+from 22.65 ms a frame to 21.97.
+
+**Two things this costs, and one it does not.** Interrupts are taken at block boundaries,
+so longer blocks take them a little later — six instructions of granularity became nine.
+That changes what a run computes, and the frame a run draws is not the frame the previous
+build drew; it is still the same frame every time for a given build, which is what
+determinism means here. And it is not a translation bug: the emitter is held against the
+interpreter for every compiled block, in the browser on the real disc, and the only
+disagreement in the whole run is the one the mechanism has always reported — a block that
+reads a video register, writes it, and reads it back cannot agree with a second run of
+itself. Two tests in the fork hold the new shape: one runs a block with a forward branch in
+the middle both ways, taken and not, against the interpreter, and one proves the folded
+guard.
+
+**Where this leaves the frame.** Three well-founded attacks on the Gekko produced one
+three-percent win between them, and the two that failed say something the successful one
+does not: the dispatch is not the cost and the guards are not the cost, which leaves the
+work itself and the memory it touches. There is no lever of the size the last round found.
+The DSP is the opposite case and the obvious next one — seven milliseconds a frame of a
+plain interpreter, with no compiler at all, where the Gekko already has one.
+
+## The DSP had no compiler and did not need one yet
+
+The Gekko's twelve milliseconds had no lever left in them; the DSP's seven turned out to
+be mostly waste. Measured first, as ever: a frame of Twilight Princess runs **317,773 DSP
+instructions in 6.83 ms — 21.5 nanoseconds each**, against the Gekko's 7.1 with a compiler
+behind it. A histogram of where the DSP's program counter goes said the work is real: the
+busiest address is 2.8% of the steps and the top twenty are forty percent between them,
+which is a handful of tight mixer loops, not a spin nobody had noticed.
+
+**What a step was paying for.** Reaching one instruction meant two reads of instruction
+memory, a word built out of their bytes, one walk of the decode tree to find how long the
+instruction is and a second walk to find its handler — ending in a call through a table,
+which in WebAssembly is a checked indirect call. Every bit of that is the same each time
+the instruction runs, and instruction memory only changes when a microcode is uploaded.
+
+So it is worked out once and kept, in a cache with an entry per instruction address —
+0x1000 words of IRAM and 0x1000 of IROM — holding the instruction, how long it is, and the
+number of its handler. Running it is a load and a jump: the number comes from a `resolve`
+generated beside the tables chipi writes, exactly as the Gekko's block cache already does,
+and `execute` runs it through one `match`. The whole cache is emptied in
+`rebuild_wait_table`, which is already the one place both writers of instruction memory
+call. **6.83 ms a frame to 4.00**, on the same 317,773 steps and the same audio out.
+
+**Two ways it is held to the old path.** The handler an instruction reaches must be the
+handler `dispatch` would have walked its tables to reach, and nothing else checks that the
+generated table stayed in step with the one chipi wrote — so a test runs every one of the
+65,536 opcodes both ways over the same console and compares the registers, DRAM and IFX
+after each, with an opcode that panics required to panic both ways. And the harness now
+counts the audio samples a run produces: 881,040 over 550 frames, the same to the sample
+before and after.
+
+**Where it lands.** The console phase — the Gekko, the DSP and the GX FIFO decode
+together — went from 21.77 ms a frame to 19.17 in a same-session A/B. The frame median
+moved about 1.2 of that; the rest the renderer takes up, which is worth knowing on its own:
+past a point this frame is gated by how fast the GPU process accepts work, not by how fast
+the console produces it.
+
+**What is left of the DSP.** Twelve and a half nanoseconds an instruction, against maybe
+five or six for an interpreter with nothing left to give and three or four with a compiler.
+The remaining candidates are all fractions of a millisecond — the accumulator snapshot
+taken before every instruction that has an extension field, which only three of the
+extension handlers read, is nine percent of steps wasted and about a third of a millisecond
+— so the next real multiple here is the same one the Gekko got: blocks, and a JIT that
+emits WebAssembly. The machinery for that already exists next door.
+
+## There is no ceiling; there was a bad statistic
+
+The last round ended on an observation that did not add up: a change worth 2.6 ms of
+console time moved the frame by 1.2, and the difference was written down as the renderer
+taking up the slack — a browser's GPU process being the thing the frame really waits on.
+Asked to look into it, the answer is that no such ceiling exists and the arithmetic was
+never wrong; the statistic was.
+
+**The frame the harness reported was a median, and this workload is two workloads.**
+Twilight Princess renders at thirty frames a second, so the console's sixty vertical syncs
+a second alternate: one frame draws a whole scene and the next draws almost nothing. Over
+550 in-game frames, 273 of them cost between nothing and 20 ms and 271 cost between 30 and
+50, with **four frames in between**. The median therefore sits in the gap between two
+clouds, where it is decided by which cloud holds one more frame, and it moves in steps
+rather than smoothly. Every frame figure quoted in the three rounds before this one is that
+median, which is why they wandered by most of a millisecond between runs of the same build,
+and why a real 2.6 ms saving showed up as 1.2.
+
+**The mean is the right number and it is exact.** It equals the sum of the phases to two
+decimal places — 24.63 against 24.63 — and two runs of the same build agree to within
+0.05 ms, where the median varies by 0.8. That is a measurement sixteen times sharper, and
+it is what should have been used from the start.
+
+**The ceiling was then tested directly rather than argued about.** A debug switch burns a
+given number of microseconds at the top of every frame, changing nothing about what the GPU
+is asked to do. Adding 2, 4 and 8 milliseconds of pure CPU work moved the mean by 1.93,
+4.14 and 7.91 — one for one — while the renderer stayed flat at 4.9 ms across all four
+runs. Nothing absorbs a saving. Every millisecond taken out of the console comes straight
+off the frame.
+
+**So the three rounds are worth restating honestly.** Measured on the mean, on the same
+disc at the same point: **40.3 ms a frame to 24.5**, which is 1.65 times rather than the
+1.74 the medians claimed. The frame is now the console 19.0, the renderer 4.9, the EFB
+writebacks 0.7 and everything else a rounding error, and full speed is a mean of 16.7 — so
+Twilight Princess's attract demo runs at about two thirds of speed and wants another 1.5x,
+almost all of it in the console.
+
+**One earlier verdict rests on the bad statistic and should be re-tested.** Block chaining
+was called three milliseconds slower on the strength of medians. The gap was larger than
+the median's noise and the mechanism is believable, so it is probably right — but it is the
+one conclusion in these rounds that was not measured on a mean, and it is the first thing to
+try again now that a third of a millisecond is visible. The phase timings, the DSP figures
+and the console-phase A/Bs were all totals divided by frames, which is a mean, and stand.
+
+## A draw that asks for what the last one asked for
+
+With the mean established as the measurement, a third of a millisecond is visible and the
+things dismissed as unmeasurable are worth another look. The first one pays.
+
+**A scene is thousands of tiny draws, and nearly every one repeats the one before it.**
+Twilight Princess submits 5,233 draws a frame averaging 4.9 vertices each, and the backend
+already merges them down to 62 real draw calls — but it decides to merge only after
+building the shader key, the key it is specialised with, the pipeline key, the bind group
+key and both uniform blocks all over again, and then comparing them with the last draw's.
+A draw that arrives under a state nothing has touched, asking for what the last one asked
+for, can skip all of that and go straight to the merge. An epoch bumped by every action
+that is not a draw says nothing has touched the state; a comparison against the last draw
+says the rest.
+
+**The comparison has to be cheap or it eats what it saves, and it has to be exact.**
+Comparing the whole draw record with a derived `PartialEq` was worth nothing at all —
+it is a kilobyte and a half, most of it floating point, and Rust compares those a lane at
+a time with NaN in mind. Comparing seven fields instead was worth a millisecond but was
+not exact. What is both is this: **only the whole numbers are compared**, because every
+floating-point field a draw carries is read in exactly one place — building the frame
+uniforms — and only for a draw that says its frame state changed, which is 1.5% of them
+and takes the long way round; the modelview is not read at all, since vertices arrive
+transformed. And of the TEV arrays only the stages in use are compared, because only those
+are read. **0.93 ms a frame**, and the frame from 24.54 to 23.69.
+
+**It is held to the long way round by an oracle.** A debug switch makes every draw take
+the long way and counts the ones the short way would have taken that the long way would
+not have merged: **2,798,751 draws over 550 frames of the game, none of them wrong**.
+
+**One thing tried and not kept.** A 32-bit load from the console's RAM has its bytes
+reversed with a mask, a rotate, a mask, a rotate and an or — eleven WebAssembly
+operations, on 484,718 accesses a frame. WebAssembly has no instruction that reverses a
+word, but it has one that puts bytes wherever you like, and loading into a vector and
+shuffling is three operations instead of twelve. It measured a tenth of a millisecond
+*slower*: the two moves between a general register and a vector one cost what the nine
+operations saved. The scalar version stays.
+
+**Where the last of it is.** The frame is the console 19.0, the renderer about 4.0 and the
+EFB writebacks 0.7, against a budget of 16.7. The next thing anyone should look at is the
+road a vertex travels: 25,739 of them a frame, 164 bytes each, written by the decoder,
+copied into the queue, copied out of it, copied into the renderer's own scratch, packed
+into the strides the draws use and then handed to JavaScript — six passes over four
+megabytes a frame, three of which exist only because the native backend runs its renderer
+on another thread and this one does not.
