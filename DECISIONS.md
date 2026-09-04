@@ -2776,3 +2776,47 @@ taken before every instruction that has an extension field, which only three of 
 extension handlers read, is nine percent of steps wasted and about a third of a millisecond
 — so the next real multiple here is the same one the Gekko got: blocks, and a JIT that
 emits WebAssembly. The machinery for that already exists next door.
+
+## There is no ceiling; there was a bad statistic
+
+The last round ended on an observation that did not add up: a change worth 2.6 ms of
+console time moved the frame by 1.2, and the difference was written down as the renderer
+taking up the slack — a browser's GPU process being the thing the frame really waits on.
+Asked to look into it, the answer is that no such ceiling exists and the arithmetic was
+never wrong; the statistic was.
+
+**The frame the harness reported was a median, and this workload is two workloads.**
+Twilight Princess renders at thirty frames a second, so the console's sixty vertical syncs
+a second alternate: one frame draws a whole scene and the next draws almost nothing. Over
+550 in-game frames, 273 of them cost between nothing and 20 ms and 271 cost between 30 and
+50, with **four frames in between**. The median therefore sits in the gap between two
+clouds, where it is decided by which cloud holds one more frame, and it moves in steps
+rather than smoothly. Every frame figure quoted in the three rounds before this one is that
+median, which is why they wandered by most of a millisecond between runs of the same build,
+and why a real 2.6 ms saving showed up as 1.2.
+
+**The mean is the right number and it is exact.** It equals the sum of the phases to two
+decimal places — 24.63 against 24.63 — and two runs of the same build agree to within
+0.05 ms, where the median varies by 0.8. That is a measurement sixteen times sharper, and
+it is what should have been used from the start.
+
+**The ceiling was then tested directly rather than argued about.** A debug switch burns a
+given number of microseconds at the top of every frame, changing nothing about what the GPU
+is asked to do. Adding 2, 4 and 8 milliseconds of pure CPU work moved the mean by 1.93,
+4.14 and 7.91 — one for one — while the renderer stayed flat at 4.9 ms across all four
+runs. Nothing absorbs a saving. Every millisecond taken out of the console comes straight
+off the frame.
+
+**So the three rounds are worth restating honestly.** Measured on the mean, on the same
+disc at the same point: **40.3 ms a frame to 24.5**, which is 1.65 times rather than the
+1.74 the medians claimed. The frame is now the console 19.0, the renderer 4.9, the EFB
+writebacks 0.7 and everything else a rounding error, and full speed is a mean of 16.7 — so
+Twilight Princess's attract demo runs at about two thirds of speed and wants another 1.5x,
+almost all of it in the console.
+
+**One earlier verdict rests on the bad statistic and should be re-tested.** Block chaining
+was called three milliseconds slower on the strength of medians. The gap was larger than
+the median's noise and the mechanism is believable, so it is probably right — but it is the
+one conclusion in these rounds that was not measured on a mean, and it is the first thing to
+try again now that a third of a millisecond is visible. The phase timings, the DSP figures
+and the console-phase A/Bs were all totals divided by frames, which is a mean, and stand.
