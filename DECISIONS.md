@@ -2731,3 +2731,48 @@ does not: the dispatch is not the cost and the guards are not the cost, which le
 work itself and the memory it touches. There is no lever of the size the last round found.
 The DSP is the opposite case and the obvious next one — seven milliseconds a frame of a
 plain interpreter, with no compiler at all, where the Gekko already has one.
+
+## The DSP had no compiler and did not need one yet
+
+The Gekko's twelve milliseconds had no lever left in them; the DSP's seven turned out to
+be mostly waste. Measured first, as ever: a frame of Twilight Princess runs **317,773 DSP
+instructions in 6.83 ms — 21.5 nanoseconds each**, against the Gekko's 7.1 with a compiler
+behind it. A histogram of where the DSP's program counter goes said the work is real: the
+busiest address is 2.8% of the steps and the top twenty are forty percent between them,
+which is a handful of tight mixer loops, not a spin nobody had noticed.
+
+**What a step was paying for.** Reaching one instruction meant two reads of instruction
+memory, a word built out of their bytes, one walk of the decode tree to find how long the
+instruction is and a second walk to find its handler — ending in a call through a table,
+which in WebAssembly is a checked indirect call. Every bit of that is the same each time
+the instruction runs, and instruction memory only changes when a microcode is uploaded.
+
+So it is worked out once and kept, in a cache with an entry per instruction address —
+0x1000 words of IRAM and 0x1000 of IROM — holding the instruction, how long it is, and the
+number of its handler. Running it is a load and a jump: the number comes from a `resolve`
+generated beside the tables chipi writes, exactly as the Gekko's block cache already does,
+and `execute` runs it through one `match`. The whole cache is emptied in
+`rebuild_wait_table`, which is already the one place both writers of instruction memory
+call. **6.83 ms a frame to 4.00**, on the same 317,773 steps and the same audio out.
+
+**Two ways it is held to the old path.** The handler an instruction reaches must be the
+handler `dispatch` would have walked its tables to reach, and nothing else checks that the
+generated table stayed in step with the one chipi wrote — so a test runs every one of the
+65,536 opcodes both ways over the same console and compares the registers, DRAM and IFX
+after each, with an opcode that panics required to panic both ways. And the harness now
+counts the audio samples a run produces: 881,040 over 550 frames, the same to the sample
+before and after.
+
+**Where it lands.** The console phase — the Gekko, the DSP and the GX FIFO decode
+together — went from 21.77 ms a frame to 19.17 in a same-session A/B. The frame median
+moved about 1.2 of that; the rest the renderer takes up, which is worth knowing on its own:
+past a point this frame is gated by how fast the GPU process accepts work, not by how fast
+the console produces it.
+
+**What is left of the DSP.** Twelve and a half nanoseconds an instruction, against maybe
+five or six for an interpreter with nothing left to give and three or four with a compiler.
+The remaining candidates are all fractions of a millisecond — the accumulator snapshot
+taken before every instruction that has an extension field, which only three of the
+extension handlers read, is nine percent of steps wasted and about a third of a millisecond
+— so the next real multiple here is the same one the Gekko got: blocks, and a JIT that
+emits WebAssembly. The machinery for that already exists next door.
