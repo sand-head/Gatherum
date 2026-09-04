@@ -32,7 +32,9 @@ use std::sync::{Arc, Mutex};
 use backend_wgpu::GxRenderer;
 use gecko::audio::AudioSink;
 use gecko::flipper::exi::macronix::{ExiMacronix, RTC_SECONDS};
-use gecko::flipper::si::pad::{self, PadStatus, STICK_CENTER, STICK_MAX, STICK_MIN, TRIGGER_MAX, TRIGGER_MIN};
+use gecko::flipper::si::pad::{
+    self, PadStatus, STICK_CENTER, STICK_MAX, STICK_MIN, TRIGGER_MAX, TRIGGER_MIN,
+};
 use gecko::flipper::vi::regs::RefreshRate;
 use gecko::gekko::wasmjit::{self, BlockCompiler};
 use gecko::host::{DrawVertex, GxAction, RenderSink};
@@ -79,11 +81,14 @@ const GC_MAGIC_OFFSET: usize = 0x1C;
 /// depends on the vertex scratch being rebuilt in exactly the order actions arrive.
 struct ActionMessage {
     action: GxAction,
-    vertices: Vec<DrawVertex>,
+    /// Where this action's new vertices sit in the queue's own vertex buffer. A vector
+    /// per action was five thousand allocations a frame on a game drawing a real scene.
+    vertices: core::ops::Range<usize>,
 }
 
 struct QueueShared {
     messages: Vec<ActionMessage>,
+    vertices: Vec<DrawVertex>,
     epoch: u64,
 }
 
@@ -98,7 +103,12 @@ struct QueueSink {
 
 impl QueueSink {
     fn new(shared: ActionQueue) -> Self {
-        Self { shared, scratch: Vec::new(), scratch_sent_len: 0, last_epoch: 0 }
+        Self {
+            shared,
+            scratch: Vec::new(),
+            scratch_sent_len: 0,
+            last_epoch: 0,
+        }
     }
 
     fn sync_epoch(&mut self, epoch: u64) {
@@ -112,16 +122,26 @@ impl QueueSink {
 
 impl RenderSink for QueueSink {
     fn exec(&mut self, action: GxAction) {
-        let epoch = self.shared.lock().unwrap().epoch;
-        self.sync_epoch(epoch);
-        let vertices = if self.scratch.len() > self.scratch_sent_len {
-            self.scratch[self.scratch_sent_len..].to_vec()
-        } else {
-            Vec::new()
-        };
-        self.scratch_sent_len = self.scratch.len();
         let resets = backend_wgpu::sink::action_resets_vertex_scratch(&action);
-        self.shared.lock().unwrap().messages.push(ActionMessage { action, vertices });
+        {
+            let mut shared = self.shared.lock().unwrap();
+            if shared.epoch != self.last_epoch {
+                self.scratch.clear();
+                self.scratch_sent_len = 0;
+                self.last_epoch = shared.epoch;
+            }
+            let start = shared.vertices.len();
+            if self.scratch.len() > self.scratch_sent_len {
+                let tail = self.scratch_sent_len;
+                shared.vertices.extend_from_slice(&self.scratch[tail..]);
+            }
+            let end = shared.vertices.len();
+            self.scratch_sent_len = self.scratch.len();
+            shared.messages.push(ActionMessage {
+                action,
+                vertices: start..end,
+            });
+        }
         if resets {
             self.scratch.clear();
             self.scratch_sent_len = 0;
@@ -216,7 +236,10 @@ impl Gpu {
             })
             .await
             .ok()?;
-        let (device, queue) = adapter.request_device(&wgpu::DeviceDescriptor::default()).await.ok()?;
+        let (device, queue) = adapter
+            .request_device(&wgpu::DeviceDescriptor::default())
+            .await
+            .ok()?;
         // A validation error would otherwise vanish: the picture is read back rather than
         // presented, so nothing on the page ever shows the GPU refusing a command.
         device.on_uncaptured_error(std::sync::Arc::new(|error: wgpu::Error| {
@@ -245,20 +268,38 @@ impl Gpu {
 
     /// The renderer plays back what the console queued while it ran.
     fn process(&mut self, queue: &ActionQueue) {
-        let messages = {
+        let (messages, vertices) = {
             let mut shared = queue.lock().unwrap();
             shared.epoch = shared.epoch.wrapping_add(1);
-            std::mem::take(&mut shared.messages)
+            (
+                std::mem::take(&mut shared.messages),
+                std::mem::take(&mut shared.vertices),
+            )
         };
         // Draws are batched until a non-draw action arrives, and a batch left over from the
         // previous frame indexes into the scratch about to be swapped out: flush it first.
         self.renderer.flush_pending_draws(&self.device, &self.queue);
         let mut scratch = self.renderer.replace_vertex_scratch(Vec::new());
         scratch.clear();
-        for message in messages {
-            scratch.extend_from_slice(&message.vertices);
-            self.renderer
-                .process_action_with_external_scratch(&self.device, &self.queue, &message.action, &mut scratch);
+        for message in &messages {
+            scratch.extend_from_slice(&vertices[message.vertices.clone()]);
+            self.renderer.process_action_with_external_scratch(
+                &self.device,
+                &self.queue,
+                &message.action,
+                &mut scratch,
+            );
+        }
+        // The queue lent its two vectors for the frame and gets them back emptied, so
+        // the next frame's actions and vertices are written into memory already there.
+        {
+            let mut messages = messages;
+            let mut vertices = vertices;
+            messages.clear();
+            vertices.clear();
+            let mut shared = queue.lock().unwrap();
+            shared.messages = messages;
+            shared.vertices = vertices;
         }
         for writeback in self.renderer.take_pending_writebacks(&self.queue) {
             let mapped = Rc::new(Cell::new(None));
@@ -266,7 +307,9 @@ impl Gpu {
             writeback
                 .staging
                 .slice(..writeback.staging_size)
-                .map_async(wgpu::MapMode::Read, move |result| flag.set(Some(result.is_ok())));
+                .map_async(wgpu::MapMode::Read, move |result| {
+                    flag.set(Some(result.is_ok()))
+                });
             self.writebacks.push((writeback, mapped));
         }
     }
@@ -283,7 +326,11 @@ impl Gpu {
                 None => waiting.push((writeback, mapped)),
                 Some(false) => self.renderer.discard_writeback(writeback),
                 Some(true) => {
-                    let bytes = writeback.staging.slice(..writeback.staging_size).get_mapped_range().to_vec();
+                    let bytes = writeback
+                        .staging
+                        .slice(..writeback.staging_size)
+                        .get_mapped_range()
+                        .to_vec();
                     writeback.staging.unmap();
                     self.renderer.finish_writeback(writeback, &bytes, &mut ram);
                 }
@@ -300,7 +347,9 @@ impl Gpu {
         let texture = &self.renderer.xfb_texture;
         let size = texture.size();
         let (width, height) = (size.width.min(FRAME_WIDTH), size.height.min(FRAME_HEIGHT));
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
         encoder.copy_texture_to_buffer(
             wgpu::TexelCopyTextureInfo {
                 texture,
@@ -310,22 +359,34 @@ impl Gpu {
             },
             wgpu::TexelCopyBufferInfo {
                 buffer: &self.staging,
-                layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(ROW_BYTES), rows_per_image: None },
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(ROW_BYTES),
+                    rows_per_image: None,
+                },
             },
-            wgpu::Extent3d { width, height, depth_or_array_layers: 1 },
+            wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
         );
         self.queue.submit([encoder.finish()]);
         self.mapped.set(None);
         let mapped = self.mapped.clone();
         self.staging
             .slice(..)
-            .map_async(wgpu::MapMode::Read, move |result| mapped.set(Some(result.is_ok())));
+            .map_async(wgpu::MapMode::Read, move |result| {
+                mapped.set(Some(result.is_ok()))
+            });
         self.pending = Some((width, height));
     }
 
     /// Copies the picture asked for last time into the frame, if it has arrived.
     fn collect(&mut self, frame: &mut [u8]) {
-        let Some((width, height)) = self.pending else { return };
+        let Some((width, height)) = self.pending else {
+            return;
+        };
         match self.mapped.get() {
             None => return,
             Some(false) => {
@@ -381,13 +442,27 @@ impl TableCompiler {
     fn new() -> Option<Self> {
         let table: js_sys::WebAssembly::Table = wasm_bindgen::function_table().dyn_into().ok()?;
         let env = js_sys::Object::new();
-        js_sys::Reflect::set(&env, &wasmjit::MEMORY_IMPORT.into(), &wasm_bindgen::memory()).ok()?;
+        js_sys::Reflect::set(
+            &env,
+            &wasmjit::MEMORY_IMPORT.into(),
+            &wasm_bindgen::memory(),
+        )
+        .ok()?;
         js_sys::Reflect::set(&env, &wasmjit::TABLE_IMPORT.into(), &table).ok()?;
         let imports = js_sys::Object::new();
         js_sys::Reflect::set(&imports, &wasmjit::IMPORT_MODULE.into(), &env).ok()?;
-        let mut compiler = Self { table, imports, placeholder: js_sys::Function::new_no_args(""), free: Vec::new(), complained: false };
+        let mut compiler = Self {
+            table,
+            imports,
+            placeholder: js_sys::Function::new_no_args(""),
+            free: Vec::new(),
+            complained: false,
+        };
         // A block-shaped function that must never run: a released slot holds it.
-        compiler.placeholder = compiler.functions_of(&wasmjit::assemble(&[wasmjit::trap()])).ok()?.pop()?;
+        compiler.placeholder = compiler
+            .functions_of(&wasmjit::assemble(&[wasmjit::trap()]))
+            .ok()?
+            .pop()?;
         Some(compiler)
     }
 
@@ -432,7 +507,9 @@ impl BlockCompiler for TableCompiler {
                 // The interpreter runs the blocks instead; one complaint is enough.
                 if !self.complained {
                     self.complained = true;
-                    web_sys::console::warn_1(&format!("GameCube core: could not compile a block: {error:?}").into());
+                    web_sys::console::warn_1(
+                        &format!("GameCube core: could not compile a block: {error:?}").into(),
+                    );
                 }
                 None
             }
@@ -473,11 +550,23 @@ impl Console {
         // as a fresh console would either way. Booting stays the free IPL's job.
         let ipl = IPL_ROM.with(|rom| {
             let rom = rom.borrow();
-            if rom.len() == IPL_ROM_SIZE { rom.clone() } else { vec![0u8; IPL_ROM_SIZE] }
+            if rom.len() == IPL_ROM_SIZE {
+                rom.clone()
+            } else {
+                vec![0u8; IPL_ROM_SIZE]
+            }
         });
-        emulator.exi.attach_device(ExiMacronix::CHANNEL, ExiMacronix::DEVICE, Box::new(ExiMacronix::new(ipl)));
+        emulator.exi.attach_device(
+            ExiMacronix::CHANNEL,
+            ExiMacronix::DEVICE,
+            Box::new(ExiMacronix::new(ipl)),
+        );
 
-        let actions: ActionQueue = Arc::new(Mutex::new(QueueShared { messages: Vec::new(), epoch: 0 }));
+        let actions: ActionQueue = Arc::new(Mutex::new(QueueShared {
+            messages: Vec::new(),
+            vertices: Vec::new(),
+            epoch: 0,
+        }));
         emulator.render_sink = Box::new(QueueSink::new(actions.clone()));
 
         let audio = Arc::new(Mutex::new(AudioShared {
@@ -489,10 +578,20 @@ impl Console {
         emulator.audio_sink = Box::new(ResamplingSink(audio.clone()));
 
         if let Some(compiler) = TableCompiler::new() {
-            emulator.block_cache.get_or_insert_with(Default::default).set_compiler(Some(Box::new(compiler)));
+            emulator
+                .block_cache
+                .get_or_insert_with(Default::default)
+                .set_compiler(Some(Box::new(compiler)));
         }
 
-        let mut console = Self { emulator, actions, audio, buttons: 0, sticks: 0, frames: 0 };
+        let mut console = Self {
+            emulator,
+            actions,
+            audio,
+            buttons: 0,
+            sticks: 0,
+            frames: 0,
+        };
         console.apply_input();
         console
     }
@@ -508,15 +607,31 @@ impl Console {
     fn apply_input(&mut self) {
         let held = |bit: u32| self.buttons & (1 << bit) != 0;
         let mut buttons = 0u16;
-        if held(0) { buttons |= pad::B; }
-        if held(1) { buttons |= pad::Y; }
-        if held(2) { buttons |= pad::Z; }
-        if held(3) { buttons |= pad::START; }
-        if held(8) { buttons |= pad::A; }
-        if held(9) { buttons |= pad::X; }
+        if held(0) {
+            buttons |= pad::B;
+        }
+        if held(1) {
+            buttons |= pad::Y;
+        }
+        if held(2) {
+            buttons |= pad::Z;
+        }
+        if held(3) {
+            buttons |= pad::START;
+        }
+        if held(8) {
+            buttons |= pad::A;
+        }
+        if held(9) {
+            buttons |= pad::X;
+        }
         let (left_trigger, right_trigger) = (held(10), held(11));
-        if left_trigger { buttons |= pad::L; }
-        if right_trigger { buttons |= pad::R; }
+        if left_trigger {
+            buttons |= pad::L;
+        }
+        if right_trigger {
+            buttons |= pad::R;
+        }
         let axis = |negative: bool, positive: bool| match (negative, positive) {
             (true, false) => STICK_MIN,
             (false, true) => STICK_MAX,
@@ -531,12 +646,28 @@ impl Console {
         let (left_x, left_y) = (stick(self.sticks), stick(self.sticks >> 8));
         let status = PadStatus {
             buttons,
-            stick_x: if left_x != STICK_CENTER { left_x } else { axis(held(6), held(7)) },
-            stick_y: if left_y != STICK_CENTER { left_y } else { axis(held(5), held(4)) },
+            stick_x: if left_x != STICK_CENTER {
+                left_x
+            } else {
+                axis(held(6), held(7))
+            },
+            stick_y: if left_y != STICK_CENTER {
+                left_y
+            } else {
+                axis(held(5), held(4))
+            },
             substick_x: stick(self.sticks >> 16),
             substick_y: stick(self.sticks >> 24),
-            trigger_left: if left_trigger { TRIGGER_MAX } else { TRIGGER_MIN },
-            trigger_right: if right_trigger { TRIGGER_MAX } else { TRIGGER_MIN },
+            trigger_left: if left_trigger {
+                TRIGGER_MAX
+            } else {
+                TRIGGER_MIN
+            },
+            trigger_right: if right_trigger {
+                TRIGGER_MAX
+            } else {
+                TRIGGER_MIN
+            },
             connected: true,
         };
         self.emulator.apply_host_input(&HostInput::Gc(status));
@@ -550,7 +681,10 @@ impl Console {
     }
 
     fn memory_card(&mut self) -> Option<&mut [u8]> {
-        self.emulator.exi.memory_card_mut(MEMORY_CARD_SLOT).map(|card| card.data_mut())
+        self.emulator
+            .exi
+            .memory_card_mut(MEMORY_CARD_SLOT)
+            .map(|card| card.data_mut())
     }
 }
 
@@ -590,11 +724,15 @@ fn with_host<T>(f: impl FnOnce(&mut Host) -> T) -> T {
 /// Checked before Gecko sees them, because Gecko trusts what it is given and a trap
 /// inside it would take this whole module down with it.
 fn is_gamecube_disc(bytes: &[u8]) -> bool {
-    let plain = bytes.len() > GC_MAGIC_OFFSET + 4 && bytes[GC_MAGIC_OFFSET..GC_MAGIC_OFFSET + 4] == image::GC_MAGIC;
+    let plain = bytes.len() > GC_MAGIC_OFFSET + 4
+        && bytes[GC_MAGIC_OFFSET..GC_MAGIC_OFFSET + 4] == image::GC_MAGIC;
     let rvz = bytes.len() > RVZ_DISC_HEADER_OFFSET + 0x80
         && &bytes[..4] == RVZ_MAGIC
-        && u32::from_be_bytes(bytes[RVZ_DISC_TYPE_OFFSET..RVZ_DISC_TYPE_OFFSET + 4].try_into().unwrap())
-            == RVZ_DISC_TYPE_GAMECUBE;
+        && u32::from_be_bytes(
+            bytes[RVZ_DISC_TYPE_OFFSET..RVZ_DISC_TYPE_OFFSET + 4]
+                .try_into()
+                .unwrap(),
+        ) == RVZ_DISC_TYPE_GAMECUBE;
     plain || rvz
 }
 
@@ -715,8 +853,12 @@ pub fn gatherum_unload() {
 #[wasm_bindgen]
 pub fn gatherum_reset() {
     with_host(|host| {
-        let Some(mut console) = host.console.take() else { return };
-        let Some(dvd) = console.emulator.di.dvd.take() else { return };
+        let Some(mut console) = host.console.take() else {
+            return;
+        };
+        let Some(dvd) = console.emulator.di.dvd.take() else {
+            return;
+        };
         let buttons = console.buttons;
         let sticks = console.sticks;
         let card = console.memory_card().map(|data| data.to_vec());
@@ -776,12 +918,23 @@ pub fn gatherum_set_sticks(port: u32, packed: u32) {
 #[wasm_bindgen]
 pub fn gatherum_run() {
     with_host(|host| {
-        let Host { gpu, console, frame, audio_out, .. } = host;
-        let (Some(gpu), Some(console)) = (gpu.as_mut(), console.as_mut()) else { return };
+        let Host {
+            gpu,
+            console,
+            frame,
+            audio_out,
+            ..
+        } = host;
+        let (Some(gpu), Some(console)) = (gpu.as_mut(), console.as_mut()) else {
+            return;
+        };
         gpu.collect(frame);
         gpu.settle_writebacks(&mut console.emulator.mmio);
         console.frames += 1;
-        RTC_SECONDS.store((console.frames as f64 / console.fps()) as u32, Ordering::Relaxed);
+        RTC_SECONDS.store(
+            (console.frames as f64 / console.fps()) as u32,
+            Ordering::Relaxed,
+        );
         console.emulator.run_until_vsync();
         gpu.process(&console.actions);
         gpu.capture();

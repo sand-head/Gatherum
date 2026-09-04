@@ -2609,3 +2609,59 @@ uploaded, a reader who is not signed in, a core built before the call existed. T
 gained `gatherum_set_firmware`, which takes the bytes before the console powers on and
 ignores a ROM of any other length, and the loader hands them over between setting the
 core's options and booting it.
+
+## A frame's largest cost was a buffer nobody had filled
+
+The owner reported the GameCube slow across the board, and named the case: Twilight
+Princess is fine on the screen it starts on and not fine once the game behind it starts.
+Measuring that meant reaching it — a scratch harness driving `gecko.mjs` past the health
+screen with the A button, into the attract demo, which is real gameplay rendered by the
+real engine. There it cost **56 ms a frame**, three and a half times the budget.
+
+**A frame was timed by its phases rather than guessed at.** The Gecko profiler was tried
+first and gave one wasm code address holding 99.5% of the samples, which says nothing, so
+the host was instrumented instead: a clock lent to the fork through one extern function,
+accumulators around each phase of `gatherum_run`, then around the DSP, the GX FIFO decode,
+each kind of renderer action, and the two halves of a draw flush. All of it temporary, and
+none of it in the tree. What it said, per frame: the console 23 ms (the Gekko 12, the DSP
+7, the FIFO decode 4), the renderer 20, the EFB writebacks under 1.
+
+**The renderer's twenty milliseconds were nearly all one line.** `wgpu`'s WebGPU backend
+implements `write_buffer_with` by allocating and zeroing a staging buffer of the size
+asked for and copying the whole of it across on drop, and the size asked for was the draw
+buffer's whole *capacity* — sized to the heaviest frame ever seen, written in full four
+times a frame however few draws were in it. Each section is now written with the bytes it
+actually holds, the vertices packed through a scratch vector kept between flushes rather
+than a fresh zeroed one each time. Twelve milliseconds a frame became one and a third, and
+the picture came back pixel for pixel identical, which is the test that matters for a
+change that only moves bytes.
+
+**The second was an allocation per action.** The queue between the console and the renderer
+carried each action's new vertices as their own `Vec` — five thousand nine hundred
+allocations a frame. They share one vector now and an action carries a range into it, and
+the two vectors go back to the queue emptied so the next frame writes into memory already
+there. Measured together, in a same-session A/B against the build without them: Twilight
+Princess in the attract demo **56.3 ms a frame to 34.3**, and Super Monkey Ball 2's title
+screen **52.5 to 39.1**. A third of a frame, for forty lines.
+
+**Where the rest of it is, measured, so nobody has to guess again.** Of what is left, the
+Gekko is 12 ms, the renderer 9, the DSP 7 and the GX FIFO decode 4. The Gekko's number is
+the interesting one, because the JIT is not the problem: 285,699 compiled block runs a
+frame against 33 interpreted, 1.68 million instructions a frame — and only **5.9
+instructions per block**, at 41 ns a block. A block that short spends most of itself
+arriving and leaving: the cache lookup, the type-checked indirect call, the prologue that
+loads its registers into locals and the epilogue that writes them back. That is the next
+piece of work, and WebAssembly has the instruction for it — the build already enables tail
+calls, so a compiled block can `return_call_indirect` straight into the next one instead
+of returning to the Rust loop, which is block chaining under another name. The DSP is a
+plain interpreter here (its Cranelift JIT is native-only) and wants the same treatment the
+Gekko got. The renderer's nine are 5,233 draw actions a frame averaging 4.9 vertices each,
+of which 97.7% are back to back with identical state — the backend already merges them
+down to 62 real draws, so what is left is the work done *before* the merge decision, and
+the fix is to reach that decision sooner.
+
+**One thing tried and not kept.** The draw record each of those 5,233 draws asks for is a
+kilobyte and a half, allocated and zeroed fresh every time; pooling them was worth nothing
+measurable, and two runs with the pool drew a picture that differed from two runs without
+it by a little everywhere. Unexplained, and not chased, because there was no speed in it
+either way — but recorded, so the next person to think of it knows to look there first.
